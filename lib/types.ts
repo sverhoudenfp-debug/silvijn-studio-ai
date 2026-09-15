@@ -89,3 +89,31 @@ export interface PipelineStage {
   label: string;
   count: number;
 }
+
+export type DemoTemplate =
+  | "local_service"
+  | "professional_service"
+  | "home_improvement"
+  | "business_standard";
+
+export type GenerationStatus = "idle" | "generating" | "completed" | "failed";
+
+export interface DemoWebsite {
+  id: string;
+  leadId: string;
+  slug: string;
+  businessName: string;
+  industry: string;
+  city: string;
+  template: DemoTemplate;
+  status: DemoStatus;
+  generationStatus: GenerationStatus;
+  headline: string;
+  description: string;
+  services: string[];
+  ctaText: string;
+  notes: string;
+  previewUrl: string;
+  createdAt: string;
+  updatedAt: string;
+}

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import { scoreLead } from "@/lib/agents/lead-scoring";
+import { demoByLeadId } from "@/lib/mock-demos";
 import {
   demoStatusMeta,
   leadSourceMeta,
@@ -38,6 +39,7 @@ export function LeadDetail({ lead }: { lead: Lead }) {
   });
 
   const { score, reason, factors } = scoreLead(current);
+  const demo = demoByLeadId(lead.id);
 
   function addEvent(label: string) {
     setEvents((prev) => [
@@ -343,6 +345,43 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                 </p>
               ) : null}
             </div>
+          </Card>
+
+          <Card>
+            <CardHeader
+              title="Demo"
+              subtitle={demo ? "Gekoppeld via het demo-systeem" : "Geen demo gekoppeld"}
+            />
+            {demo ? (
+              <>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm text-zinc-300">{demo.businessName}</span>
+                  <Badge variant={demoStatusMeta[demo.status].variant}>
+                    {demoStatusMeta[demo.status].label}
+                  </Badge>
+                </div>
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  {demo.status === "ready" ? (
+                    <Link
+                      href={demo.previewUrl}
+                      className="inline-flex h-8 items-center rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-white transition-colors hover:bg-indigo-500"
+                    >
+                      View Demo
+                    </Link>
+                  ) : null}
+                  <Link
+                    href={`/demo-websites/${demo.id}`}
+                    className="inline-flex h-8 items-center rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-xs font-semibold text-zinc-200 transition-colors hover:border-zinc-600"
+                  >
+                    Demo beheren
+                  </Link>
+                </div>
+              </>
+            ) : (
+              <p className="text-xs leading-relaxed text-zinc-500">
+                Voor deze lead is nog geen demo aangemaakt. Demo-generatie komt in een latere fase.
+              </p>
+            )}
           </Card>
 
           <Card>

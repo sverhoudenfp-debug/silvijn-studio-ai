@@ -10,7 +10,7 @@ import type { RawBusiness } from "@/lib/types";
 
 export interface LeadSearchParams {
   industries?: string[];
-  locations?: string[];
+  cities?: string[];
   limit?: number;
 }
 
@@ -25,25 +25,27 @@ export class MockLeadSource implements LeadSource {
   readonly name = "Mock lead source (development mode)";
 
   async searchBusinesses(params: LeadSearchParams = {}): Promise<RawBusiness[]> {
-    const { industries, locations, limit } = params;
+    const { industries, cities, limit } = params;
 
     let result: RawBusiness[] = leads.map((lead) => ({
-      name: lead.name,
-      category: lead.category,
-      location: lead.location,
+      businessName: lead.businessName,
+      industry: lead.industry,
+      city: lead.city,
+      province: lead.province,
       phone: lead.phone,
       email: lead.email,
       website: lead.website,
-      rating: lead.rating,
+      websiteStatus: lead.websiteStatus,
+      googleRating: lead.googleRating,
       reviewCount: lead.reviewCount,
-      source: "mock",
+      source: lead.source,
     }));
 
     if (industries?.length) {
-      result = result.filter((business) => industries.includes(business.category));
+      result = result.filter((business) => industries.includes(business.industry));
     }
-    if (locations?.length) {
-      result = result.filter((business) => locations.includes(business.location));
+    if (cities?.length) {
+      result = result.filter((business) => cities.includes(business.city));
     }
 
     return limit ? result.slice(0, limit) : result;

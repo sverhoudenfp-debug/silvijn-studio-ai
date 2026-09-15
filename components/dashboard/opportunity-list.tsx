@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
-import { leadStatusMeta, leads } from "@/lib/mock-data";
+import { leadStatusMeta, leads, websiteStatusMeta } from "@/lib/mock-data";
 import { scoreVariant } from "@/lib/utils";
 
 export function OpportunityList() {
@@ -34,17 +34,19 @@ export function OpportunityList() {
               <tr key={lead.id} className="border-b border-zinc-800/50 last:border-0 hover:bg-zinc-800/30">
                 <td className="py-2.5 pr-4">
                   <Link href={`/leads/${lead.id}`} className="font-medium text-zinc-100 hover:text-indigo-300">
-                    {lead.name}
+                    {lead.businessName}
                   </Link>
                 </td>
-                <td className="py-2.5 pr-4 text-zinc-400">{lead.location}</td>
+                <td className="py-2.5 pr-4 text-zinc-400">{lead.city}</td>
                 <td className="py-2.5 pr-4">
                   <Badge variant={scoreVariant(lead.leadScore)}>{lead.leadScore}</Badge>
                 </td>
-                <td className="py-2.5 pr-4 text-zinc-500">{lead.website ? "Bestaand" : "Geen website"}</td>
+                <td className="py-2.5 pr-4 text-zinc-500">
+                  {websiteStatusMeta[lead.websiteStatus].label}
+                </td>
                 <td className="py-2.5">
-                  <Badge variant={leadStatusMeta[lead.status].variant}>
-                    {leadStatusMeta[lead.status].label}
+                  <Badge variant={leadStatusMeta[lead.leadStatus].variant}>
+                    {leadStatusMeta[lead.leadStatus].label}
                   </Badge>
                 </td>
               </tr>

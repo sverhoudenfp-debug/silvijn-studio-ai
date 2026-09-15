@@ -4,8 +4,19 @@ import { conversationMessages, leads } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 
 export default function ConversationsPage() {
-  const conversations = leads.filter((lead) => lead.status === "interested" || lead.status === "replied");
+  const conversations = leads.filter(
+    (lead) => lead.leadStatus === "interested" || lead.outreachStatus === "replied"
+  );
   const active = conversations[0];
+
+  if (!active) {
+    return (
+      <Card className="p-10 text-center">
+        <p className="text-sm font-medium text-zinc-200">Nog geen gesprekken</p>
+        <p className="mt-1 text-xs text-zinc-500">Zodra leads reageren verschijnen ze hier.</p>
+      </Card>
+    );
+  }
 
   return (
     <div className="grid gap-6 lg:grid-cols-3">
@@ -24,10 +35,12 @@ export default function ConversationsPage() {
               )}
             >
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-zinc-100">{lead.name}</span>
+                <span className="text-sm font-medium text-zinc-100">{lead.businessName}</span>
                 <Badge variant="success">Actief</Badge>
               </div>
-              <p className="mt-1 text-xs text-zinc-500">{lead.location} · {lead.category}</p>
+              <p className="mt-1 text-xs text-zinc-500">
+                {lead.city} · {lead.industry}
+              </p>
             </button>
           ))}
         </div>
@@ -35,7 +48,7 @@ export default function ConversationsPage() {
 
       <Card className="flex flex-col lg:col-span-2">
         <CardHeader
-          title={active.name}
+          title={active.businessName}
           subtitle="AI status: Geïnteresseerd — wil een prijsindicatie en heeft foto's van klussen beschikbaar"
           action={<Badge variant="success">AI voert gesprek</Badge>}
         />
@@ -45,9 +58,7 @@ export default function ConversationsPage() {
               <div
                 className={cn(
                   "max-w-[80%] rounded-xl px-4 py-2.5 text-sm",
-                  message.sender === "ai"
-                    ? "bg-zinc-800 text-zinc-200"
-                    : "bg-indigo-600 text-white"
+                  message.sender === "ai" ? "bg-zinc-800 text-zinc-200" : "bg-indigo-600 text-white"
                 )}
               >
                 <p>{message.body}</p>
@@ -60,7 +71,8 @@ export default function ConversationsPage() {
         </div>
         <div className="mt-4 rounded-lg border border-dashed border-zinc-700 bg-zinc-900/40 p-3">
           <p className="text-xs text-zinc-500">
-            AI-suggestie: klant wil 1-pagina website met contactformulier en foto-galerij. Projectintake kan worden gestart; prijsindicatie ~750-1500 euro. Wacht op menselijke bevestiging.
+            AI-suggestie: {active.businessName} wil een 1-pagina website met contactformulier en foto-galerij.
+            Projectintake kan worden gestart; prijsindicatie ~750-1500 euro. Wacht op menselijke bevestiging.
           </p>
         </div>
       </Card>

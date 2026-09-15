@@ -4,6 +4,7 @@ import type { Lead } from "@/lib/types";
  * Lead Scoring Agent — berekent een score 0-100 per lead.
  * De weging is volledig configureerbaar via ScoringWeights,
  * zodat de eigenaar later eigen regels kan instellen.
+ * Fase 2: rule-based, geen echte AI API calls.
  */
 
 export interface ScoringWeights {
@@ -35,15 +36,15 @@ export interface LeadScoreResult {
 }
 
 const industryPotential: Record<string, number> = {
-  Dakdekkers: 0.9,
+  Dakwerken: 0.9,
   Loodgieters: 0.9,
   Elektriciens: 0.85,
-  Garages: 0.8,
+  Installatietechniek: 0.85,
+  Bouwbedrijven: 0.85,
   Hoveniers: 0.8,
   Schilders: 0.8,
-  Kappers: 0.75,
-  "Schoonheidssalons": 0.75,
-  Restaurants: 0.7,
+  Autogarages: 0.8,
+  Keukenzaken: 0.8,
   Schoonmaak: 0.65,
 };
 
@@ -51,15 +52,28 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
+export type ScorableLead = Pick<
+  Lead,
+  "websiteStatus" | "reviewCount" | "googleRating" | "email" | "phone" | "industry" | "city"
+>;
+
 export function scoreLead(
-  lead: Lead,
+  lead: ScorableLead,
   weights: ScoringWeights = defaultScoringWeights
 ): LeadScoreResult {
   const factors: ScoreFactor[] = [];
 
+  const websiteFactor =
+    lead.websiteStatus === "no_website"
+      ? 1
+      : lead.websiteStatus === "website_poor"
+        ? 0.5
+        : lead.websiteStatus === "unknown"
+          ? 0.25
+          : 0;
   factors.push({
     label: "Geen website",
-    earned: lead.website ? 0 : weights.noWebsite,
+    earned: websiteFactor * weights.noWebsite,
     max: weights.noWebsite,
   });
 
@@ -70,7 +84,7 @@ export function scoreLead(
     max: weights.reviewVolume,
   });
 
-  const rating = lead.rating ? clamp((lead.rating - 3.5) / 1.5, 0, 1) : 0;
+  const rating = lead.googleRating ? clamp((lead.googleRating - 3.5) / 1.5, 0, 1) : 0;
   factors.push({
     label: "Review score",
     earned: Math.round(rating * weights.reviewRating),
@@ -84,7 +98,7 @@ export function scoreLead(
     max: weights.contactAvailability,
   });
 
-  const industry = industryPotential[lead.category] ?? 0.7;
+  const industry = industryPotential[lead.industry] ?? 0.7;
   factors.push({
     label: "Commercieel branchepotentieel",
     earned: Math.round(industry * weights.industryPotential),
@@ -94,9 +108,9 @@ export function scoreLead(
   const score = Math.round(factors.reduce((sum, factor) => sum + factor.earned, 0));
 
   const reason =
-    lead.website
-      ? `${lead.category} in ${lead.location} met een bestaande website — lager prioriteit voor outreach.`
-      : `Gevestigd ${lead.category.toLowerCase()}bedrijf in ${lead.location} met ${lead.reviewCount ?? 0} reviews (${lead.rating ?? "onbekende"} sterren), geen website en ${lead.email ? "openbare e-mail" : "telefoonnummer"} beschikbaar — sterk commercieel potentieel voor een eerste website.`;
+    lead.websiteStatus === "no_website"
+      ? `Established ${lead.industry.toLowerCase()} company in ${lead.city} with ${lead.reviewCount ?? 0} reviews (${lead.googleRating ?? "unknown"} rating), no website and ${lead.email ? "public e-mail" : "phone number"} available — strong commercial potential for a first website.`
+      : `${lead.industry} company in ${lead.city} with ${lead.websiteStatus === "has_website" ? "an existing website" : "an underperforming or unknown website"} — lower priority for outreach in the current phase.`;
 
   return { score, reason, factors };
 }

@@ -1,11 +1,7 @@
+import type { BadgeVariant, ScoreCategory } from "@/lib/types";
+
 export function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
-}
-
-export function scoreVariant(score: number): "success" | "warning" | "neutral" {
-  if (score >= 80) return "success";
-  if (score >= 60) return "warning";
-  return "neutral";
 }
 
 export function slugify(value: string): string {
@@ -14,4 +10,18 @@ export function slugify(value: string): string {
     .trim()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+export function scoreCategory(score: number): ScoreCategory {
+  if (score >= 90) return "Excellent";
+  if (score >= 75) return "High";
+  if (score >= 50) return "Medium";
+  return "Low";
+}
+
+export function scoreVariant(score: number): BadgeVariant {
+  if (score >= 90) return "success";
+  if (score >= 75) return "info";
+  if (score >= 50) return "warning";
+  return "neutral";
 }

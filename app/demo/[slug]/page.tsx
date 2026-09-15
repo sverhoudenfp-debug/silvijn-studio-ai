@@ -62,7 +62,7 @@ export default async function DemoPage(props: PageProps<"/demo/[slug]">) {
     <div className="min-h-screen bg-white text-zinc-900">
       <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-xs text-amber-800">
         Demo website — automatisch gegenereerd door Silvijn Studio ·{" "}
-        <Link href="/" className="font-medium underline underline-offset-2">
+        <Link href="/dashboard" className="font-medium underline underline-offset-2">
           Terug naar dashboard
         </Link>
       </div>

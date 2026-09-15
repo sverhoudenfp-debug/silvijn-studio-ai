@@ -28,14 +28,14 @@ export const leadStatusMeta: Record<LeadStatus, { label: string; variant: BadgeV
 };
 
 export const kpis: Kpi[] = [
-  { label: "Totaal leads", value: "248", delta: "+32 deze week" },
-  { label: "Nieuwe leads", value: "18", delta: "+6 vandaag" },
-  { label: "Hoge kwaliteit (80+)", value: "31", delta: "+4 deze week" },
-  { label: "E-mails verzonden", value: "96", delta: "+12 vandaag" },
-  { label: "Antwoorden", value: "23", delta: "24% reply rate" },
-  { label: "Geïnteresseerd", value: "9", delta: "+2 vandaag" },
-  { label: "Demo websites", value: "14", delta: "3 in review" },
-  { label: "Projecten", value: "4", delta: "1 klaar voor goedkeuring" },
+  { label: "Total Leads", value: "248", delta: "+32 deze week" },
+  { label: "New Leads", value: "42", delta: "+8 vandaag" },
+  { label: "High Quality Leads", value: "19", delta: "+4 deze week" },
+  { label: "Emails Sent", value: "126", delta: "+12 vandaag" },
+  { label: "Replies", value: "31", delta: "25% reply rate" },
+  { label: "Interested Leads", value: "12", delta: "+2 vandaag" },
+  { label: "Projects", value: "4", delta: "1 klaar voor goedkeuring" },
+  { label: "Websites", value: "3", delta: "1 in review" },
 ];
 
 export const activities: ActivityEntry[] = [
@@ -89,3 +89,33 @@ export const leads: Lead[] = rawLeads.map((lead) => ({
   ...lead,
   leadScore: scoreLead(lead).score,
 }));
+
+export interface AutomationModule {
+  name: string;
+  status: "Active" | "Paused" | "Not configured";
+  variant: BadgeVariant;
+}
+
+export const automationModules: AutomationModule[] = [
+  { name: "Business Discovery", status: "Active", variant: "success" },
+  { name: "Demo Generation", status: "Active", variant: "success" },
+  { name: "AI Outreach", status: "Active", variant: "success" },
+  { name: "Sales Agent", status: "Not configured", variant: "neutral" },
+  { name: "Website Generation", status: "Not configured", variant: "neutral" },
+];
+
+export interface OutreachSummary {
+  business: string;
+  email: string;
+  date: string;
+  status: "Draft" | "Sent" | "Opened" | "Replied" | "Interested";
+  variant: BadgeVariant;
+}
+
+export const recentOutreach: OutreachSummary[] = [
+  { business: "Jansen Dakwerken", email: "info@jansendakwerken.nl", date: "20:36", status: "Replied", variant: "success" },
+  { business: "Groen & Co Hoveniers", email: "info@groenenco.nl", date: "17:30", status: "Interested", variant: "success" },
+  { business: "Kapsalon Mirage", email: "hallo@kapsalonmirage.nl", date: "19:12", status: "Opened", variant: "info" },
+  { business: "Elektro Vries", email: "service@elektrovries.nl", date: "18:48", status: "Sent", variant: "neutral" },
+  { business: "Van der Berg Loodgieters", email: "info@vanderberg-loodgieters.nl", date: "16:02", status: "Draft", variant: "warning" },
+];

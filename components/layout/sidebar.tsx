@@ -38,11 +38,11 @@ const icons: Record<string, React.ReactNode> = {
 };
 
 const navItems = [
-  { href: "/", label: "Dashboard", icon: "home" },
+  { href: "/dashboard", label: "Dashboard", icon: "home" },
   { href: "/leads", label: "Leads", icon: "users" },
   { href: "/outreach", label: "AI Outreach", icon: "mail" },
   { href: "/conversations", label: "Conversations", icon: "chat" },
-  { href: "/demos", label: "Demo Websites", icon: "monitor" },
+  { href: "/demo-websites", label: "Demo Websites", icon: "monitor" },
   { href: "/projects", label: "Projects", icon: "folder" },
   { href: "/websites", label: "Websites", icon: "globe" },
   { href: "/analytics", label: "Analytics", icon: "chart" },
@@ -50,51 +50,66 @@ const navItems = [
   { href: "/settings", label: "Settings", icon: "sliders" },
 ];
 
-export function Sidebar() {
+export function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => void }) {
   const pathname = usePathname();
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-zinc-800 bg-zinc-950 lg:flex">
-      <div className="flex h-14 items-center gap-2.5 border-b border-zinc-800 px-5">
-        <span className="h-6 w-6 rounded-md bg-gradient-to-br from-indigo-400 to-violet-600" />
-        <span className="text-sm font-semibold tracking-tight text-zinc-50">
-          SILVIJN <span className="text-indigo-400">STUDIO</span>
-        </span>
-      </div>
-
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
-        {navItems.map((item) => {
-          const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-                active
-                  ? "bg-zinc-800/70 text-zinc-50"
-                  : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
-              )}
-            >
-              {icons[item.icon]}
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
-
-      <div className="border-t border-zinc-800 p-4">
-        <div className="flex items-center gap-2.5">
-          <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+    <>
+      {mobileOpen ? (
+        <div
+          className="fixed inset-0 z-40 bg-black/60 lg:hidden"
+          onClick={onClose}
+          aria-hidden="true"
+        />
+      ) : null}
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 flex w-60 flex-col border-r border-zinc-800 bg-zinc-950 transition-transform duration-200 ease-out lg:translate-x-0",
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+        <div className="flex h-14 items-center gap-2.5 border-b border-zinc-800 px-5">
+          <span className="h-6 w-6 shrink-0 rounded-md bg-gradient-to-br from-indigo-400 to-violet-600" />
+          <span className="text-sm font-semibold tracking-tight text-zinc-50">
+            SILVIJN <span className="text-indigo-400">STUDIO AI</span>
           </span>
-          <div className="text-xs">
-            <p className="font-medium text-zinc-200">AI Agent actief</p>
-            <p className="text-zinc-500">Volgende run: 07:00</p>
+        </div>
+
+        <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
+          {navItems.map((item) => {
+            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={onClose}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                  active
+                    ? "bg-zinc-800/70 text-zinc-50"
+                    : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+                )}
+              >
+                {icons[item.icon]}
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="border-t border-zinc-800 p-4">
+          <div className="flex items-center gap-2.5">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+            </span>
+            <div className="text-xs">
+              <p className="font-medium text-zinc-200">AI Agent actief</p>
+              <p className="text-zinc-500">Mock mode — geen echte acties</p>
+            </div>
           </div>
         </div>
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 }

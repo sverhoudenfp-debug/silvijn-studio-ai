@@ -1,6 +1,7 @@
 import type { ActivityEntry, BadgeVariant, Kpi, Lead, LeadStatus, PipelineStage } from "./types";
+import { scoreLead } from "./agents/lead-scoring";
 
-export const leads: Lead[] = [
+const rawLeads: Lead[] = [
   { id: "ld-001", name: "Jansen Dakwerken", category: "Dakdekkers", location: "Eindhoven", phone: "+31 40 123 4567", email: "info@jansendakwerken.nl", website: null, rating: 4.8, reviewCount: 87, leadScore: 94, status: "interested", hasDemo: true, lastActivity: "5 min geleden" },
   { id: "ld-002", name: "Van der Berg Loodgieters", category: "Loodgieters", location: "Rotterdam", phone: "+31 10 234 5678", email: "info@vanderberg-loodgieters.nl", website: null, rating: 4.6, reviewCount: 132, leadScore: 91, status: "demo_ready", hasDemo: true, lastActivity: "12 min geleden" },
   { id: "ld-003", name: "Kapsalon Mirage", category: "Kappers", location: "Tilburg", phone: "+31 13 345 6789", email: "hallo@kapsalonmirage.nl", website: null, rating: 4.9, reviewCount: 203, leadScore: 88, status: "contacted", hasDemo: true, lastActivity: "1 uur geleden" },
@@ -83,3 +84,8 @@ export const workflowSteps = [
   { label: "Quality check", enabled: true, detail: "Responsive, links, SEO, fouten" },
   { label: "Ready for Silvijn", enabled: true, detail: "Menselijke goedkeuring — altijd aan" },
 ];
+
+export const leads: Lead[] = rawLeads.map((lead) => ({
+  ...lead,
+  leadScore: scoreLead(lead).score,
+}));

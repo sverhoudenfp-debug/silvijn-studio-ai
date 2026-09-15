@@ -44,3 +44,15 @@ export interface PipelineStage {
   label: string;
   count: number;
 }
+
+export interface RawBusiness {
+  name: string;
+  category: string;
+  location: string;
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+  rating: number | null;
+  reviewCount: number | null;
+  source: string;
+}

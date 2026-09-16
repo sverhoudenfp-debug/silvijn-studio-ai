@@ -33,8 +33,7 @@ export class AutomationService {
   async ensureWorkflows(): Promise<void> {
     const repo = getAutomationRepository();
 
-    if (!(await repo.getById(AUTOMATION_IDS.qualifiedLeadToWebsite))) {
-      await repo.create({
+    await repo.upsertIfAbsent({
         id: AUTOMATION_IDS.qualifiedLeadToWebsite,
         name: "Qualified Lead → Website Ready",
         description:
@@ -51,10 +50,8 @@ export class AutomationService {
         lastRunAt: null,
         nextRunAt: null,
       });
-    }
 
-    if (!(await repo.getById(AUTOMATION_IDS.leadDiscovery))) {
-      await repo.create({
+    await repo.upsertIfAbsent({
         id: AUTOMATION_IDS.leadDiscovery,
         name: "Lead Discovery",
         description:
@@ -71,7 +68,6 @@ export class AutomationService {
         lastRunAt: null,
         nextRunAt: null,
       });
-    }
   }
 
   async listAutomations(): Promise<Automation[]> {

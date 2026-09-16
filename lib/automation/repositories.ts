@@ -20,6 +20,8 @@ import type {
 export interface AutomationRepository {
   readonly source: "mock" | "supabase";
   create(automation: Omit<Automation, "createdAt" | "updatedAt">): Promise<Automation>;
+  /** Atomaire insert die niets doet als de rij al bestaat — race-vrij. */
+  upsertIfAbsent(automation: Omit<Automation, "createdAt" | "updatedAt">): Promise<void>;
   getById(id: string): Promise<Automation | null>;
   list(): Promise<Automation[]>;
   listByTrigger(trigger: AutomationEventType | "manual"): Promise<Automation[]>;
@@ -32,6 +34,11 @@ class MemoryAutomationRepository implements AutomationRepository {
 
   private now(): string {
     return new Date().toISOString();
+  }
+
+  async upsertIfAbsent(automation: Omit<Automation, "createdAt" | "updatedAt">): Promise<void> {
+    if (this.records.some((r) => r.id === automation.id)) return;
+    this.create(automation);
   }
   async create(automation: Omit<Automation, "createdAt" | "updatedAt">): Promise<Automation> {
     const now = this.now();
@@ -97,6 +104,35 @@ function rowToAutomation(row: AutomationRow): Automation {
 
 class SupabaseAutomationRepository implements AutomationRepository {
   readonly source = "supabase" as const;
+
+  /**
+   * Atomaire INSERT ... ON CONFLICT (id) DO NOTHING — veilig bij gelijktijdige
+   * renders (Next.js build workers) én idempotent: bestaande rijen blijven ongewijzigd.
+   */
+  async upsertIfAbsent(automation: Omit<Automation, "createdAt" | "updatedAt">): Promise<void> {
+    const { error } = await getSupabaseServerClient()
+      .from("automations")
+      .upsert(
+        {
+          id: automation.id,
+          name: automation.name,
+          description: automation.description,
+          type: automation.type,
+          status: automation.status,
+          enabled: automation.enabled,
+          trigger: automation.trigger,
+          steps: automation.steps,
+          current_step: automation.currentStep,
+          execution_count: automation.executionCount,
+          success_count: automation.successCount,
+          failure_count: automation.failureCount,
+          last_run_at: automation.lastRunAt,
+          next_run_at: automation.nextRunAt,
+        },
+        { onConflict: "id", ignoreDuplicates: true }
+      );
+    if (error) throw new Error(`AutomationRepository: upsert mislukt: ${error.message}`);
+  }
 
   async create(automation: Omit<Automation, "createdAt" | "updatedAt">): Promise<Automation> {
     const { data, error } = await getSupabaseServerClient()

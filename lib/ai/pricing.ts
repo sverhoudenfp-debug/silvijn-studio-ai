@@ -15,7 +15,12 @@ export interface ModelPricing {
 }
 
 export const modelPricing: Record<string, ModelPricing> = {
+  // Actuele lineup (gecontroleerd 16-09-2026 tegen platform.claude.com/docs)
   "claude-haiku-4-5": { inputPerMillion: 1, outputPerMillion: 5 },
+  "claude-sonnet-5": { inputPerMillion: 2, outputPerMillion: 10 },
+  "claude-opus-5": { inputPerMillion: 5, outputPerMillion: 25 },
+  "claude-fable-5-1": { inputPerMillion: 10, outputPerMillion: 50 },
+  // Legacy-modellen (nog geldig bij expliciete env-override)
   "claude-sonnet-4-5": { inputPerMillion: 3, outputPerMillion: 15 },
   "claude-opus-4-5": { inputPerMillion: 5, outputPerMillion: 25 },
 };

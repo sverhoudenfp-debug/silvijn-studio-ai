@@ -6,9 +6,9 @@ import type { AIModelTier, AIMode } from "./types";
  * en zijn per environment variable te overschrijven. NIET elders hardcoden.
  *
  * Actuele Claude-modellen (controleer bij een upgrade):
- *   fast      → claude-haiku-4-5   (goedkoop/high-volume)
- *   balanced  → claude-sonnet-4-5  (standaard productie)
- *   powerful → claude-opus-4-5     (zware taken, optioneel)
+ *   fast      → claude-haiku-4-5  (snelste, goedkoop/high-volume)
+ *   balanced  → claude-sonnet-5  (beste snelheid/intelligentie-balans, standaard productie)
+ *   powerful → claude-opus-5     (krachtigste algemene model, zware taken)
  */
 
 export interface AIConfig {
@@ -35,8 +35,8 @@ export function getAIConfig(): AIConfig {
     apiKey,
     models: {
       fast: readModel("fast", "claude-haiku-4-5"),
-      balanced: readModel("balanced", "claude-sonnet-4-5"),
-      powerful: readModel("powerful", "claude-opus-4-5"),
+      balanced: readModel("balanced", "claude-sonnet-5"),
+      powerful: readModel("powerful", "claude-opus-5"),
     },
     maxRequestsPerRun: Number.isFinite(maxRequests) && maxRequests > 0 ? maxRequests : 5,
     requestTimeoutMs: 30_000,

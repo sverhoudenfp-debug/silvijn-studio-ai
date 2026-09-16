@@ -27,8 +27,8 @@ Eén centrale plek: `lib/ai/config.ts`. Tiers met defaults (per env te overschri
 | Tier | Default model | Gebruik |
 |---|---|---|
 | fast | claude-haiku-4-5 | hoog volume, classificatie |
-| balanced | claude-sonnet-4-5 | standaard productietaken |
-| powerful | claude-opus-4-5 | zware generatie-taken |
+| balanced | claude-sonnet-5 | standaard productietaken |
+| powerful | claude-opus-5 | zware generatie-taken |
 
 ## AI-services
 

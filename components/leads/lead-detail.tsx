@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { OutreachSection } from "@/components/leads/outreach-section";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import { scoreLead } from "@/lib/agents/lead-scoring";
@@ -121,14 +122,6 @@ export function LeadDetail({ lead, demo }: { lead: Lead; demo: DemoWebsite | nul
             className="h-9 cursor-not-allowed rounded-lg border border-zinc-800 bg-zinc-900 px-4 text-xs font-medium text-zinc-500"
           >
             Create demo · Fase 3
-          </button>
-          <button
-            type="button"
-            disabled
-            title="AI-outreach komt in Fase 6"
-            className="h-9 cursor-not-allowed rounded-lg border border-zinc-800 bg-zinc-900 px-4 text-xs font-medium text-zinc-500"
-          >
-            Draft outreach · Fase 6
           </button>
           {current.demoStatus === "ready" ? (
             <Link
@@ -280,6 +273,12 @@ export function LeadDetail({ lead, demo }: { lead: Lead; demo: DemoWebsite | nul
               Notitie toevoegen
             </button>
           </Card>
+
+          <OutreachSection
+            leadId={current.id}
+            leadBusinessName={current.businessName}
+            demoUrl={demo?.status === "ready" ? demo.previewUrl : null}
+          />
         </div>
 
         <div className="space-y-6">

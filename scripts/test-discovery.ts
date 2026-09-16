@@ -36,7 +36,6 @@ async function main() {
   check("created leads > 0", first.createdLeads > 0, `created=${first.createdLeads}`);
   check("no errors in mock run", first.errors.length === 0, first.errors.join("; "));
 
-  const statuses = first.candidates.map((c) => c.status);
   const reasons = first.candidates.map((c) => c.reason ?? "");
 
   check("duplicate email detected", reasons.some((r) => r.includes("E-mail bestaat al")));

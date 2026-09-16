@@ -58,10 +58,10 @@ export const AI_AGENTS: Record<AgentType, AgentDefinition> = {
   outreach: {
     id: "outreach",
     name: "Outreach Agent",
-    description: "Stelt gepersonaliseerde outreach-berichten op (latere fase).",
-    status: "planned",
-    defaultTier: "fast",
-    defaultTask: "generate_text",
+    description: "Genereert gepersonaliseerde outreach-concepten (draft) per lead; nooit automatisch verzonden (Fase 6).",
+    status: "implemented",
+    defaultTier: "balanced",
+    defaultTask: "outreach_generation",
   },
   sales: {
     id: "sales",

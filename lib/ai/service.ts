@@ -8,7 +8,7 @@ import {
 import { estimateCost } from "./pricing";
 import { getAIProvider } from "./provider";
 import { withRetry } from "./retry";
-import { BusinessAnalysisSchema, extractJSON } from "./schemas";
+import { BusinessAnalysisSchema, OutreachMessageSchema, extractJSON } from "./schemas";
 import {
   getAIActivityRepository,
   type AIActivityRepository,
@@ -17,6 +17,7 @@ import {
   getAIRunRepository,
   type AIRunRepository,
 } from "@/lib/repositories/ai-run-repository";
+import { getAgencyConfiguration, getOutreachRules } from "@/lib/config/agency-config";
 import type {
   AIServiceResult,
   AIUsage,
@@ -25,6 +26,8 @@ import type {
   AIModelTier,
   BusinessAnalysis,
   BusinessAnalysisInput,
+  OutreachMessage,
+  OutreachMessageInput,
 } from "./types";
 import {
   AIInvalidResponseError,
@@ -101,7 +104,12 @@ export class AIService {
   /** Gestructureerde output: AI-antwoord wordt geëxtraheerd en via Zod gevalideerd. */
   async generateStructured<T>(call: AIServiceCall, schema: z.ZodType<T>): Promise<AIServiceResult<T>> {
     const agent = AI_AGENTS[call.agent];
-    const task: AITaskType = call.agent === "business_analysis" ? "business_analysis" : "generate_structured";
+    const task: AITaskType =
+      call.agent === "business_analysis"
+        ? "business_analysis"
+        : call.agent === "outreach"
+          ? "outreach_generation"
+          : "generate_structured";
     const model = getModelForTier(call.tier ?? agent.defaultTier);
     const started = Date.now();
 
@@ -204,6 +212,65 @@ export class AIService {
     }
   }
 
+  /**
+   * Outreach Agent — genereert een gepersonaliseerd outreach-concept op basis
+   * van uitsluitend échte leaddata (Fase 6). Het resultaat is een CONCEPT:
+   * verzenden gebeurt nooit automatisch en niet in deze fase.
+   * Tier: standaard balanced; powerful alléén via expliciete env-override
+   * (OUTREACH_AI_TIER).
+   */
+  async generateOutreachMessage(
+    input: OutreachMessageInput,
+    leadId?: string | null
+  ): Promise<AIServiceResult<OutreachMessage>> {
+    await this.activityRepository.log({
+      leadId: leadId ?? null,
+      type: "outreach_generation",
+      status: "started",
+      message: `Outreach-concept gestart voor ${input.businessName}`,
+    });
+
+    try {
+      const result = await this.generateStructured<OutreachMessage>(
+        {
+          agent: "outreach",
+          tier: getOutreachTier(),
+          leadId: leadId ?? null,
+          system: OUTREACH_SYSTEM,
+          prompt: buildOutreachPrompt(input),
+          maxTokens: 1500,
+          temperature: 0.5,
+        },
+        OutreachMessageSchema
+      );
+
+      await this.activityRepository.log({
+        leadId: leadId ?? null,
+        type: "outreach_generation",
+        status: "completed",
+        message: `Outreach-concept gegenereerd voor ${input.businessName}`,
+        metadata: {
+          model: result.model,
+          mode: result.mode,
+          durationMs: result.durationMs,
+          cost: result.estimatedCost,
+          tokens: result.usage,
+        },
+      });
+
+      return result;
+    } catch (error) {
+      await this.activityRepository.log({
+        leadId: leadId ?? null,
+        type: "outreach_generation",
+        status: "failed",
+        message: `Outreach-concept mislukt voor ${input.businessName}`,
+        metadata: { reason: userFacingAIMessage(error) },
+      });
+      throw error;
+    }
+  }
+
   private guardSafetyLimit(): void {
     this.requestsThisRun += 1;
     if (this.requestsThisRun > this.config.maxRequestsPerRun) {
@@ -251,6 +318,74 @@ export class AIService {
       errorMessage: error instanceof Error ? error.message : userFacingAIMessage(error),
     });
   }
+}
+
+const OUTREACH_SYSTEM = `Je bent de outreach-agent van een Nederlandse webagency die websites maakt voor lokale bedrijven.
+Je schrijft korte, professionele Nederlandse outreach-e-mails (concept — nooit direct verzenden).
+
+Regels:
+- Gebruik uitsluitend de aangeleverde leaddata; verzin geen feiten, cijfers of namen.
+- Noem geen contactpersoon bij naam; spreek het bedrijf aan.
+- Doe geen claims die niet uit de data volgen.
+- Noem de demo-website alléén als die in de input staat (met de gegeven URL).
+- Vermeld niet richting de ontvanger dat deze tekst AI-gegenereerd is.
+- Beloof geen prijzen, contracten of resultaten.
+- Output: uitsluitend geldig JSON conform het gevraagde schema.`;
+
+function getOutreachTier(): AIModelTier {
+  const override = (process.env.OUTREACH_AI_TIER ?? "").trim().toLowerCase();
+  if (override === "fast" || override === "balanced" || override === "powerful") return override;
+  return AI_AGENTS.outreach.defaultTier;
+}
+
+function buildOutreachPrompt(input: OutreachMessageInput): string {
+  const config = getAgencyConfiguration();
+  const rules = getOutreachRules();
+
+  const lines: string[] = [
+    "Schrijf een gepersonaliseerd outreach-concept (e-mail) voor het volgende bedrijf.",
+    "",
+    "BESCHIKBARE LEADDATA (uitsluitend hieruit putten, niets verzinnen):",
+    `Bedrijf: ${input.businessName}`,
+    `Branche: ${input.industry}`,
+    `Stad: ${input.city}`,
+    `Provincie: ${input.province}`,
+    `Websitestatus: ${input.websiteStatus}${input.website ? ` (huidige site: ${input.website})` : ""}`,
+  ];
+  if (input.phone) lines.push(`Telefoon: aanwezig`);
+  if (input.email) lines.push(`E-mail: aanwezig`);
+  if (typeof input.leadScore === "number") lines.push(`Lead score: ${input.leadScore}`);
+  if (input.scoreFactors?.length) lines.push(`Score factoren: ${input.scoreFactors.join("; ")}`);
+  if (input.leadSource) lines.push(`Bron: ${input.leadSource}`);
+  if (input.discoveryNotes?.length) lines.push(`Discovery-notities: ${input.discoveryNotes.join("; ")}`);
+
+  if (input.demo) {
+    lines.push(
+      "",
+      "BESCHIKBARE DEMO-WEBSITE (bestaat echt en mag genoemd worden):",
+      `URL: ${input.demo.url}`,
+      `Headline: ${input.demo.headline}`,
+      `Template: ${input.demo.template}`
+    );
+  } else {
+    lines.push("", "Er is GEEN demo-website beschikbaar — noem geen demo of voorbeeldwebsite.");
+  }
+
+  lines.push(
+    "",
+    "STIJL & REGELS:",
+    ...(config.communicationTone ? [`Toon: ${config.communicationTone}`] : []),
+    ...(config.companyName ? [`Onderteken namens: ${config.companyName}`] : []),
+    ...(config.forbiddenClaims?.length ? [`Verboden claims: ${config.forbiddenClaims.join("; ")}`] : []),
+    ...rules.map((rule, index) => `${index + 1}. ${rule}`)
+  );
+
+  lines.push(
+    "",
+    'Output: JSON met de velden "personalizationReason" (waarom dit bedrijf relevant is, uitsluitend gebaseerd op de data), "approach" (gedachte achter de aanpak), "subject" (onderwerpregel), "body" (e-mailtekst, 150-400 woorden, gewone tekst met regeleinden als \\n) en "callToAction" (de concrete volgende stap).'
+  );
+
+  return lines.join("\n");
 }
 
 const BUSINESS_ANALYSIS_SYSTEM = `Je bent een business-analist voor een webagency die websites maakt voor lokale Nederlandse bedrijven.

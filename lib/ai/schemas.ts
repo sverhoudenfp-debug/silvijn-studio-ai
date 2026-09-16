@@ -15,6 +15,14 @@ export const LeadScoreAISchema = z.object({
   reasons: z.array(z.string().min(3)).min(1).max(5),
 });
 
+export const OutreachMessageSchema = z.object({
+  personalizationReason: z.string().min(20, "personalizationReason te kort"),
+  approach: z.string().min(10, "approach te kort"),
+  subject: z.string().min(5, "subject te kort").max(120, "subject te lang"),
+  body: z.string().min(150, "body te kort").max(2500, "body te lang"),
+  callToAction: z.string().min(10, "callToAction te kort"),
+});
+
 /** JSON extraheren uit een modelantwoord (tolereert code-fences en whitespace). */
 export function extractJSON(text: string): unknown {
   const stripped = text.replace(/```(?:json)?/g, "").trim();

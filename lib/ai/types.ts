@@ -21,6 +21,7 @@ export type AgentType =
 export type AITaskType =
   | "generate_text"
   | "business_analysis"
+  | "outreach_generation"
   | "lead_score"
   | "classify_lead"
   | "generate_structured";
@@ -79,6 +80,37 @@ export interface BusinessAnalysis {
   opportunity: string;
   potentialProblems: string;
   recommendedApproach: string;
+}
+
+/** Input voor de outreach-berichtgeneratie — uitsluitend échte leaddata, nooit verzinnen. */
+export interface OutreachMessageInput {
+  businessName: string;
+  industry: string;
+  city: string;
+  province: string;
+  websiteStatus: string;
+  website?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  leadScore?: number | null;
+  scoreFactors?: string[];
+  leadSource?: string | null;
+  discoveryNotes?: string[];
+  demo?: {
+    url: string;
+    headline: string;
+    description: string;
+    template: string;
+  } | null;
+}
+
+/** Gestructureerde outreach-output; gevalideerd via OutreachMessageSchema. */
+export interface OutreachMessage {
+  personalizationReason: string;
+  approach: string;
+  subject: string;
+  body: string;
+  callToAction: string;
 }
 
 export interface AIJSONOutput<T> {

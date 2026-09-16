@@ -1,60 +1,30 @@
-import { Badge } from "@/components/ui/badge";
-import { Card, CardHeader } from "@/components/ui/card";
-import { StatCard } from "@/components/ui/stat-card";
+import { OutreachView } from "@/components/outreach/outreach-view";
+import { getDemoRepository } from "@/lib/repositories/demo-repository";
+import { getLeadRepository } from "@/lib/repositories/lead-repository";
+import { OutreachService } from "@/lib/outreach/service";
 
-const stats = [
-  { label: "E-mails verzonden", value: "96", delta: "+12 vandaag" },
-  { label: "Geopend", value: "61", delta: "64% open rate" },
-  { label: "Antwoorden", value: "23", delta: "24% reply rate" },
-  { label: "Niet geïnteresseerd", value: "7", delta: "3 nieuwe" },
-];
+/**
+ * Outreach-overzicht — echte data uit de draft-repository (geen mockstats).
+ * Mock-dashboardwidgets met verzonnen "verzonden"-cijfers zijn hier bewust
+ * vervangen; de dashboard-analytics uit een latere fase pakt dit centraal op.
+ */
+export default async function OutreachPage() {
+  const service = new OutreachService();
+  const [drafts, leads, demos] = await Promise.all([
+    service.listAll(),
+    getLeadRepository().list(),
+    getDemoRepository().list(),
+  ]);
 
-const emails = [
-  { lead: "Jansen Dakwerken", time: "20:36", status: "Beantwoord", variant: "success" as const, subject: "Voorbeeldwebsite voor Jansen Dakwerken" },
-  { lead: "Kapsalon Mirage", time: "19:12", status: "Verzonden", variant: "info" as const, subject: "Meer online zichtbaarheid voor Kapsalon Mirage" },
-  { lead: "Elektro Vries", time: "18:48", status: "Geopend", variant: "neutral" as const, subject: "Een website voor Elektro Vries — vrijblijvende demo" },
-  { lead: "Groen & Co Hoveniers", time: "17:30", status: "Beantwoord", variant: "success" as const, subject: "Voorbeeldwebsite voor Groen & Co Hoveniers" },
-  { lead: "Garage Veldhuis", time: "16:02", status: "In wachtrij", variant: "warning" as const, subject: "Automatisch gegenereerd — wacht op verzending" },
-];
+  const leadNames: Record<string, { name: string; hasDemo: boolean; demoUrl: string | null }> = {};
+  for (const lead of leads) {
+    const demo = demos.find((d) => d.leadId === lead.id);
+    leadNames[lead.id] = {
+      name: lead.businessName,
+      hasDemo: demo?.status === "ready",
+      demoUrl: demo?.status === "ready" ? demo.previewUrl : null,
+    };
+  }
 
-export default function OutreachPage() {
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        {stats.map((stat) => (
-          <StatCard key={stat.label} kpi={stat} />
-        ))}
-      </div>
-
-      <Card className="p-0">
-        <div className="p-5 pb-0">
-          <CardHeader title="Recente outreach" subtitle="AI-gegenereerde e-mails per lead" />
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-zinc-800 text-xs uppercase tracking-wide text-zinc-500">
-                <th className="px-5 py-3 font-medium">Lead</th>
-                <th className="px-3 py-3 font-medium">Onderwerp</th>
-                <th className="px-3 py-3 font-medium">Verzonden</th>
-                <th className="px-3 py-3 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {emails.map((email) => (
-                <tr key={email.lead} className="border-b border-zinc-800/50 last:border-0 hover:bg-zinc-800/30">
-                  <td className="px-5 py-3 font-medium text-zinc-100">{email.lead}</td>
-                  <td className="px-3 py-3 text-zinc-400">{email.subject}</td>
-                  <td className="px-3 py-3 text-zinc-500">{email.time}</td>
-                  <td className="px-3 py-3">
-                    <Badge variant={email.variant}>{email.status}</Badge>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-    </div>
-  );
+  return <OutreachView initialDrafts={drafts} leadNames={leadNames} />;
 }

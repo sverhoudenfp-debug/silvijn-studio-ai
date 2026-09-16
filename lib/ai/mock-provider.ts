@@ -100,6 +100,116 @@ function buildMockRequirementsAnalysis(prompt: string): string {
   return JSON.stringify(output);
 }
 
+function buildMockWebsiteSpecification(prompt: string): string {
+  // Deterministische, veilige mock-planning: uitsluitend echte data uit de prompt.
+  const nameMatch = prompt.match(/Bedrijf: ([^\n]+)/);
+  const industryMatch = prompt.match(/Branche: ([^\n]+)/);
+  const cityMatch = prompt.match(/Plaats: ([^\n]+)/);
+  const provinceMatch = prompt.match(/provincie ([^)\n]+)\)/);
+  const phoneMatch = prompt.match(/Telefoon: ([^\n]+)/);
+  const emailMatch = prompt.match(/E-mail: ([^\n]+)/);
+  const templateMatch = prompt.match(/TEMPLATESUGGESTIE \(deterministisch\): ([a-z_]+)/);
+
+  const businessName = nameMatch ? nameMatch[1].trim() : "Testbedrijf (TESTDATA)";
+  const industry = industryMatch ? industryMatch[1].trim() : "Dienstverlening (TESTDATA)";
+  const city = cityMatch ? cityMatch[1].trim() : "Teststad (TESTDATA)";
+  const template = templateMatch ? templateMatch[1] : "business_standard";
+  const servicesCount = 3;
+
+  const services = [];
+  for (let i = 1; i <= servicesCount; i += 1) {
+    services.push({
+      title: `Dienst ${i} van ${businessName}`,
+      description: null,
+    });
+  }
+
+  const spec = {
+    template,
+    business: {
+      businessName,
+      industry,
+      city,
+      province: provinceMatch ? provinceMatch[1].trim() : null,
+      description: `[INFORMATIE ONBEKEND] — beschrijving volgt zodra aangeleverd`,
+      targetAudience: null,
+    },
+    branding: {
+      primaryColor: null,
+      secondaryColor: null,
+      accentColor: null,
+      backgroundStyle: "licht en zakelijk (TESTDATA-voorstel)",
+      typographyStyle: "modern sans-serif (TESTDATA-voorstel)",
+      visualStyle: "professioneel en overzichtelijk (TESTDATA-voorstel)",
+    },
+    structure: {
+      pages: [{ key: "home", title: "Home" }],
+      navigation: ["Home", "Diensten", "Over ons", "Contact"],
+      sections: ["hero", "services", "about", "cta", "contact"],
+    },
+    content: {
+      headline: `${businessName} — professionele ${industry.toLowerCase()} in ${city}`,
+      subheadline: `Persoonlijke service en vakmanschap in ${city} en omgeving. Vraag vrijblijvend naar de mogelijkheden.`,
+      valueProposition: null,
+      services,
+      about: `[INFORMATIE ONBEKEND] — tekst over het bedrijf volgt zodra aangeleverd`,
+      benefits: [
+        `Actief in ${city} en directe omgeving`,
+        "Persoonlijk contact en heldere afspraken",
+        "Vrijblijvend kennismakingsgesprek mogelijk",
+      ],
+      faq: [
+        {
+          question: `In welke regio is ${businessName} actief?`,
+          answer: `Wij werken in ${city} en de directe omgeving. Neem contact op voor de mogelijkheden in uw plaats.`,
+        },
+        {
+          question: "Hoe kan ik een afspraak maken?",
+          answer: phoneMatch || emailMatch
+            ? "U kunt ons telefonisch of per e-mail bereiken; we plannen vervolgens een moment dat u schikt."
+            : "Neem contact op via het contactformulier; we reageren zo snel mogelijk.",
+        },
+      ],
+      testimonials: [],
+      contactIntro: `Kom in contact met ${businessName}.`,
+      ctaPrimaryText: "Neem contact op",
+      ctaSecondaryText: "Bekijk onze diensten",
+    },
+    conversion: {
+      primaryCta: "contact",
+      secondaryCta: "diensten",
+      contactMethods: [
+        ...(phoneMatch ? ["telefoon"] : []),
+        ...(emailMatch ? ["e-mail"] : []),
+        "contactformulier",
+      ],
+      leadCapture: true,
+    },
+    media: {
+      imageRequirements: [
+        { key: "hero", description: `Sfeerbeeld passend bij ${industry.toLowerCase()} in ${city}`, required: true },
+        { key: "services", description: "Werk-/dienstgerelateerd beeldmateriaal (placeholder tot aangeleverd)", required: false },
+        { key: "local", description: `Herkenbaar stadsbeeld ${city} (placeholder)`, required: false },
+      ],
+      imageDescriptions: [`Hero: sfeerbeeld ${industry.toLowerCase()}`, "Services: werkimpressie (placeholder)"],
+      imagePlaceholders: ["hero-placeholder", "services-placeholder", "local-placeholder"],
+    },
+    seo: {
+      title: `${businessName} | ${industry} in ${city}`,
+      metaDescription: `${businessName} is een ${industry.toLowerCase()} gevestigd in ${city}. Bekijk onze diensten en neem vrijblijvend contact op.`,
+      keywords: [industry.toLowerCase(), city.toLowerCase(), `${industry.toLowerCase()} ${city.toLowerCase()}`],
+      localArea: city,
+    },
+    missingInformation: [
+      "TESTDATA (mock): bedrijfsbeschrijving is onbekend — placeholder geplaatst.",
+      "TESTDATA (mock): echte dienstnamen zijn onbekend — generieke diensten geplaatst.",
+      "TESTDATA (mock): foto's/materiaal is niet aangeleverd — placeholder-referenties geplaatst.",
+    ],
+  };
+
+  return JSON.stringify(spec);
+}
+
 function buildMockSalesAnalysis(prompt: string): string {
   // Inbound-bericht uit de prompt halen (onder de Body:-marker, tot de lege regel)
   const match = prompt.match(/Body:\n([\s\S]*?)\n\n/);
@@ -151,7 +261,9 @@ export class MockAIProvider implements AIProvider {
             ? buildMockSalesAnalysis(request.prompt)
             : request.task === "requirements_analysis"
               ? buildMockRequirementsAnalysis(request.prompt)
-              : `[MOCK AI] Antwoord op: ${request.prompt.slice(0, 80)}...`;
+              : request.task === "website_planning"
+                ? buildMockWebsiteSpecification(request.prompt)
+                : `[MOCK AI] Antwoord op: ${request.prompt.slice(0, 80)}...`;
 
     return {
       text,

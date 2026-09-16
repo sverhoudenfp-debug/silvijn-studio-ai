@@ -84,6 +84,67 @@ export const RequirementsAnalysisSchema = z.object({
   confidence: z.number().min(0).max(1),
 });
 
+export const WebsiteSpecificationSchema = z.object({
+  template: z.enum(["local_service", "professional_service", "home_improvement", "business_standard"]),
+  business: z.object({
+    businessName: z.string().min(2),
+    industry: z.string().min(2),
+    city: z.string().min(2),
+    province: z.string().nullable(),
+    description: z.string().nullable(),
+    targetAudience: z.string().nullable(),
+  }),
+  branding: z.object({
+    primaryColor: z.string().nullable(),
+    secondaryColor: z.string().nullable(),
+    accentColor: z.string().nullable(),
+    backgroundStyle: z.string().nullable(),
+    typographyStyle: z.string().nullable(),
+    visualStyle: z.string().nullable(),
+  }),
+  structure: z.object({
+    pages: z.array(z.object({ key: z.string().min(1), title: z.string().nullable() })).max(10),
+    navigation: z.array(z.string().min(1)).max(8),
+    sections: z.array(z.string().min(1)).max(12),
+  }),
+  content: z.object({
+    headline: z.string().min(5),
+    subheadline: z.string().nullable(),
+    valueProposition: z.string().nullable(),
+    services: z
+      .array(z.object({ title: z.string().min(2), description: z.string().nullable() }))
+      .min(1)
+      .max(8),
+    about: z.string().nullable(),
+    benefits: z.array(z.string().min(3)).max(8),
+    faq: z.array(z.object({ question: z.string().min(5), answer: z.string().min(5) })).max(8),
+    testimonials: z.array(z.string().min(5)).max(5),
+    contactIntro: z.string().nullable(),
+    ctaPrimaryText: z.string().min(3),
+    ctaSecondaryText: z.string().nullable(),
+  }),
+  conversion: z.object({
+    primaryCta: z.string().min(2),
+    secondaryCta: z.string().nullable(),
+    contactMethods: z.array(z.string().min(2)).max(6),
+    leadCapture: z.boolean(),
+  }),
+  media: z.object({
+    imageRequirements: z
+      .array(z.object({ key: z.string().min(2), description: z.string().min(5), required: z.boolean() }))
+      .max(10),
+    imageDescriptions: z.array(z.string().min(3)).max(10),
+    imagePlaceholders: z.array(z.string().min(3)).max(10),
+  }),
+  seo: z.object({
+    title: z.string().min(5),
+    metaDescription: z.string().min(20).max(200),
+    keywords: z.array(z.string().min(2)).max(12),
+    localArea: z.string().nullable(),
+  }),
+  missingInformation: z.array(z.string().min(5)).max(12),
+});
+
 /** JSON extraheren uit een modelantwoord (tolereert code-fences en whitespace). */
 export function extractJSON(text: string): unknown {
   const stripped = text.replace(/```(?:json)?/g, "").trim();

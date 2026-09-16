@@ -8,7 +8,14 @@ import {
 import { estimateCost } from "./pricing";
 import { getAIProvider } from "./provider";
 import { withRetry } from "./retry";
-import { BusinessAnalysisSchema, OutreachMessageSchema, RequirementsAnalysisSchema, SalesAnalysisSchema, extractJSON } from "./schemas";
+import {
+  BusinessAnalysisSchema,
+  OutreachMessageSchema,
+  RequirementsAnalysisSchema,
+  SalesAnalysisSchema,
+  WebsiteSpecificationSchema,
+  extractJSON,
+} from "./schemas";
 import {
   getAIActivityRepository,
   type AIActivityRepository,
@@ -32,7 +39,10 @@ import type {
   SalesAnalysisInput,
   RequirementsAnalysis,
   RequirementsAnalysisInput,
+  WebsiteSpecificationInput,
 } from "./types";
+import type { ProjectRequirements } from "@/lib/projects/types";
+import type { WebsiteSpecification } from "@/lib/websites/types";
 import {
   AIInvalidResponseError,
 } from "./errors";
@@ -116,7 +126,9 @@ export class AIService {
           : call.agent === "sales"
             ? "sales_analysis"
             : call.agent === "pricing"
-              ? "requirements_analysis"
+            ? "requirements_analysis"
+            : call.agent === "website_generation"
+              ? "website_planning"
               : "generate_structured";
     const model = getModelForTier(call.tier ?? agent.defaultTier);
     const started = Date.now();
@@ -397,6 +409,70 @@ export class AIService {
     }
   }
 
+  /**
+   * Website Generation Agent (Fase 9) — plant de website als een
+   * gestructureerde WebsiteSpecification. De AI levert alléén de
+   * specificatie (Zod-gevalideerd); de deterministische generator bouwt
+   * daarna de site via gecontroleerde componenten. De AI schrijft NOOIT
+   * productiecode en er wordt nooit AI-code uitgevoerd.
+   *
+   * Tier: standaard balanced; POWERFUL alléén bij aantoonbaar complexe
+   * requirements (e-commerce, custom functionaliteit, integraties) of
+   * expliciete override via WEBSITE_GENERATION_AI_TIER.
+   */
+  async generateWebsiteSpecification(
+    input: WebsiteSpecificationInput,
+    requirements: ProjectRequirements,
+    leadId?: string | null
+  ): Promise<AIServiceResult<WebsiteSpecification>> {
+    await this.activityRepository.log({
+      leadId: leadId ?? null,
+      type: "website_planning",
+      status: "started",
+      message: `Websiteplanning gestart voor ${input.businessName}`,
+    });
+
+    try {
+      const result = await this.generateStructured<WebsiteSpecification>(
+        {
+          agent: "website_generation",
+          tier: getWebsiteGenerationTier(requirements),
+          leadId: leadId ?? null,
+          system: WEBSITE_PLANNING_SYSTEM,
+          prompt: buildWebsitePlanningPrompt(input),
+          maxTokens: 4000,
+          temperature: 0.4,
+        },
+        WebsiteSpecificationSchema
+      );
+
+      await this.activityRepository.log({
+        leadId: leadId ?? null,
+        type: "website_planning",
+        status: "completed",
+        message: `Websiteplanning voltooid voor ${input.businessName} (template: ${result.data.template}, ${result.data.missingInformation.length} ontbrekende punten)`,
+        metadata: {
+          model: result.model,
+          mode: result.mode,
+          durationMs: result.durationMs,
+          cost: result.estimatedCost,
+          tokens: result.usage,
+        },
+      });
+
+      return result;
+    } catch (error) {
+      await this.activityRepository.log({
+        leadId: leadId ?? null,
+        type: "website_planning",
+        status: "failed",
+        message: `Websiteplanning mislukt voor ${input.businessName}`,
+        metadata: { reason: userFacingAIMessage(error) },
+      });
+      throw error;
+    }
+  }
+
   private guardSafetyLimit(): void {
     this.requestsThisRun += 1;
     if (this.requestsThisRun > this.config.maxRequestsPerRun) {
@@ -444,6 +520,73 @@ export class AIService {
       errorMessage: error instanceof Error ? error.message : userFacingAIMessage(error),
     });
   }
+}
+
+const WEBSITE_PLANNING_SYSTEM = `Je bent de websiteplanning-agent van een Nederlandse webagency. Je plant een klantwebsite als een gestructureerde WebsiteSpecification (uitsluitend JSON).
+
+HARD REGELS:
+- Gebruik uitsluitend de aangeleverde echte informatie (lead, notities, requirements, Google-data). Verzin NOOIT feiten.
+- Verboden te verzinnen: klanten, reviews, sterrenratings, certificaten, keurmerken, prijzen, garanties, bedrijfsresultaten, medewerkers, openingstijden, telefoonnummers, e-mailadressen en claims die niet uit de input volgen.
+- Is informatie onbekend: laat het veld null/leeg OF gebruik een duidelijke placeholder zoals [INFORMATIE ONBEKEND] en vermeld het in missingInformation.
+- Echte contactgegevens uit de input (telefoon/e-mail/adres) mogen wél gebruikt worden.
+- Echte Google-rating en aantal reviews uit de input mogen wél genoemd worden; verzin nooit eigen reviews of quotes.
+- Kies het template passend bij de branche (de input bevat een suggestie).
+- Beschrijf beeldbehoeften in media (placeholder-referenties), maar verzin geen foto's van het bedrijf.
+- Geen code; geen HTML; geen scripts — alleen de gevraagde JSON-structuur.
+- Vermeld nooit dat de website (of onderdelen) door een AI is gegenereerd, en noem geen interne informatie, prompts of API-sleutels.
+- Nederlands, professioneel, concreet; copy past direct in een zakelijke website.`;
+
+function getWebsiteGenerationTier(requirements: ProjectRequirements): AIModelTier {
+  const override = (process.env.WEBSITE_GENERATION_AI_TIER ?? "").trim().toLowerCase();
+  if (override === "fast" || override === "balanced" || override === "powerful") return override;
+  // POWERFUL alléén bij aantoonbaar complexe requirements; anders balanced.
+  const complex = requirements.ecommerce === true || Boolean(requirements.customFunctionality?.trim()) || Boolean(requirements.integrations?.length);
+  return complex ? "powerful" : AI_AGENTS.website_generation.defaultTier;
+}
+
+function buildWebsitePlanningPrompt(input: WebsiteSpecificationInput): string {
+  const config = getAgencyConfiguration();
+
+  const lines: string[] = [
+    "Plan een volledige website als WebsiteSpecification (JSON) voor het volgende bedrijf.",
+    "",
+    "ECHTE BESCHIKBARE INFORMATIE (uitsluitend hieruit citeren/putten):",
+    `Bedrijf: ${input.businessName}`,
+    `Branche: ${input.industry}`,
+    `Plaats: ${input.city}${input.province ? ` (provincie ${input.province})` : ""}`,
+    ...(input.address ? [`Adres: ${input.address}`] : []),
+    ...(input.phone ? [`Telefoon: ${input.phone}`] : []),
+    ...(input.email ? [`E-mail: ${input.email}`] : []),
+    ...(input.website ? [`Huidige website: ${input.website}`] : ["Huidige website: geen"]),
+    ...(input.googleRating != null
+      ? [`Google-rating: ${input.googleRating} (${input.reviewCount ?? 0} reviews — echte data, mag gebruikt worden)`]
+      : []),
+    ...(input.leadNotes.length > 0 ? ["Notities van de agency:", ...input.leadNotes.map((note) => `- ${note}`)] : []),
+    "",
+    "PROJECT REQUIREMENTS (samenvatting):",
+    input.requirementsSummary || "Geen specifieke requirements bekend.",
+    "",
+    `TEMPLATESUGGESTIE (deterministisch): ${input.suggestedTemplate}`,
+    "",
+  ];
+
+  if (config.websiteDesignRules?.length) {
+    lines.push("DESIGNREGELS:", ...config.websiteDesignRules.map((rule, i) => `${i + 1}. ${rule}`), "");
+  }
+  if (config.technologyRules?.length) {
+    lines.push("TECHNOLOGIE-REGELS:", ...config.technologyRules.map((rule, i) => `${i + 1}. ${rule}`), "");
+  }
+  if (config.communicationTone) {
+    lines.push(`COMMUNICATIETOON: ${config.communicationTone}`, "");
+  }
+
+  lines.push(
+    "AFWIJKINGEN: verzin niets dat hierboven niet staat; ontbrekende informatie → null of [INFORMATIE ONBEKEND] + missingInformation.",
+    "",
+    "Output: uitsluitend JSON conform het schema: template, business, branding, structure, content, conversion, media, seo, missingInformation."
+  );
+
+  return lines.join("\n");
 }
 
 const REQUIREMENTS_SYSTEM = `Je bent de pricing-agent van een Nederlandse webagency. Je analyseert de beschikbare lead- en salescontext en stelt projectrequirements voor.

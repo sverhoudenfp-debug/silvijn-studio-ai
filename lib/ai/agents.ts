@@ -90,10 +90,11 @@ export const AI_AGENTS: Record<AgentType, AgentDefinition> = {
   website_generation: {
     id: "website_generation",
     name: "Website Generation Agent",
-    description: "Genereert definitieve klantwebsites (latere fase).",
-    status: "planned",
-    defaultTier: "powerful",
-    defaultTask: "generate_structured",
+    description:
+      "Plant de website als gestructureerde, Zod-gevalideerde WebsiteSpecification op basis van échte lead-/projectinformatie; de deterministische generator bouwt daarna de site met gecontroleerde componenten — de AI schrijft nooit productiecode.",
+    status: "implemented",
+    defaultTier: "balanced",
+    defaultTask: "website_planning",
   },
   quality_control: {
     id: "quality_control",

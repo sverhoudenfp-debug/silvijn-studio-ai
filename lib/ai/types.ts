@@ -24,6 +24,7 @@ export type AITaskType =
   | "outreach_generation"
   | "sales_analysis"
   | "requirements_analysis"
+  | "website_planning"
   | "lead_score"
   | "classify_lead"
   | "generate_structured";
@@ -237,6 +238,28 @@ export interface RequirementsAnalysis {
   missingInformation: string[];
   questions: string[];
   confidence: number;
+}
+
+/**
+ * Context voor de AI-websiteplanning — uitsluitend beschikbare, echte
+ * informatie uit lead, project, requirements en configuratie. De AI
+ * verzint hier GEEN feiten aan toe.
+ */
+export interface WebsiteSpecificationInput {
+  businessName: string;
+  industry: string;
+  city: string;
+  province: string | null;
+  address: string | null;
+  phone: string | null; // echte contactgegevens mogen getoond worden
+  email: string | null;
+  website: string | null;
+  leadNotes: string[]; // menselijke notities — betrouwbare bron
+  requirementsSummary: string;
+  existingWebsite: boolean;
+  googleRating: number | null; // échte Google-data; mag gebruikt worden
+  reviewCount: number | null;
+  suggestedTemplate: string; // deterministische suggestie (engine)
 }
 
 export interface AIJSONOutput<T> {

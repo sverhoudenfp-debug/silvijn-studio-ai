@@ -12,7 +12,6 @@ import { calculatePriceIndication } from "../lib/pricing/engine";
 import { getPriceIndicationRepository } from "../lib/pricing/repository";
 import { getPricingConfiguration } from "../lib/config/agency-config";
 import { ProjectService, ProjectLimitError, ProjectNotFoundError, ProjectValidationError } from "../lib/projects/service";
-import { getProjectRepository } from "../lib/projects/repository";
 import { getLeadRepository } from "../lib/repositories/lead-repository";
 import type { PricingConfiguration } from "../lib/pricing/types";
 

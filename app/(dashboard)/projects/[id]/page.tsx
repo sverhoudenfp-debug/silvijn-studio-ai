@@ -3,6 +3,7 @@ import { ProjectDetail } from "@/components/projects/project-detail";
 import { getLeadRepository } from "@/lib/repositories/lead-repository";
 import { getSalesInteractionRepository } from "@/lib/sales/repository";
 import { getProjectRepository } from "@/lib/projects/repository";
+import { getGeneratedWebsiteRepository } from "@/lib/websites/repository";
 
 export async function generateMetadata(props: PageProps<"/projects/[id]">) {
   const { id } = await props.params;
@@ -20,9 +21,10 @@ export default async function ProjectDetailPage(props: PageProps<"/projects/[id]
   const project = await getProjectRepository().getById(id);
   if (!project) notFound();
 
-  const [lead, interactions] = await Promise.all([
+  const [lead, interactions, websites] = await Promise.all([
     getLeadRepository().get(project.leadId),
     getSalesInteractionRepository().listByLead(project.leadId),
+    getGeneratedWebsiteRepository().listByProject(project.id),
   ]);
   const latestQualification = interactions[0]?.qualification ?? null;
 
@@ -41,6 +43,7 @@ export default async function ProjectDetailPage(props: PageProps<"/projects/[id]
             }
           : null
       }
+      websites={websites}
       latestQualification={
         latestQualification
           ? {

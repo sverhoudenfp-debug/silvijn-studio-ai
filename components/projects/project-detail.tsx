@@ -16,6 +16,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import type { Project, ProjectRequirements, ProjectStatus } from "@/lib/projects/types";
 import type { PriceIndication } from "@/lib/pricing/types";
+import { WebsiteGenerationSection } from "@/components/projects/website-generation-section";
+import type { GeneratedWebsite } from "@/lib/websites/types";
 
 /**
  * Project-detail (Fase 8). Requirements en prijsindicaties zijn altijd
@@ -106,10 +108,12 @@ export function ProjectDetail({
   project,
   lead,
   latestQualification,
+  websites,
 }: {
   project: Project;
   lead: { id: string; businessName: string; leadScore: number; leadStatus: string; industry: string; city: string } | null;
   latestQualification: { status: string; interestLevel: string; projectType: string | null; timeline: string | null; missingInformation: string[] } | null;
+  websites: GeneratedWebsite[];
 }) {
   const [form, setForm] = useState<RequirementsFormState>(toFormState(project.requirements));
   const [indications, setIndications] = useState<PriceIndication[]>([]);
@@ -492,6 +496,14 @@ export function ProjectDetail({
           </p>
         )}
       </Card>
+
+      {/* ===== WEBSITE GENERATION ===== */}
+      <WebsiteGenerationSection
+        projectId={project.id}
+        projectStatus={project.status}
+        leadStatus={lead?.leadStatus ?? "unknown"}
+        websites={websites}
+      />
     </div>
   );
 }

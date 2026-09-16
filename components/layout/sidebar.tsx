@@ -52,7 +52,7 @@ const navItems = [
   { href: "/conversations", label: "Conversations", icon: "chat" },
   { href: "/demo-websites", label: "Demo Websites", icon: "monitor" },
   { href: "/projects", label: "Projects", icon: "folder" },
-  { href: "/websites", label: "Websites", icon: "globe" },
+  { href: "/generated-websites", label: "Websites", icon: "globe" },
   { href: "/analytics", label: "Analytics", icon: "chart" },
   { href: "/automation", label: "Automation", icon: "zap" },
   { href: "/settings", label: "Settings", icon: "sliders" },

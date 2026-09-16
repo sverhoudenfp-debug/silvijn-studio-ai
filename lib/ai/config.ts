@@ -40,6 +40,18 @@ function readModel(tier: AIModelTier, fallback: string): string {
 
 export function getAIConfig(): AIConfig {
   const modeEnv = process.env.AI_MODE?.trim().toLowerCase();
+  // FAIL LOUD (Fase 12 §B): in productie mag een ontbrekende AI_MODE NIET stilletjs
+  // naar mock terugvallen — live AI is de expliciete productiebedoeling.
+  // Expliciete keuzes: "live" (vereist key) of "mock" (bewuste dev/test-mode).
+  // Mock fallback blijft bewust beschikbaar voor development; zie docs/production.md.
+  // Fail-loud alléén in de draaiende productie-omgeving — niet tijdens `next build`
+  // (die draait ook met NODE_ENV=production maar zet geen runtime-env).
+  const isBuildPhase = process.env.NEXT_PHASE === "phase-production-build";
+  if (process.env.NODE_ENV === "production" && !modeEnv && !isBuildPhase) {
+    throw new AIConfigurationError(
+      "AI_MODE ontbreekt in de productie-omgeving — stel AI_MODE=live (of expliciet mock) in via de deployment-omgeving."
+    );
+  }
   const mode: AIMode = modeEnv === "live" ? "live" : "mock";
   const apiKey = process.env.ANTHROPIC_API_KEY?.trim() || null;
   const maxRequests = Number.parseInt(process.env.AI_MAX_REQUESTS_PER_RUN ?? "", 10);

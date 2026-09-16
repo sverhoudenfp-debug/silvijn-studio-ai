@@ -21,10 +21,15 @@ import type {
 function mapAnthropicError(error: unknown): Error {
   if (error instanceof Anthropic.APIError) {
     const status = error.status ?? 0;
-    if (status === 401 || status === 403) return new AIAuthError("Anthropic-authenticatie mislukt");
-    if (status === 429) return new AIProviderError("Anthropic rate limit bereikt");
-    if (status >= 500) return new AIProviderError("Anthropic-serverfout");
-    return new AIProviderError(`Anthropic-APIfout (status ${status})`);
+    // Fase 12 §O: log het veilige Anthropic error.type (never de payload —
+    // die kan request-details bevatten). error.error?.type is een publieke
+    // enum als invalid_request_error / billing_error / rate_limit_error.
+    const errorType = (error as { error?: { type?: string } }).error?.type;
+    const typeSuffix = errorType ? `, type: ${errorType}` : "";
+    if (status === 401 || status === 403) return new AIAuthError(`Anthropic-authenticatie mislukt (status ${status}${typeSuffix})`);
+    if (status === 429) return new AIProviderError(`Anthropic rate limit bereikt${typeSuffix}`);
+    if (status >= 500) return new AIProviderError(`Anthropic-serverfout (status ${status}${typeSuffix})`);
+    return new AIProviderError(`Anthropic-APIfout (status ${status}${typeSuffix})`);
   }
   if (error instanceof Anthropic.APIConnectionError) {
     return new AIProviderError("Kon Anthropic niet bereiken (netwerkfout)");

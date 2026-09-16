@@ -65,14 +65,15 @@ Tabellen `automations`, `automation_runs`, `automation_run_steps`,
 mutaties lopen uitsluitend server-side. Workflow-definities worden bij
 eerste gebruik geseed via `AutomationService.ensureWorkflows()`.
 
-## Supabase-setup (éénmalig)
+## Supabase-setup
 
-De Supabase-credentials zijn geconfigureerd, maar de tabellen bestaan nog
-niet in het live project. Voer **eenmalig** `supabase/apply-all.sql` in zijn
-geheel uit in de Supabase SQL-editor (Dashboard → SQL Editor → New query →
-plak → Run). Dit bestand bevat migratie 0001 t/m 0008 in de juiste volgorde.
-Zonder deze stap faalt de build zodra de Supabase-credentials actief zijn,
-omdat de repository-laag fail-loud kiest boven stille fallback naar mock.
+Migraties 0001 t/m 0008 zijn live toegepast en geverifieerd. Nieuwe
+installaties voeren `supabase/apply-all.sql` uit in de Supabase SQL-editor.
+**Openstaand:** migratie 0009 (uitbreiding van de
+`generated_websites_status_check`-constraint met de QC-statussen) moet
+eenmalig in de SQL-editor worden uitgevoerd — zie
+docs/production-readiness.md. De repository-laag kiest fail-loud boven
+stille fallback naar mock.
 
 ## Scheduler (voorbereid, nog NIET actief)
 

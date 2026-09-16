@@ -1,22 +1,34 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
-import { automationModules } from "@/lib/mock-data";
+import type { Automation } from "@/lib/automation/types";
 
-export function AutomationStatus() {
+/** Fase 12 §P — echte automations uit de database. */
+
+const statusVariants: Record<string, "success" | "warning" | "danger" | "neutral" | "info"> = {
+  active: "success",
+  paused: "warning",
+  disabled: "neutral",
+  draft: "info",
+  completed: "success",
+  failed: "danger",
+};
+
+export function AutomationStatus({ automations }: { automations: Automation[] }) {
   return (
     <Card>
-      <CardHeader
-        title="Automation Status"
-        subtitle="Fase 1 — uitsluitend UI, geen echte automations"
-      />
-      <ul className="space-y-3">
-        {automationModules.map((module) => (
-          <li key={module.name} className="flex items-center justify-between gap-3 text-sm">
-            <span className="text-zinc-300">{module.name}</span>
-            <Badge variant={module.variant}>{module.status}</Badge>
-          </li>
-        ))}
-      </ul>
+      <CardHeader title="Automation Status" subtitle="Actuele automations — geen scheduler actief" />
+      {automations.length === 0 ? (
+        <p className="py-4 text-sm text-zinc-500">Nog geen automations gedefinieerd.</p>
+      ) : (
+        <ul className="space-y-3">
+          {automations.map((automation) => (
+            <li key={automation.id} className="flex items-center justify-between gap-3 text-sm">
+              <span className="min-w-0 truncate text-zinc-300">{automation.name}</span>
+              <Badge variant={statusVariants[automation.status] ?? "neutral"}>{automation.status}</Badge>
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   );
 }

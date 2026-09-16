@@ -13,9 +13,20 @@ export interface AIActivityInput {
   metadata?: Record<string, unknown> | null;
 }
 
+export interface AIActivityRecord {
+  id: string | null;
+  leadId: string | null;
+  type: string;
+  status: "started" | "completed" | "failed" | "blocked";
+  message: string;
+  createdAt: string | null;
+}
+
 export interface AIActivityRepository {
   readonly sink: "supabase" | "memory";
   log(activity: AIActivityInput): Promise<void>;
+  /** Fase 12 §O/P/Q: uitlezen voor activity-feed en audit-trail — nieuwste eerst. */
+  listRecent(limit?: number): Promise<AIActivityRecord[]>;
 }
 
 export class MemoryAIActivityRepository implements AIActivityRepository {
@@ -30,10 +41,38 @@ export class MemoryAIActivityRepository implements AIActivityRepository {
   getActivities(): AIActivityInput[] {
     return this.activities;
   }
+
+  async listRecent(limit = 100): Promise<AIActivityRecord[]> {
+    return this.activities.slice(-limit).reverse().map((a, i) => ({
+      id: `memory-${this.activities.length - i}`,
+      leadId: a.leadId ?? null,
+      type: a.type,
+      status: a.status,
+      message: a.message,
+      createdAt: null,
+    }));
+  }
 }
 
 export class SupabaseAIActivityRepository implements AIActivityRepository {
   readonly sink = "supabase" as const;
+
+  async listRecent(limit = 100): Promise<AIActivityRecord[]> {
+    const { data, error } = await getSupabaseServerClient()
+      .from("ai_activities")
+      .select("id,lead_id,type,status,message,created_at")
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) return [];
+    return (data ?? []).map((row: Record<string, unknown>) => ({
+      id: row.id as string | null,
+      leadId: (row.lead_id as string | null) ?? null,
+      type: row.type as string,
+      status: row.status as "started" | "completed" | "failed" | "blocked",
+      message: row.message as string,
+      createdAt: (row.created_at as string | null) ?? null,
+    }));
+  }
 
   async log(activity: AIActivityInput): Promise<void> {
     const { error } = await getSupabaseServerClient().from("ai_activities").insert({

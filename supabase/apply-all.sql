@@ -368,7 +368,9 @@ create table if not exists public.generated_websites (
   slug text not null unique,
   business_name text not null,
   status text not null default 'generating'
-    check (status in ('generating', 'generated', 'building', 'ready_for_qc', 'failed', 'archived')),
+    check (status in ('generating', 'generated', 'building', 'ready_for_qc',
+      'qc_running', 'ready_for_silvijn', 'needs_revision', 'approved',
+      'failed', 'archived')),
   generation_status text not null default 'pending'
     check (generation_status in ('pending', 'planning', 'generating', 'validating', 'completed', 'failed')),
   website_type text not null

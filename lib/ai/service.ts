@@ -14,6 +14,7 @@ import {
   RequirementsAnalysisSchema,
   SalesAnalysisSchema,
   WebsiteSpecificationSchema,
+  QCAnalysisSchema,
   extractJSON,
 } from "./schemas";
 import {
@@ -40,9 +41,11 @@ import type {
   RequirementsAnalysis,
   RequirementsAnalysisInput,
   WebsiteSpecificationInput,
+  WebsiteQualityAnalysisInput,
 } from "./types";
 import type { ProjectRequirements } from "@/lib/projects/types";
 import type { WebsiteSpecification } from "@/lib/websites/types";
+import type { QCAnalysis } from "@/lib/qc/ai-types";
 import {
   AIInvalidResponseError,
 } from "./errors";
@@ -129,7 +132,9 @@ export class AIService {
             ? "requirements_analysis"
             : call.agent === "website_generation"
               ? "website_planning"
-              : "generate_structured";
+              : call.agent === "website_quality_control"
+                ? "website_quality_analysis"
+                : "generate_structured";
     const model = getModelForTier(call.tier ?? agent.defaultTier);
     const started = Date.now();
 
@@ -473,6 +478,66 @@ export class AIService {
     }
   }
 
+  /**
+   * Website Quality Control Agent (Fase 10) — ADVISERENDE AI-analyse van
+   * content, UX, design, conversion en business-consistentie, bovenop de
+   * deterministische checks. De AI mag issues classificeren en
+   * aanbevelingen doen, maar NOOIT: goedkeuren, leveren, publiceren,
+   * prijzen noemen of de harde FAIL-regels (security/technical/fabricatie)
+   * overrulen. Die regels worden deterministisch toegepast.
+   */
+  async generateWebsiteQualityAnalysis(
+    input: WebsiteQualityAnalysisInput,
+    leadId?: string | null
+  ): Promise<AIServiceResult<QCAnalysis>> {
+    await this.activityRepository.log({
+      leadId: leadId ?? null,
+      type: "website_quality_analysis",
+      status: "started",
+      message: `AI-kwaliteitsanalyse gestart voor ${input.businessName}`,
+    });
+
+    try {
+      const result = await this.generateStructured<QCAnalysis>(
+        {
+          agent: "website_quality_control",
+          tier: getWebsiteQCTier(),
+          leadId: leadId ?? null,
+          system: WEBSITE_QC_SYSTEM,
+          prompt: buildWebsiteQCPrompt(input),
+          maxTokens: 2500,
+          temperature: 0.3,
+        },
+        QCAnalysisSchema
+      );
+
+      await this.activityRepository.log({
+        leadId: leadId ?? null,
+        type: "website_quality_analysis",
+        status: "completed",
+        message: `AI-kwaliteitsanalyse voltooid voor ${input.businessName} (${result.data.recommendations.length} aanbevelingen)`,
+        metadata: {
+          model: result.model,
+          mode: result.mode,
+          durationMs: result.durationMs,
+          cost: result.estimatedCost,
+          tokens: result.usage,
+        },
+      });
+
+      return result;
+    } catch (error) {
+      await this.activityRepository.log({
+        leadId: leadId ?? null,
+        type: "website_quality_analysis",
+        status: "failed",
+        message: `AI-kwaliteitsanalyse mislukt voor ${input.businessName}`,
+        metadata: { reason: userFacingAIMessage(error) },
+      });
+      throw error;
+    }
+  }
+
   private guardSafetyLimit(): void {
     this.requestsThisRun += 1;
     if (this.requestsThisRun > this.config.maxRequestsPerRun) {
@@ -587,6 +652,51 @@ function buildWebsitePlanningPrompt(input: WebsiteSpecificationInput): string {
   );
 
   return lines.join("\n");
+}
+
+const WEBSITE_QC_SYSTEM = `Je bent de kwaliteitscontrole-agent van een Nederlandse webagency. Je beoordeelt een gegenereerde klantwebsite op content, UX, design, conversion en business-consistentie.
+
+HARD REGELS:
+- Je bent ADVISEREND: je rapporteert en classificeert, maar keurt NOOIT goed namens de eigenaar, start nooit levering/publicatie en noemt nooit prijzen, garanties of contractvoorwaarden.
+- Gebruik alleen de aangeleverde informatie. Verzin geen feiten, problemen of claims.
+- Herbeoordeel fabricatie-risico's: noem alleen reviews, certificaten, keurmerken, prijzen, garanties, klantaantallen of contactgegevens als feit als deze uit de aangeleverde echte data volgen. Anders: severity error of critical.
+- Ontbrekende informatie markeer je als MISSING_INFORMATION (info/warning) — nooit als feit.
+- Neem de deterministische checkresultaten serieus: je kunt zwaardere severity voorstellen, maar nooit afzwakken wat deterministisch is gevonden.
+- Geen rankingclaims ("op #1 in Google") — die kunnen uit deze analyse niet volgen.
+- Beoordeel Nederlands zakelijk taalgebruik: grammatica, duidelijkheid, professionele toon, consistente tone of voice.
+- Geef concrete, uitvoerbare aanbevelingen in het Nederlands.
+- Output uitsluitend als JSON conform het schema.`;
+
+function getWebsiteQCTier(): AIModelTier {
+  const override = (process.env.WEBSITE_QC_AI_TIER ?? "").trim().toLowerCase();
+  if (override === "fast" || override === "balanced" || override === "powerful") return override;
+  return AI_AGENTS.website_quality_control.defaultTier;
+}
+
+function buildWebsiteQCPrompt(input: WebsiteQualityAnalysisInput): string {
+  return [
+    "Beoordeel de volgende gegenereerde website op content, UX, design, conversion en business-consistentie.",
+    "",
+    "ECHTE BEDRIJFSDATA:",
+    `Bedrijf: ${input.businessName}`,
+    `Branche: ${input.industry}`,
+    `Plaats: ${input.city}`,
+    `Lead-status: ${input.leadStatus}`,
+    "",
+    "PROJECT REQUIREMENTS (samenvatting):",
+    input.requirementsSummary,
+    "",
+    "WEBSITE SPECIFICATION (samenvatting):",
+    input.specificationSummary,
+    "",
+    "GEGENEERDE SECTIES (samenvatting):",
+    input.generatedSectionsSummary,
+    "",
+    "DETERMINISTISCHE CHECKRESULTATEN (serieus nemen — niet afzwakken):",
+    input.deterministicResults,
+    "",
+    "Lever JSON met: contentAssessment, designAssessment, responsiveAssessment, conversionAssessment, businessAccuracyAssessment (elk met result/issues/notes), recommendations en summary.",
+  ].join("\n");
 }
 
 const REQUIREMENTS_SYSTEM = `Je bent de pricing-agent van een Nederlandse webagency. Je analyseert de beschikbare lead- en salescontext en stelt projectrequirements voor.

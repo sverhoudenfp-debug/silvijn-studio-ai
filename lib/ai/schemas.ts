@@ -145,6 +145,29 @@ export const WebsiteSpecificationSchema = z.object({
   missingInformation: z.array(z.string().min(5)).max(12),
 });
 
+export const QCAssessmentSchema = z.object({
+  result: z.enum(["passed", "warning", "failed", "not_checked"]),
+  issues: z
+    .array(
+      z.object({
+        severity: z.enum(["info", "warning", "error", "critical"]),
+        message: z.string().min(5),
+      })
+    )
+    .max(10),
+  notes: z.string().nullable(),
+});
+
+export const QCAnalysisSchema = z.object({
+  contentAssessment: QCAssessmentSchema,
+  designAssessment: QCAssessmentSchema,
+  responsiveAssessment: QCAssessmentSchema,
+  conversionAssessment: QCAssessmentSchema,
+  businessAccuracyAssessment: QCAssessmentSchema,
+  recommendations: z.array(z.string().min(5)).max(10),
+  summary: z.string().min(20),
+});
+
 /** JSON extraheren uit een modelantwoord (tolereert code-fences en whitespace). */
 export function extractJSON(text: string): unknown {
   const stripped = text.replace(/```(?:json)?/g, "").trim();

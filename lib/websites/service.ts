@@ -51,16 +51,9 @@ const ALLOWED_LEAD_STATUSES = new Set(["qualified", "contacted", "interested", "
 /** Project-statussen waarin generatie is toegestaan (NOT cancelled/completed). */
 const BLOCKED_PROJECT_STATUSES = new Set(["cancelled", "completed"]);
 
-/** Slugify: veilige URL-segmenten zonder path traversal of speciale tekens. */
-export function slugifyBusinessName(name: string): string {
-  return name
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 48) || "website";
-}
+// Slugify is gecentraliseerd in ./slug (gedeeld met de QC-security-check).
+export { slugifyBusinessName } from "./slug";
+import { slugifyBusinessName } from "./slug";
 
 function summarizeRequirements(requirements: ProjectRequirements): string {
   const parts: string[] = [];
@@ -133,8 +126,12 @@ export class WebsiteGenerationService {
     const slug = await this.generateUniqueSlug(lead.businessName, version);
     const previewUrl = `/generated-websites/${slug}`;
 
+    // Alleen nog-lopende versies archiveren; APPROVED (menselijk besluit),
+    // FAILED en reeds gearchiveerde versies blijven ongemoeerd — de
+    // versiegeschiedenis is de bron van waarheid (Fase 10).
+    const archivableStatuses = new Set(["ready_for_qc", "qc_running", "needs_revision"]);
     for (const previous of previousVersions) {
-      if (previous.status !== "archived") {
+      if (archivableStatuses.has(previous.status)) {
         await getGeneratedWebsiteRepository().update(previous.id, { status: "archived" });
       }
     }

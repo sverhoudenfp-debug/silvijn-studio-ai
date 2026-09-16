@@ -96,10 +96,19 @@ export const AI_AGENTS: Record<AgentType, AgentDefinition> = {
     defaultTier: "balanced",
     defaultTask: "website_planning",
   },
+  website_quality_control: {
+    id: "website_quality_control",
+    name: "Website Quality Control Agent",
+    description:
+      "Hybride QC: voert deterministische checks uit en beoordeelt daarnaast content, UX, design, conversion en business-consistentie. Alléén adviserend — de menselijke approval (READY_FOR_SILVIJN → APPROVED) is een harde gate die de AI nooit overrult.",
+    status: "implemented",
+    defaultTier: "balanced",
+    defaultTask: "website_quality_analysis",
+  },
   quality_control: {
     id: "quality_control",
     name: "Quality Control Agent",
-    description: "Controleert gegenereerde output op kwaliteit (latere fase).",
+    description: "Generieke output-kwaliteitscontrole voor overige content (toekomstig).",
     status: "planned",
     defaultTier: "balanced",
     defaultTask: "generate_structured",

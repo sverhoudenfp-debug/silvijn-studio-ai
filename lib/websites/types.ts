@@ -23,9 +23,13 @@ export type GeneratedWebsiteStatus =
   | "generating" // volledige generatie bezig (planning + build)
   | "generated" // content gegenereerd, wacht op build/validation
   | "building" // build/validation bezig
-  | "ready_for_qc" // klaar voor menselijke quality control
-  | "failed" // generatie of build mislukt
-  | "archived"; // superseded door nieuwere versie (bewaard)
+  | "ready_for_qc" // klaar voor quality control (Fase 10)
+  | "qc_running" // quality control bezig
+  | "ready_for_silvijn" // QC PASS — wacht op menselijke beoordeling door Silvijn
+  | "needs_revision" // QC vond revisiepunten (of Silvijn vroeg revisie aan)
+  | "approved" // door Silvijn goedgekeurd (delivery = latere fase)
+  | "failed" // generatie, build of QC mislukt
+  | "archived"; // superseded door nieuwere versie (bewaard, niets verwijderd)
 
 export type WebsiteGenerationStatus =
   | "pending"

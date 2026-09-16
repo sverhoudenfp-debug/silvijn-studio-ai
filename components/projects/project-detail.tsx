@@ -18,6 +18,7 @@ import type { Project, ProjectRequirements, ProjectStatus } from "@/lib/projects
 import type { PriceIndication } from "@/lib/pricing/types";
 import { WebsiteGenerationSection } from "@/components/projects/website-generation-section";
 import type { GeneratedWebsite } from "@/lib/websites/types";
+import type { QualityControl } from "@/lib/qc/types";
 
 /**
  * Project-detail (Fase 8). Requirements en prijsindicaties zijn altijd
@@ -109,11 +110,13 @@ export function ProjectDetail({
   lead,
   latestQualification,
   websites,
+  latestQc,
 }: {
   project: Project;
   lead: { id: string; businessName: string; leadScore: number; leadStatus: string; industry: string; city: string } | null;
   latestQualification: { status: string; interestLevel: string; projectType: string | null; timeline: string | null; missingInformation: string[] } | null;
   websites: GeneratedWebsite[];
+  latestQc: QualityControl | null;
 }) {
   const [form, setForm] = useState<RequirementsFormState>(toFormState(project.requirements));
   const [indications, setIndications] = useState<PriceIndication[]>([]);
@@ -503,6 +506,7 @@ export function ProjectDetail({
         projectStatus={project.status}
         leadStatus={lead?.leadStatus ?? "unknown"}
         websites={websites}
+        latestQc={latestQc}
       />
     </div>
   );

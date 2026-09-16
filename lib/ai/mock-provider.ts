@@ -104,7 +104,7 @@ function buildMockWebsiteSpecification(prompt: string): string {
   // Deterministische, veilige mock-planning: uitsluitend echte data uit de prompt.
   const nameMatch = prompt.match(/Bedrijf: ([^\n]+)/);
   const industryMatch = prompt.match(/Branche: ([^\n]+)/);
-  const cityMatch = prompt.match(/Plaats: ([^\n]+)/);
+  const cityMatch = prompt.match(/Plaats: ([^(\n]+)/);
   const provinceMatch = prompt.match(/provincie ([^)\n]+)\)/);
   const phoneMatch = prompt.match(/Telefoon: ([^\n]+)/);
   const emailMatch = prompt.match(/E-mail: ([^\n]+)/);
@@ -210,6 +210,57 @@ function buildMockWebsiteSpecification(prompt: string): string {
   return JSON.stringify(spec);
 }
 
+function buildMockQualityAnalysis(prompt: string): string {
+  // Deterministische, veilige mock-QC: alléén beoordelen wat uit de echte data volgt.
+  const nameMatch = prompt.match(/Bedrijf: ([^\n]+)/);
+  const businessName = nameMatch ? nameMatch[1].trim() : "Testbedrijf (TESTDATA)";
+
+  const analysis = {
+    contentAssessment: {
+      result: "warning",
+      issues: [
+        {
+          severity: "info",
+          message: `TESTDATA (mock): teksten voor ${businessName} zijn grotendeels placeholders ([INFORMATIE ONBEKEND]) — dit is correct gedrag; ontbrekende informatie is niet als feit gepresenteerd.`,
+        },
+      ],
+      notes: "Content is zakelijk geformuleerd; echte bedrijfsteksten moeten nog worden aangeleverd.",
+    },
+    designAssessment: {
+      result: "passed",
+      issues: [],
+      notes: "Template-styling is consistent toegepast binnen de gecontroleerde componenten.",
+    },
+    responsiveAssessment: {
+      result: "warning",
+      issues: [
+        {
+          severity: "warning",
+          message: "TESTDATA (mock): visuele controle op tablet/desktop is niet uitgevoerd (STRUCTURAL CHECK only).",
+        },
+      ],
+      notes: "Structureel mobile-first; echte weergave is niet visueel geverifieerd.",
+    },
+    conversionAssessment: {
+      result: "passed",
+      issues: [],
+      notes: "Primaire CTA en contactmogelijkheden zijn aanwezig.",
+    },
+    businessAccuracyAssessment: {
+      result: "passed",
+      issues: [],
+      notes: `Bedrijfsgegevens op de website komen overeen met de lead-data voor ${businessName}.`,
+    },
+    recommendations: [
+      "TESTDATA (mock): vul de bedrijfsbeschrijving aan zodra deze is aangeleverd.",
+      "TESTDATA (mock): voeg echte dienstomschrijvingen toe voor meer duidelijkheid.",
+    ],
+    summary: `TESTDATA (mock): de website voor ${businessName} voldoet structureel; ontbrekende bedrijfsinformatie is als placeholder gemarkeerd en niet als feit gepresenteerd.`,
+  };
+
+  return JSON.stringify(analysis);
+}
+
 function buildMockSalesAnalysis(prompt: string): string {
   // Inbound-bericht uit de prompt halen (onder de Body:-marker, tot de lege regel)
   const match = prompt.match(/Body:\n([\s\S]*?)\n\n/);
@@ -263,6 +314,8 @@ export class MockAIProvider implements AIProvider {
               ? buildMockRequirementsAnalysis(request.prompt)
               : request.task === "website_planning"
                 ? buildMockWebsiteSpecification(request.prompt)
+              : request.task === "website_quality_analysis"
+                ? buildMockQualityAnalysis(request.prompt)
                 : `[MOCK AI] Antwoord op: ${request.prompt.slice(0, 80)}...`;
 
     return {

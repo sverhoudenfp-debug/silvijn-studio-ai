@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { generateWebsiteAction } from "@/app/actions/websites";
+import { generateWebsiteAction, runQualityControlAction } from "@/app/actions/websites";
+import type { QualityControl } from "@/lib/qc/types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import type { GeneratedWebsite } from "@/lib/websites/types";
@@ -34,17 +35,31 @@ export function WebsiteGenerationSection({
   projectStatus,
   leadStatus,
   websites,
+  latestQc,
 }: {
   projectId: string;
   projectStatus: string;
   leadStatus: string;
   websites: GeneratedWebsite[];
+  latestQc: QualityControl | null;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const latest = websites.find((w) => w.status !== "archived") ?? null;
   const canGenerate = projectStatus !== "cancelled" && projectStatus !== "completed";
+  const canRunQc = latest ? ["ready_for_qc", "needs_revision"].includes(latest.status) : false;
+
+  function runQc() {
+    setError(null);
+    startTransition(async () => {
+      try {
+        if (latest) await runQualityControlAction(latest.id);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Kwaliteitscontrole mislukt");
+      }
+    });
+  }
 
   function generate() {
     setError(null);
@@ -84,6 +99,15 @@ export function WebsiteGenerationSection({
               ))}
             </ul>
           )}
+          {latestQc && (
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2.5 text-xs text-zinc-300">
+              <span className="font-semibold text-zinc-100">Quality Control:</span>{" "}
+              {latestQc.status === "completed" ? latestQc.overallResult.toUpperCase() : latestQc.status} · score{" "}
+              {latestQc.score}/100 · {latestQc.issues.filter((i) => i.severity === "critical").length} critical ·{" "}
+              {latestQc.issues.filter((i) => i.severity === "warning").length} warning
+              {latestQc.approval ? ` · laatste actie: ${latestQc.approval.action} (${latestQc.approval.by})` : ""}
+            </div>
+          )}
           <div className="flex flex-wrap gap-2">
             <Link
               href={`/generated-websites/${latest.slug}`}
@@ -91,6 +115,24 @@ export function WebsiteGenerationSection({
             >
               Bekijk preview
             </Link>
+            {latest && (
+              <Link
+                href={`/generated-websites/${latest.slug}/qc`}
+                className="inline-flex h-9 items-center rounded-lg border border-zinc-700 bg-zinc-900 px-4 text-xs font-semibold text-zinc-200 transition-colors hover:border-zinc-500"
+              >
+                QC-rapport
+              </Link>
+            )}
+            {canRunQc && (
+              <button
+                type="button"
+                onClick={runQc}
+                disabled={pending}
+                className="h-9 rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-4 text-xs font-semibold text-indigo-300 transition-colors hover:bg-indigo-500/20 disabled:opacity-60"
+              >
+                {pending ? "QC draait..." : "Run quality control"}
+              </button>
+            )}
             <button
               type="button"
               onClick={generate}
@@ -110,6 +152,7 @@ export function WebsiteGenerationSection({
         <div className="space-y-3">
           <p className="text-sm text-zinc-400">
             Nog geen website gegenereerd. Generatie is mogelijk bij een geschikte lead-status (huidig: {leadStatus}).
+            Na generatie start de hybride kwaliteitscontrole via het QC-rapport; APPROVED kan alléén menselijk.
           </p>
           <button
             type="button"

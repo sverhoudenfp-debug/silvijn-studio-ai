@@ -16,6 +16,7 @@ export type AgentType =
   | "qualification"
   | "pricing"
   | "website_generation"
+  | "website_quality_control"
   | "quality_control";
 
 export type AITaskType =
@@ -25,6 +26,7 @@ export type AITaskType =
   | "sales_analysis"
   | "requirements_analysis"
   | "website_planning"
+  | "website_quality_analysis"
   | "lead_score"
   | "classify_lead"
   | "generate_structured";
@@ -260,6 +262,23 @@ export interface WebsiteSpecificationInput {
   googleRating: number | null; // échte Google-data; mag gebruikt worden
   reviewCount: number | null;
   suggestedTemplate: string; // deterministische suggestie (engine)
+}
+
+/**
+ * Context voor de AI-kwaliteitsanalyse (Fase 10) — de AI ontvangt
+ * uitsluitend echte data + de uitkomsten van de deterministische checks.
+ * De AI is ADVISEREND: ze mag analyseren en classificeren, maar nooit
+ * goedkeuren, leveren, publiceren of harde FAIL-regels overrulen.
+ */
+export interface WebsiteQualityAnalysisInput {
+  businessName: string;
+  industry: string;
+  city: string;
+  leadStatus: string;
+  requirementsSummary: string;
+  specificationSummary: string;
+  generatedSectionsSummary: string;
+  deterministicResults: string;
 }
 
 export interface AIJSONOutput<T> {

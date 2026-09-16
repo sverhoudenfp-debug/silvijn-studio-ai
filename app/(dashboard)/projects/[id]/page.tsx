@@ -3,6 +3,7 @@ import { ProjectDetail } from "@/components/projects/project-detail";
 import { getLeadRepository } from "@/lib/repositories/lead-repository";
 import { getSalesInteractionRepository } from "@/lib/sales/repository";
 import { getProjectRepository } from "@/lib/projects/repository";
+import { QualityControlService } from "@/lib/qc/service";
 import { getGeneratedWebsiteRepository } from "@/lib/websites/repository";
 
 export async function generateMetadata(props: PageProps<"/projects/[id]">) {
@@ -26,6 +27,10 @@ export default async function ProjectDetailPage(props: PageProps<"/projects/[id]
     getSalesInteractionRepository().listByLead(project.leadId),
     getGeneratedWebsiteRepository().listByProject(project.id),
   ]);
+  const latestWebsite = websites.find((w) => w.status !== "archived") ?? websites[0] ?? null;
+  const latestQc = latestWebsite
+    ? await new QualityControlService().getLatestQcForWebsite(latestWebsite.id)
+    : null;
   const latestQualification = interactions[0]?.qualification ?? null;
 
   return (
@@ -44,6 +49,7 @@ export default async function ProjectDetailPage(props: PageProps<"/projects/[id]
           : null
       }
       websites={websites}
+      latestQc={latestQc}
       latestQualification={
         latestQualification
           ? {

@@ -30,11 +30,18 @@ export interface LeadCreateInput {
   reviewCount?: number | null;
 }
 
+export interface LeadStatusUpdate {
+  leadStatus?: Lead["leadStatus"];
+  outreachStatus?: Lead["outreachStatus"];
+}
+
 export interface LeadRepository {
   readonly source: "mock" | "supabase";
   list(): Promise<Lead[]>;
   get(id: string): Promise<Lead | null>;
   create(input: LeadCreateInput): Promise<Lead>;
+  /** Conservatieve statusupdate (geen WON/LOST door de AI — Fase 7-regels). */
+  updateStatuses(id: string, update: LeadStatusUpdate): Promise<Lead | null>;
 }
 
 /**
@@ -180,6 +187,14 @@ export class MockLeadRepository implements LeadRepository {
     leads.push(lead);
     return lead;
   }
+  async updateStatuses(id: string, update: LeadStatusUpdate): Promise<Lead | null> {
+    const lead = leads.find((l) => l.id === id);
+    if (!lead) return null;
+    if (update.leadStatus) lead.leadStatus = update.leadStatus;
+    if (update.outreachStatus) lead.outreachStatus = update.outreachStatus;
+    lead.updatedAt = new Date().toISOString();
+    return lead;
+  }
 }
 
 export class SupabaseLeadRepository implements LeadRepository {
@@ -214,6 +229,20 @@ export class SupabaseLeadRepository implements LeadRepository {
       .single();
     if (error) throw new Error(`LeadRepository: lead aanmaken mislukt: ${error.message}`);
     return { ...lead, id: (data as { id: string }).id };
+  }
+
+  async updateStatuses(id: string, update: LeadStatusUpdate): Promise<Lead | null> {
+    const { data, error } = await getSupabaseServerClient()
+      .from("leads")
+      .update({
+        ...(update.leadStatus ? { lead_status: update.leadStatus } : {}),
+        ...(update.outreachStatus ? { outreach_status: update.outreachStatus } : {}),
+      })
+      .eq("id", id)
+      .select("*")
+      .maybeSingle();
+    if (error) throw new Error(`LeadRepository: statusupdate mislukt: ${error.message}`);
+    return data ? rowToLead(data as LeadRow) : null;
   }
 }
 

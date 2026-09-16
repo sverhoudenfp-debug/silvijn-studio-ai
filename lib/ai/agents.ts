@@ -66,10 +66,10 @@ export const AI_AGENTS: Record<AgentType, AgentDefinition> = {
   sales: {
     id: "sales",
     name: "Sales Agent",
-    description: "Voert verkoopgesprekken in gespreksthreads (latere fase).",
-    status: "planned",
+    description: "Analyseert inkomende reacties, kwalificeert leads en draft een antwoord; nooit automatisch verzonden (Fase 7).",
+    status: "implemented",
     defaultTier: "balanced",
-    defaultTask: "generate_text",
+    defaultTask: "sales_analysis",
   },
   qualification: {
     id: "qualification",

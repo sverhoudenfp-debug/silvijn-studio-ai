@@ -1,3 +1,4 @@
+import { classifyMockInbound } from "@/lib/sales/mock-classification";
 import type {
   AIProvider,
   AIProviderRequest,
@@ -25,6 +26,60 @@ const mockOutreachMessage = `{
   "callToAction": "TESTDATA (mock): bekijk de voorbeeldwebsite en reageer als je interesse heeft."
 }`;
 
+const mockSalesAnalysis = `{
+  "intent": "\${INTENT_TOKEN}",
+  "objectionType": "\${OBJECTION_TOKEN}",
+  "qualification": {
+    "status": "\${QUAL_STATUS_TOKEN}",
+    "interestLevel": "\${INTEREST_TOKEN}",
+    "projectType": null,
+    "needsWebsite": \${NEEDS_WEB_TOKEN},
+    "needsEcommerce": false,
+    "wantsDemo": \${WANTS_DEMO_TOKEN},
+    "wantsCall": \${WANTS_CALL_TOKEN},
+    "timeline": null,
+    "budgetKnown": false,
+    "decisionMakerKnown": false,
+    "requirementsKnown": false,
+    "missingInformation": ["TESTDATA (mock): aanvullende projectinformatie is nog niet bekend."],
+    "qualificationNotes": "TESTDATA (mock): classificatie op basis van de inkomende reactie; aanvullende informatie is nog nodig voor volledige kwalificatie.",
+    "confidence": 0.6
+  },
+  "response": "TESTDATA (mock): dank voor uw reactie. Op basis van uw bericht wil ik graag kort terugkomen op uw vraag. Om u gericht verder te helpen, heb ik nog wat aanvullende informatie nodig over wat u precies zoekt. Vervolgens kan ik u een passend voorstel voorbereiden. Hartelijke groet, Silvijn Studio",
+  "suggestedNextAction": "TESTDATA (mock): verzamel aanvullende informatie en bereid een menselijke opvolging voor.",
+  "questions": ["TESTDATA (mock): Wat voor soort website zoekt u?", "TESTDATA (mock): Wanneer wilt u de website ongeveer online hebben?"],
+  "escalationRequired": \${ESCALATION_TOKEN},
+  "escalationReason": \${ESCALATION_REASON_TOKEN}
+}`;
+
+function buildMockSalesAnalysis(prompt: string): string {
+  // Inbound-bericht uit de prompt halen (onder de Body:-marker, tot de lege regel)
+  const match = prompt.match(/Body:\n([\s\S]*?)\n\n/);
+  const subjectMatch = prompt.match(/Onderwerp: (.+)/);
+  const inboundBody = match?.[1] ?? "";
+  const inboundSubject = subjectMatch?.[1] ?? "";
+  const c = classifyMockInbound(inboundBody, inboundSubject);
+
+  const negative = c.intent === "opt_out" || c.intent === "not_interested" || c.intent === "wrong_contact";
+  const qualStatus = negative
+    ? "not_qualified"
+    : c.intent === "unclear"
+      ? "needs_human"
+      : "qualifying";
+  const interest = negative ? "none" : c.interestLevel;
+
+  return mockSalesAnalysis
+    .replaceAll("${INTENT_TOKEN}", c.intent)
+    .replaceAll("${OBJECTION_TOKEN}", c.objectionType)
+    .replaceAll("${QUAL_STATUS_TOKEN}", qualStatus)
+    .replaceAll("${INTEREST_TOKEN}", interest)
+    .replaceAll("${NEEDS_WEB_TOKEN}", negative ? "false" : "true")
+    .replaceAll("${WANTS_DEMO_TOKEN}", c.intent === "demo_request" ? "true" : "false")
+    .replaceAll("${WANTS_CALL_TOKEN}", c.intent === "call_request" ? "true" : "false")
+    .replaceAll("${ESCALATION_TOKEN}", String(c.escalationRequired))
+    .replaceAll("${ESCALATION_REASON_TOKEN}", JSON.stringify(c.escalationReason ?? null));
+}
+
 export class MockAIProvider implements AIProvider {
   readonly id = "mock";
   readonly mode = "mock" as const;
@@ -44,7 +99,9 @@ export class MockAIProvider implements AIProvider {
             .replaceAll("\${BUSINESS_TOKEN}", businessToken)
             .replaceAll("\${CITY_TOKEN}", cityToken)
             .replaceAll("\${INDUSTRY_TOKEN}", industryToken)
-          : `[MOCK AI] Antwoord op: ${request.prompt.slice(0, 80)}...`;
+          : request.task === "sales_analysis"
+            ? buildMockSalesAnalysis(request.prompt)
+            : `[MOCK AI] Antwoord op: ${request.prompt.slice(0, 80)}...`;
 
     return {
       text,

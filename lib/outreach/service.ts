@@ -2,7 +2,6 @@ import { getDemoRepository } from "@/lib/repositories/demo-repository";
 import { getLeadRepository } from "@/lib/repositories/lead-repository";
 import { scoreLead } from "@/lib/agents/lead-scoring";
 import { AIService } from "@/lib/ai/service";
-import { getAIConfig } from "@/lib/ai/config";
 import { getOutreachRepository } from "./repository";
 import { checkOutreachQuality } from "./quality-check";
 import type { OutreachDraft, OutreachDraftStatus, OutreachGenerationResult } from "./types";

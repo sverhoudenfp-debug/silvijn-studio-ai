@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { OutreachSection } from "@/components/leads/outreach-section";
+import { SalesSection } from "@/components/sales/sales-section";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import { scoreLead } from "@/lib/agents/lead-scoring";
@@ -279,6 +280,8 @@ export function LeadDetail({ lead, demo }: { lead: Lead; demo: DemoWebsite | nul
             leadBusinessName={current.businessName}
             demoUrl={demo?.status === "ready" ? demo.previewUrl : null}
           />
+
+          <SalesSection leadId={current.id} leadBusinessName={current.businessName} />
         </div>
 
         <div className="space-y-6">

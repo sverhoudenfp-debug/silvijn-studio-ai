@@ -1,0 +1,329 @@
+"use client";
+
+import { useCallback, useEffect, useState, useTransition } from "react";
+import {
+  analyzeInboundMessageAction,
+  createInboundMessageAction,
+  listInboundMessagesAction,
+  listSalesInteractionsAction,
+  markHandledAction,
+  markReadyForSilvijnAction,
+} from "@/app/actions/sales";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardHeader } from "@/components/ui/card";
+import type { InboundMessage, SalesInteraction } from "@/lib/sales/types";
+
+/**
+ * AI Sales-sectie op de lead-detailpagina (Fase 7). De AI is hier een eerste
+ * sales-assistent: analyseert inkomende reacties, kwalificeert en draft een
+ * antwoord. Alles is CONCEPT — er wordt nooit automatisch verzonden of
+ * iets toegezegd; verzenden/prijzen volgen in latere fases.
+ */
+
+const intentLabels: Record<string, string> = {
+  interested: "Geïnteresseerd",
+  question: "Vraag",
+  price_request: "Prijsaanvraag",
+  demo_request: "Demo-aanvraag",
+  call_request: "Belverzoek",
+  more_information: "Meer informatie",
+  not_interested: "Niet geïnteresseerd",
+  objection: "Bezwaar",
+  not_now: "Nu niet",
+  wrong_contact: "Verkeerd contact",
+  opt_out: "Afmelding",
+  unclear: "Onduidelijk",
+};
+
+const statusMeta: Record<string, { label: string; variant: "warning" | "info" | "success" | "neutral" }> = {
+  draft: { label: "Concept — wacht op review", variant: "info" },
+  ready_for_silvijn: { label: "READY FOR SILVIJN", variant: "warning" },
+  handled: { label: "Afgehandeld", variant: "success" },
+  cancelled: { label: "Geannuleerd", variant: "neutral" },
+};
+
+const interestLabels: Record<string, string> = {
+  none: "geen", low: "laag", medium: "gemiddeld", high: "hoog",
+};
+
+const inputClass =
+  "w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-zinc-600 focus:outline-none";
+
+export function SalesSection({ leadId, leadBusinessName }: { leadId: string; leadBusinessName: string }) {
+  const [inbound, setInbound] = useState<InboundMessage[]>([]);
+  const [interactions, setInteractions] = useState<SalesInteraction[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState({ sender: "", subject: "", body: "" });
+  const [pending, startTransition] = useTransition();
+
+  const refresh = useCallback(async () => {
+    const [inboundList, interactionList] = await Promise.all([
+      listInboundMessagesAction(leadId),
+      listSalesInteractionsAction(leadId),
+    ]);
+    setInbound(inboundList);
+    setInteractions(interactionList);
+    setLoaded(true);
+  }, [leadId]);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([listInboundMessagesAction(leadId), listSalesInteractionsAction(leadId)])
+      .then(([inboundList, interactionList]) => {
+        if (active) {
+          setInbound(inboundList);
+          setInteractions(interactionList);
+          setLoaded(true);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setError("Sales-data kon niet worden geladen");
+          setLoaded(true);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [leadId]);
+
+  function addInbound() {
+    if (!form.body.trim()) {
+      setError("Berichttekst ontbreekt");
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      try {
+        await createInboundMessageAction({ leadId, ...form });
+        setForm({ sender: "", subject: "", body: "" });
+        await refresh();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Bericht toevoegen mislukt");
+      }
+    });
+  }
+
+  function analyze(inboundMessageId: string) {
+    setError(null);
+    startTransition(async () => {
+      try {
+        await analyzeInboundMessageAction(leadId, inboundMessageId);
+        await refresh();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Analyse mislukt");
+      }
+    });
+  }
+
+  function updateStatus(interactionId: string, action: "ready" | "handled") {
+    startTransition(async () => {
+      try {
+        await (action === "ready" ? markReadyForSilvijnAction(interactionId) : markHandledAction(interactionId));
+        await refresh();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Bijwerken mislukt");
+      }
+    });
+  }
+
+  const latest = interactions[0];
+
+  return (
+    <Card>
+      <CardHeader
+        title="AI Sales"
+        subtitle={latest ? `Laatste analyse: ${intentLabels[latest.intent] ?? latest.intent}` : "Nog geen analyses — voeg een inkomende reactie toe"}
+      />
+
+      <div className="space-y-5">
+        {/* Inkomend bericht toevoegen (mock/dev: handmatig; echte inbox volgt later) */}
+        <div className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+            Inkomende reactie registreren <span className="normal-case text-zinc-600">(mock/dev — echte e-mailinbox volgt in een latere fase)</span>
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <input
+              value={form.sender}
+              onChange={(e) => setForm((f) => ({ ...f, sender: e.target.value }))}
+              placeholder="Afzender (bijv. Jeroen van Jansen Dakwerken)"
+              className={inputClass}
+            />
+            <input
+              value={form.subject}
+              onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))}
+              placeholder="Onderwerp"
+              className={inputClass}
+            />
+          </div>
+          <textarea
+            value={form.body}
+            onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))}
+            placeholder="Berichttekst van de lead..."
+            rows={3}
+            className={inputClass}
+          />
+          <button
+            type="button"
+            onClick={addInbound}
+            disabled={pending}
+            className="h-9 rounded-lg border border-zinc-700 bg-zinc-900 px-4 text-xs font-semibold text-zinc-200 transition-colors hover:border-zinc-500 disabled:opacity-60"
+          >
+            Reactie registreren
+          </button>
+        </div>
+
+        {error && <p className="text-xs text-red-400">{error}</p>}
+
+        {/* Inkomende berichten */}
+        {!loaded ? (
+          <p className="text-sm text-zinc-500">Laden...</p>
+        ) : inbound.length === 0 ? (
+          <p className="text-sm text-zinc-500">Nog geen inkomende reacties voor {leadBusinessName}.</p>
+        ) : (
+          <div className="space-y-3">
+            {inbound
+              .slice()
+              .reverse()
+              .slice(0, 3)
+              .map((message) => {
+                const analyzed = interactions.some((i) => i.inboundMessageId === message.id);
+                return (
+                  <div key={message.id} className="rounded-lg border border-zinc-800 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-zinc-100">
+                        {message.sender} <span className="text-zinc-500">· {message.subject || "(geen onderwerp)"}</span>
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-zinc-500">
+                          {new Date(message.receivedAt).toLocaleDateString("nl-NL")}
+                        </span>
+                        {analyzed ? (
+                          <Badge variant="success">Geanalyseerd</Badge>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => analyze(message.id)}
+                            disabled={pending}
+                            className="h-8 rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-zinc-50 transition-colors hover:bg-indigo-500 disabled:opacity-60"
+                          >
+                            Analyze Response
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <p className="mt-2 whitespace-pre-line text-sm text-zinc-300">{message.body}</p>
+                  </div>
+                );
+              })}
+          </div>
+        )}
+
+        {/* Laatste analyse */}
+        {latest && (
+          <div className="space-y-4 rounded-lg border border-indigo-500/30 bg-indigo-950/20 p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="warning">AI GENERATED DRAFT</Badge>
+              <Badge variant={statusMeta[latest.status]?.variant ?? "neutral"}>
+                {statusMeta[latest.status]?.label ?? latest.status}
+              </Badge>
+              {latest.escalationRequired && (
+                <span className="text-xs font-medium text-amber-400">⚠ Escalatie: {latest.escalationReason ?? "menselijke beslissing nodig"}</span>
+              )}
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-zinc-500">Intent</p>
+                <p className="text-sm text-zinc-100">
+                  {intentLabels[latest.intent] ?? latest.intent}
+                  {latest.objectionType !== "none" && latest.objectionType !== "unclear" && (
+                    <span className="text-zinc-500"> · bezwaar: {latest.objectionType}</span>
+                  )}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-zinc-500">Kwalificatie</p>
+                <p className="text-sm text-zinc-100">
+                  {latest.qualification.status} · interesse: {interestLabels[latest.qualification.interestLevel]} · confidence {Math.round(latest.qualification.confidence * 100)}%
+                </p>
+              </div>
+            </div>
+
+            {latest.qualification.missingInformation.length > 0 && (
+              <div>
+                <p className="text-xs uppercase tracking-wide text-zinc-500">Ontbrekende informatie</p>
+                <ul className="mt-1 list-inside list-disc text-sm text-zinc-300">
+                  {latest.qualification.missingInformation.map((info) => (
+                    <li key={info}>{info}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {latest.questions.length > 0 && (
+              <div>
+                <p className="text-xs uppercase tracking-wide text-zinc-500">Vervolgvragen (voorgesteld)</p>
+                <ul className="mt-1 list-inside list-disc text-sm text-zinc-300">
+                  {latest.questions.map((q) => (
+                    <li key={q}>{q}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div>
+              <p className="text-xs uppercase tracking-wide text-zinc-500">Voorgestelde volgende actie</p>
+              <p className="text-sm text-zinc-200">{latest.suggestedNextAction}</p>
+            </div>
+
+            <div>
+              <p className="text-xs uppercase tracking-wide text-zinc-500">Antwoord-concept (nog NIET verzonden)</p>
+              <p className="mt-1 whitespace-pre-line rounded-lg border border-zinc-800 bg-zinc-900/60 p-3 text-sm text-zinc-300">
+                {latest.responseDraft}
+              </p>
+            </div>
+
+            {latest.qualityIssues.length > 0 && (
+              <div className="rounded-lg border border-red-500/40 bg-red-950/40 p-3">
+                <p className="text-xs font-semibold text-red-300">Kwaliteitscheck:</p>
+                <ul className="mt-1 list-inside list-disc text-xs text-red-300/80">
+                  {latest.qualityIssues.map((issue) => (
+                    <li key={issue}>{issue}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-2">
+              {latest.status === "draft" && (
+                <button
+                  type="button"
+                  onClick={() => updateStatus(latest.id, "ready")}
+                  disabled={pending}
+                  className="h-8 rounded-lg border border-amber-500/40 bg-amber-950/60 px-3 text-xs font-semibold text-amber-300 transition-colors hover:bg-amber-900/60 disabled:opacity-60"
+                >
+                  Mark Ready for Silvijn
+                </button>
+              )}
+              {latest.status !== "handled" && (
+                <button
+                  type="button"
+                  onClick={() => updateStatus(latest.id, "handled")}
+                  disabled={pending}
+                  className="h-8 rounded-lg border border-zinc-700 px-3 text-xs font-medium text-zinc-300 transition-colors hover:border-zinc-500 disabled:opacity-60"
+                >
+                  Markeer afgehandeld
+                </button>
+              )}
+              <span className="self-center text-xs text-zinc-500">
+                Er is géén verzendknop — antwoorden worden nooit automatisch verstuurd (Fase 7).
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}

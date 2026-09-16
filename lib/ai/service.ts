@@ -8,7 +8,7 @@ import {
 import { estimateCost } from "./pricing";
 import { getAIProvider } from "./provider";
 import { withRetry } from "./retry";
-import { BusinessAnalysisSchema, OutreachMessageSchema, extractJSON } from "./schemas";
+import { BusinessAnalysisSchema, OutreachMessageSchema, SalesAnalysisSchema, extractJSON } from "./schemas";
 import {
   getAIActivityRepository,
   type AIActivityRepository,
@@ -28,6 +28,8 @@ import type {
   BusinessAnalysisInput,
   OutreachMessage,
   OutreachMessageInput,
+  SalesAnalysis,
+  SalesAnalysisInput,
 } from "./types";
 import {
   AIInvalidResponseError,
@@ -109,7 +111,9 @@ export class AIService {
         ? "business_analysis"
         : call.agent === "outreach"
           ? "outreach_generation"
-          : "generate_structured";
+          : call.agent === "sales"
+            ? "sales_analysis"
+            : "generate_structured";
     const model = getModelForTier(call.tier ?? agent.defaultTier);
     const started = Date.now();
 
@@ -271,6 +275,65 @@ export class AIService {
     }
   }
 
+  /**
+   * Sales Agent (Fase 7) — analyseert een inkomende klantreactie: intent,
+   * bezwaar, kwalificatie, antwoord-DRAFT, vervolgvragen en escalatie.
+   * Alles is concept: er wordt nooit automatisch verzonden of toegezegd.
+   * Tier: standaard balanced; override via SALES_AI_TIER (expliciet).
+   */
+  async generateSalesResponse(
+    input: SalesAnalysisInput,
+    leadId?: string | null
+  ): Promise<AIServiceResult<SalesAnalysis>> {
+    await this.activityRepository.log({
+      leadId: leadId ?? null,
+      type: "sales_analysis",
+      status: "started",
+      message: `Sales-analyse gestart voor ${input.businessName}`,
+    });
+
+    try {
+      const result = await this.generateStructured<SalesAnalysis>(
+        {
+          agent: "sales",
+          tier: getSalesTier(),
+          leadId: leadId ?? null,
+          system: SALES_SYSTEM,
+          prompt: buildSalesPrompt(input),
+          maxTokens: 2000,
+          temperature: 0.4,
+        },
+        SalesAnalysisSchema
+      );
+
+      await this.activityRepository.log({
+        leadId: leadId ?? null,
+        type: "sales_analysis",
+        status: "completed",
+        message: `Sales-analyse voltooid voor ${input.businessName} (intent: ${result.data.intent})`,
+        metadata: {
+          model: result.model,
+          mode: result.mode,
+          durationMs: result.durationMs,
+          cost: result.estimatedCost,
+          tokens: result.usage,
+          escalationRequired: result.data.escalationRequired,
+        },
+      });
+
+      return result;
+    } catch (error) {
+      await this.activityRepository.log({
+        leadId: leadId ?? null,
+        type: "sales_analysis",
+        status: "failed",
+        message: `Sales-analyse mislukt voor ${input.businessName}`,
+        metadata: { reason: userFacingAIMessage(error) },
+      });
+      throw error;
+    }
+  }
+
   private guardSafetyLimit(): void {
     this.requestsThisRun += 1;
     if (this.requestsThisRun > this.config.maxRequestsPerRun) {
@@ -318,6 +381,76 @@ export class AIService {
       errorMessage: error instanceof Error ? error.message : userFacingAIMessage(error),
     });
   }
+}
+
+const SALES_SYSTEM = `Je bent de sales-agent van een Nederlandse webagency. Je analyseert inkomende reacties van leads en bereidt een antwoord CONCEPT voor — nooit een definitieve toezegging, nooit automatisch verzenden.
+
+Regels:
+- Classificeer de intent en eventuele bezwaren eerlijk; twijfel je, kies "unclear" en zet escalationRequired op true. Gok nooit.
+- Kwalificeer voorzichtig: markeer een lead alleen als "qualified" als cruciale informatie echt bekend is; anders "qualifying".
+- Stel alleen antwoorden op basis van de aangeleverde context; verzin geen feiten, namen of afspraken.
+- Geef NOOIT prijzen, korting, garanties, deadlines, contractuele of juridische toezeggingen — markeer die vragen voor menselijke opvolging (escalationRequired).
+- Vermeld niet richting de klant dat deze tekst AI-gegenereerd is en deel geen interne systeeminfo.
+- Noem de demo-website alléén als die in de context staat (met de gegeven URL).
+- Output: uitsluitend geldig JSON conform het gevraagde schema.`;
+
+function getSalesTier(): AIModelTier {
+  const override = (process.env.SALES_AI_TIER ?? "").trim().toLowerCase();
+  if (override === "fast" || override === "balanced" || override === "powerful") return override;
+  return AI_AGENTS.sales.defaultTier;
+}
+
+function buildSalesPrompt(input: SalesAnalysisInput): string {
+  const config = getAgencyConfiguration();
+
+  const lines: string[] = [
+    "Analyseer de inkomende reactie van deze lead en bereid een antwoord-concept voor.",
+    "",
+    "LEADCONTEXT (uitsluitend hieruit putten, niets verzinnen):",
+    `Bedrijf: ${input.businessName}`,
+    `Branche: ${input.industry}`,
+    `Stad: ${input.city}`,
+    `Websitestatus: ${input.websiteStatus}${input.website ? ` (huidige site: ${input.website})` : ""}`,
+    ...(typeof input.leadScore === "number" ? [`Lead score: ${input.leadScore}`] : []),
+    ...(input.demoUrl ? [`Demo-website beschikbaar: ${input.demoUrl} (${input.demoHeadline ?? "geen headline"})`] : ["Er is GEEN demo-website — noem geen demo."]),
+  ];
+
+  if (input.outreachHistory?.length) {
+    lines.push("", "EERDERE OUTREACH (concepten; verzenden bestaat nog niet, dus beschouw als voorgeschiedenis):", ...input.outreachHistory.map((h) => `- ${h}`));
+  }
+  if (input.previousInbound?.length) {
+    lines.push("", "EERDERE INKOMENDE BERICHTEN (oudste eerst):");
+    for (const m of input.previousInbound) {
+      lines.push(`- [${m.receivedAt}] ${m.subject || "(geen onderwerp)"}: ${m.body.slice(0, 300)}`);
+    }
+  }
+  if (input.previousInteractions?.length) {
+    lines.push("", "EERDERE SALES-ANALYSES (samenvattingen):", ...input.previousInteractions.map((h) => `- ${h}`));
+  }
+
+  lines.push(
+    "",
+    "INKOMEND BERICHT (de te analyseren reactie):",
+    `Afzender: ${input.inbound.sender}`,
+    `Kanaal: ${input.inbound.channel}`,
+    `Onderwerp: ${input.inbound.subject || "(geen onderwerp)"}`,
+    `Ontvangen: ${input.inbound.receivedAt}`,
+    `Body:`,
+    input.inbound.body,
+    "",
+    "REGELS:",
+    ...(config.salesRules?.length ? config.salesRules.map((r, i) => `${i + 1}. ${r}`) : [
+      "1. Geef geen prijzen, kortingen, garanties, deadlines of contractuele toezeggingen.",
+      "2. Gebruik uitsluitend de beschikbare context; verzin niets.",
+      "3. Vraag bij onduidelijkheid NA — niet gokken; zet escalationRequired op true.",
+      "4. Houd het antwoord kort, vriendelijk en professioneel in het Nederlands.",
+    ]),
+    ...(config.forbiddenClaims?.length ? [`Verboden claims: ${config.forbiddenClaims.join("; ")}`] : []),
+    "",
+    'Output: JSON met "intent", "objectionType", "qualification", "response" (antwoord-concept, 50-400 woorden), "suggestedNextAction", "questions" (max 3 relevante vervolgvragen), "escalationRequired", "escalationReason" (null als niet nodig).'
+  );
+
+  return lines.join("\n");
 }
 
 const OUTREACH_SYSTEM = `Je bent de outreach-agent van een Nederlandse webagency die websites maakt voor lokale bedrijven.

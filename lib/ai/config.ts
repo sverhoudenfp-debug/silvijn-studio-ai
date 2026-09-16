@@ -11,6 +11,20 @@ import type { AIModelTier, AIMode } from "./types";
  *   powerful → claude-opus-5     (krachtigste algemene model, zware taken)
  */
 
+/**
+ * CENTRALE capability-regel: modellen die het `temperature`-parameter NIET
+ * ondersteunen (Anthropic wijst de hele request af met HTTP 400 als het
+ * toch wordt meegestuurd). claude-sonnet-5 is diagnostisch bevestigd
+ * (invalid_request_error: "temperature is deprecated for this model");
+ * claude-opus-5 hoort bij dezelfde generatie. Nieuwe modellen hier toevoegen.
+ */
+const TEMPERATURE_UNSUPPORTED_PREFIXES = ["claude-sonnet-5", "claude-opus-5"];
+
+/** True als het model `temperature` accepteert in messages.create. */
+export function modelSupportsTemperature(model: string): boolean {
+  return !TEMPERATURE_UNSUPPORTED_PREFIXES.some((prefix) => model.startsWith(prefix));
+}
+
 export interface AIConfig {
   mode: AIMode;
   apiKey: string | null;

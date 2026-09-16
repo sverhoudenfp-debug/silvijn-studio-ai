@@ -43,7 +43,8 @@ export interface AIProviderRequest {
   system: string;
   prompt: string;
   maxTokens: number;
-  temperature: number;
+  /** Optioneel: alleen meesturen als het model sampling ondersteunt (zie config). */
+  temperature?: number;
 }
 
 export interface AIProviderResult {

@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { getAIConfig, requireLiveAPIKey } from "./config";
+import { getAIConfig, modelSupportsTemperature, requireLiveAPIKey } from "./config";
 import {
   AIAuthError,
   AIConfigurationError,
@@ -51,13 +51,17 @@ export class AnthropicProvider implements AIProvider {
   async generateText(request: AIProviderRequest): Promise<AIProviderResult> {
     const started = Date.now();
     try {
-      const response = await this.client.messages.create({
+      const body: Anthropic.MessageCreateParamsNonStreaming = {
         model: request.model,
         max_tokens: request.maxTokens,
-        temperature: request.temperature,
         system: request.system,
         messages: [{ role: "user", content: request.prompt }],
-      });
+      };
+      // Centrale capability-regel: temperature alleen meesturen als het model het ondersteunt.
+      if (request.temperature !== undefined && modelSupportsTemperature(request.model)) {
+        body.temperature = request.temperature;
+      }
+      const response = await this.client.messages.create(body);
 
       if (Date.now() - started > this.timeoutMs) {
         throw new AITimeoutError("Anthropic-aanvraag duurde te lang");

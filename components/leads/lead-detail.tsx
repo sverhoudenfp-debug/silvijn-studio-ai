@@ -5,7 +5,6 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import { scoreLead } from "@/lib/agents/lead-scoring";
-import { demoByLeadId } from "@/lib/mock-demos";
 import {
   demoStatusMeta,
   leadSourceMeta,
@@ -14,7 +13,7 @@ import {
   outreachStatusMeta,
   websiteStatusMeta,
 } from "@/lib/mock-data";
-import type { DemoStatus, Lead, LeadStatus, OutreachStatus } from "@/lib/types";
+import type { DemoStatus, DemoWebsite, Lead, LeadStatus, OutreachStatus } from "@/lib/types";
 import { cn, scoreCategory, scoreVariant, slugify } from "@/lib/utils";
 
 const selectClass =
@@ -23,7 +22,7 @@ const selectClass =
 const inputClass =
   "h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-zinc-600 focus:outline-none";
 
-export function LeadDetail({ lead }: { lead: Lead }) {
+export function LeadDetail({ lead, demo }: { lead: Lead; demo: DemoWebsite | null }) {
   const [current, setCurrent] = useState<Lead>(lead);
   const [notes, setNotes] = useState<string[]>(lead.notes);
   const [events, setEvents] = useState(() => mockLeadActivity(lead));
@@ -39,7 +38,6 @@ export function LeadDetail({ lead }: { lead: Lead }) {
   });
 
   const { score, reason, factors } = scoreLead(current);
-  const demo = demoByLeadId(lead.id);
 
   function addEvent(label: string) {
     setEvents((prev) => [

@@ -72,7 +72,7 @@ export default async function AutomationDetailPage(props: PageProps<"/automation
                   {step.type === "wait_for_human" && <Badge variant="warning">HUMAN GATE</Badge>}
                 </p>
                 <p className="mt-0.5 text-xs text-zinc-400">{step.description}</p>
-                <p className="mt-0.5 text-[11px] text-zinc-600">
+                <p className="mt-0.5 text-[11px] text-zinc-500">
                   timeout {Math.round(step.timeoutMs / 1000)}s · max {step.maxRetries} retries · autonomie ≥ {step.requiredAutonomy}
                 </p>
               </div>
@@ -107,7 +107,7 @@ export default async function AutomationDetailPage(props: PageProps<"/automation
             <ul className="max-h-64 space-y-1.5 overflow-y-auto text-xs">
               {latestEvents.map((event) => (
                 <li key={event.id} className="flex gap-2">
-                  <span className="shrink-0 text-zinc-600">{new Date(event.timestamp).toLocaleTimeString("nl-NL")}</span>
+                  <span className="shrink-0 text-zinc-500">{new Date(event.timestamp).toLocaleTimeString("nl-NL")}</span>
                   <span className="text-zinc-300">
                     <span className="font-mono text-[11px] text-zinc-500">{event.type}</span>
                     {event.entityId ? ` · ${event.entityId}` : ""}
@@ -141,7 +141,7 @@ export default async function AutomationDetailPage(props: PageProps<"/automation
                   <tr key={run.id} className="border-b border-zinc-800/60 last:border-0">
                     <td className="py-2.5 pr-3 font-mono text-xs text-zinc-500">{run.id.slice(0, 18)}…</td>
                     <td className="py-2.5 pr-3">
-                      <Badge variant={run.status === "completed" ? "success" : run.status === "paused" ? "warning" : run.status === "failed" ? "neutral" : "info"}>
+                      <Badge variant={run.status === "completed" ? "success" : run.status === "paused" ? "warning" : run.status === "failed" ? "danger" : "info"}>
                         {run.status}
                       </Badge>
                     </td>
@@ -169,7 +169,7 @@ export default async function AutomationDetailPage(props: PageProps<"/automation
 
 function AutomationStepLegend() {
   return (
-    <p className="text-xs text-zinc-600">
+    <p className="text-xs text-zinc-500">
       Step-statussen: pending → running → completed / failed / blocked / skipped. BLOCKED-steps worden niet
       automatisch opnieuw geprobeerd zonder dat de blocker verandert.
     </p>

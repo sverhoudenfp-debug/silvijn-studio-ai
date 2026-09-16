@@ -12,10 +12,10 @@ import type { DemoTemplate, DemoWebsite, Lead } from "@/lib/types";
 import { scoreVariant } from "@/lib/utils";
 
 const inputClass =
-  "h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-zinc-600 focus:outline-none";
+  "h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none";
 
 const selectClass =
-  "h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 text-xs text-zinc-200 focus:border-zinc-600 focus:outline-none";
+  "h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 text-xs text-zinc-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none";
 
 export function DemoDetail({ demo, lead }: { demo: DemoWebsite; lead?: Lead }) {
   const template = demoTemplates[demo.template] ?? demoTemplates.business_standard;
@@ -141,7 +141,7 @@ export function DemoDetail({ demo, lead }: { demo: DemoWebsite; lead?: Lead }) {
                 </div>
                 <div>
                   <label htmlFor="edit-description" className="mb-1.5 block text-xs text-zinc-400">Description</label>
-                  <textarea id="edit-description" rows={3} value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-zinc-600 focus:outline-none" />
+                  <textarea id="edit-description" rows={3} value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
                 </div>
                 <div>
                   <label htmlFor="edit-cta" className="mb-1.5 block text-xs text-zinc-400">CTA-tekst</label>

@@ -47,7 +47,7 @@ const interestLabels: Record<string, string> = {
 };
 
 const inputClass =
-  "w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-zinc-600 focus:outline-none";
+  "w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none";
 
 export function SalesSection({ leadId, leadBusinessName }: { leadId: string; leadBusinessName: string }) {
   const [inbound, setInbound] = useState<InboundMessage[]>([]);
@@ -141,7 +141,7 @@ export function SalesSection({ leadId, leadBusinessName }: { leadId: string; lea
         {/* Inkomend bericht toevoegen (mock/dev: handmatig; echte inbox volgt later) */}
         <div className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-            Inkomende reactie registreren <span className="normal-case text-zinc-600">(mock/dev — echte e-mailinbox volgt in een latere fase)</span>
+            Inkomende reactie registreren <span className="normal-case text-zinc-500">(mock/dev — echte e-mailinbox volgt in een latere fase)</span>
           </p>
           <div className="grid gap-2 sm:grid-cols-2">
             <input
@@ -206,7 +206,7 @@ export function SalesSection({ leadId, leadBusinessName }: { leadId: string; lea
                             type="button"
                             onClick={() => analyze(message.id)}
                             disabled={pending}
-                            className="h-8 rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-zinc-50 transition-colors hover:bg-indigo-500 disabled:opacity-60"
+                            className="h-9 rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-zinc-50 transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 focus-visible:ring-indigo-500"
                           >
                             Analyze Response
                           </button>
@@ -302,7 +302,7 @@ export function SalesSection({ leadId, leadBusinessName }: { leadId: string; lea
                   type="button"
                   onClick={() => updateStatus(latest.id, "ready")}
                   disabled={pending}
-                  className="h-8 rounded-lg border border-amber-500/40 bg-amber-950/60 px-3 text-xs font-semibold text-amber-300 transition-colors hover:bg-amber-900/60 disabled:opacity-60"
+                  className="h-9 rounded-lg border border-amber-500/40 bg-amber-950/60 px-3 text-xs font-semibold text-amber-300 transition-colors hover:bg-amber-900/60 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 focus-visible:ring-amber-500"
                 >
                   Mark Ready for Silvijn
                 </button>
@@ -312,7 +312,7 @@ export function SalesSection({ leadId, leadBusinessName }: { leadId: string; lea
                   type="button"
                   onClick={() => updateStatus(latest.id, "handled")}
                   disabled={pending}
-                  className="h-8 rounded-lg border border-zinc-700 px-3 text-xs font-medium text-zinc-300 transition-colors hover:border-zinc-500 disabled:opacity-60"
+                  className="h-9 rounded-lg border border-zinc-700 px-3 text-xs font-semibold text-zinc-300 transition-colors hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 focus-visible:ring-indigo-500"
                 >
                   Markeer afgehandeld
                 </button>

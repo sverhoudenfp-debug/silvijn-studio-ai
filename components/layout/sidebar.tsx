@@ -92,7 +92,7 @@ export function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose:
                 href={item.href}
                 onClick={onClose}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950",
                   active
                     ? "bg-zinc-800/70 text-zinc-50"
                     : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"

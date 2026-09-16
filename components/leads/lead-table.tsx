@@ -110,15 +110,11 @@ export function LeadTable({ leads }: { leads: Lead[] }) {
               <Badge variant={leadStatusMeta[lead.leadStatus].variant}>
                 {leadStatusMeta[lead.leadStatus].label}
               </Badge>
-              <Badge variant={websiteStatusMeta[lead.websiteStatus].variant}>
-                {websiteStatusMeta[lead.websiteStatus].label}
-              </Badge>
-              <Badge variant={outreachStatusMeta[lead.outreachStatus].variant}>
-                {outreachStatusMeta[lead.outreachStatus].label}
-              </Badge>
-              <Badge variant={demoStatusMeta[lead.demoStatus].variant}>
-                {demoStatusMeta[lead.demoStatus].label}
-              </Badge>
+              {lead.outreachStatus !== "not_contacted" && (
+                <Badge variant={outreachStatusMeta[lead.outreachStatus].variant}>
+                  {outreachStatusMeta[lead.outreachStatus].label}
+                </Badge>
+              )}
             </div>
           </Link>
         ))}

@@ -7,7 +7,7 @@ import type { GeneratedWebsite } from "@/lib/websites/types";
  * fake cijfers; lege state zodra er nog niets gegenereerd is.
  */
 
-const statusMeta: Record<string, { label: string; variant: "info" | "success" | "warning" | "neutral" }> = {
+const statusMeta: Record<string, { label: string; variant: "info" | "success" | "warning" | "danger" | "neutral" }> = {
   generating: { label: "Genereren bezig", variant: "info" },
   generated: { label: "Gegenereerd", variant: "info" },
   building: { label: "Build/validatie bezig", variant: "info" },
@@ -16,7 +16,7 @@ const statusMeta: Record<string, { label: string; variant: "info" | "success" | 
   ready_for_silvijn: { label: "READY FOR SILVIJN", variant: "warning" },
   needs_revision: { label: "NEEDS REVISION", variant: "warning" },
   approved: { label: "APPROVED", variant: "success" },
-  failed: { label: "Mislukt", variant: "neutral" },
+  failed: { label: "Mislukt", variant: "danger" },
   archived: { label: "Gearchiveerd (oudere versie)", variant: "neutral" },
 };
 

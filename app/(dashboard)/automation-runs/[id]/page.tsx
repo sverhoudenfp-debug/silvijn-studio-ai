@@ -13,12 +13,12 @@ export const metadata = { title: "Automation run | Silvijn Studio" };
  * blocked reason — de debugging-pagina van de automation engine.
  */
 
-const stepVariant: Record<string, "success" | "warning" | "info" | "neutral"> = {
+const stepVariant: Record<string, "success" | "warning" | "danger" | "info" | "neutral"> = {
   completed: "success",
   running: "info",
   pending: "neutral",
   blocked: "warning",
-  failed: "neutral",
+  failed: "danger",
   skipped: "neutral",
 };
 
@@ -38,7 +38,7 @@ export default async function AutomationRunPage(props: PageProps<"/automation-ru
         </Link>
         <div className="mt-1 flex flex-wrap items-center gap-2">
           <h2 className="text-2xl font-semibold tracking-tight text-zinc-50">Run</h2>
-          <Badge variant={run.status === "completed" ? "success" : run.status === "paused" ? "warning" : run.status === "failed" ? "neutral" : "info"}>
+          <Badge variant={run.status === "completed" ? "success" : run.status === "paused" ? "warning" : run.status === "failed" ? "danger" : "info"}>
             {run.status}
           </Badge>
           <span className="font-mono text-xs text-zinc-500">{run.id}</span>

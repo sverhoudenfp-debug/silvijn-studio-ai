@@ -18,12 +18,12 @@ import type { OutreachDraft } from "@/lib/outreach/types";
  * elke draft is AI-gegenereerd en wordt nooit automatisch verzonden.
  */
 
-const statusMeta: Record<string, { label: string; variant: "warning" | "info" | "success" | "neutral" }> = {
+const statusMeta: Record<string, { label: string; variant: "warning" | "info" | "success" | "danger" | "neutral" }> = {
   draft: { label: "Draft — kwaliteitscheck mislukt", variant: "warning" },
   ready_for_review: { label: "Klaar voor review", variant: "info" },
   approved: { label: "Goedgekeurd (nog niet verzonden)", variant: "success" },
   sent: { label: "Verzonden", variant: "neutral" },
-  failed: { label: "Mislukt", variant: "warning" },
+  failed: { label: "Mislukt", variant: "danger" },
   cancelled: { label: "Geannuleerd", variant: "neutral" },
 };
 
@@ -189,7 +189,7 @@ export function OutreachSection({
                         type="button"
                         onClick={() => updateStatus(draft.id, "approve")}
                         disabled={pending}
-                        className="h-8 rounded-lg border border-emerald-500/40 bg-emerald-950/60 px-3 text-xs font-semibold text-emerald-300 transition-colors hover:bg-emerald-900/60 disabled:opacity-60"
+                        className="h-9 rounded-lg border border-emerald-500/40 bg-emerald-950/60 px-3 text-xs font-semibold text-emerald-300 transition-colors hover:bg-emerald-900/60 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 focus-visible:ring-emerald-500"
                       >
                         Goedkeuren
                       </button>
@@ -197,7 +197,7 @@ export function OutreachSection({
                         type="button"
                         onClick={() => updateStatus(draft.id, "cancel")}
                         disabled={pending}
-                        className="h-8 rounded-lg border border-zinc-700 px-3 text-xs font-medium text-zinc-300 transition-colors hover:border-zinc-500 disabled:opacity-60"
+                        className="h-9 rounded-lg border border-zinc-700 px-3 text-xs font-semibold text-zinc-300 transition-colors hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 focus-visible:ring-indigo-500"
                       >
                         Annuleren
                       </button>

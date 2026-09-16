@@ -22,18 +22,18 @@ import type { GeneratedWebsite } from "@/lib/websites/types";
  * altijd expliciete bevestiging met de belangrijkste context.
  */
 
-const resultMeta: Record<string, { label: string; variant: "success" | "warning" | "neutral" }> = {
+const resultMeta: Record<string, { label: string; variant: "success" | "warning" | "danger" | "neutral" }> = {
   pass: { label: "PASS — klaar voor beoordeling", variant: "success" },
   needs_revision: { label: "NEEDS REVISION", variant: "warning" },
-  fail: { label: "FAIL", variant: "neutral" },
+  fail: { label: "FAIL", variant: "danger" },
   blocked: { label: "BLOCKED", variant: "neutral" },
 };
 
-const severityVariant: Record<string, "info" | "warning" | "neutral" | "success"> = {
+const severityVariant: Record<string, "info" | "warning" | "danger" | "success"> = {
   info: "info",
   warning: "warning",
-  error: "neutral",
-  critical: "neutral",
+  error: "danger",
+  critical: "danger",
 };
 
 function checkIcon(result: string): string {
@@ -83,13 +83,13 @@ export function QcReportView({ website, qc }: { website: GeneratedWebsite; qc: Q
         <div className="flex flex-wrap gap-2">
           <Link
             href={`/generated-websites/${website.slug}`}
-            className="inline-flex h-9 items-center rounded-lg border border-zinc-700 bg-zinc-900 px-4 text-xs font-semibold text-zinc-200 transition-colors hover:border-zinc-500"
+            className="inline-flex h-9 items-center rounded-lg border border-zinc-700 bg-zinc-900 px-4 text-xs font-semibold text-zinc-200 transition-colors hover:border-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 focus-visible:ring-indigo-500"
           >
             Open website
           </Link>
           <Link
             href={`/projects/${website.projectId}`}
-            className="inline-flex h-9 items-center rounded-lg border border-zinc-700 bg-zinc-900 px-4 text-xs font-semibold text-zinc-200 transition-colors hover:border-zinc-500"
+            className="inline-flex h-9 items-center rounded-lg border border-zinc-700 bg-zinc-900 px-4 text-xs font-semibold text-zinc-200 transition-colors hover:border-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 focus-visible:ring-indigo-500"
           >
             Naar project
           </Link>
@@ -107,7 +107,7 @@ export function QcReportView({ website, qc }: { website: GeneratedWebsite; qc: Q
               type="button"
               onClick={() => withAction(() => runQualityControlAction(website.id))}
               disabled={pending}
-              className="h-9 rounded-lg bg-indigo-600 px-4 text-xs font-semibold text-zinc-50 transition-colors hover:bg-indigo-500 disabled:opacity-60"
+              className="h-9 rounded-lg bg-indigo-600 px-4 text-xs font-semibold text-zinc-50 transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 focus-visible:ring-indigo-500"
             >
               {pending ? "Kwaliteitscontrole draait..." : "Run quality control"}
             </button>
@@ -118,8 +118,12 @@ export function QcReportView({ website, qc }: { website: GeneratedWebsite; qc: Q
       ) : (
         <>
           <Card>
-            <CardHeader title="Overall result" subtitle={`Status: ${qc.status} · score: ${qc.score}/100 (interne indicator, geen commerciële prijs)`} />
-            <div className="flex flex-wrap items-center gap-3">
+            <CardHeader title="Overall result" subtitle={`Status: ${qc.status} · interne indicator, geen commerciële prijs`} />
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-3xl font-semibold tracking-tight text-zinc-50">{qc.score}</span>
+                <span className="text-xs font-medium text-zinc-500">/ 100</span>
+              </div>
               <Badge variant={resultMeta[qc.overallResult]?.variant ?? "neutral"}>
                 {resultMeta[qc.overallResult]?.label ?? qc.overallResult}
               </Badge>
@@ -218,7 +222,7 @@ export function QcReportView({ website, qc }: { website: GeneratedWebsite; qc: Q
                   type="button"
                   onClick={() => withAction(() => runQualityControlAction(website.id))}
                   disabled={pending}
-                  className="h-9 rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-4 text-xs font-semibold text-indigo-300 transition-colors hover:bg-indigo-500/20 disabled:opacity-60"
+                  className="h-9 rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-4 text-xs font-semibold text-indigo-300 transition-colors hover:bg-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 focus-visible:ring-indigo-500"
                 >
                   {pending ? "Kwaliteitscontrole draait..." : "Run quality control (opnieuw)"}
                 </button>
@@ -228,7 +232,7 @@ export function QcReportView({ website, qc }: { website: GeneratedWebsite; qc: Q
                   type="button"
                   onClick={() => setConfirmingApprove(true)}
                   disabled={pending}
-                  className="h-9 rounded-lg bg-emerald-600 px-4 text-xs font-semibold text-zinc-50 transition-colors hover:bg-emerald-500 disabled:opacity-60"
+                  className="h-9 rounded-lg border border-emerald-500/40 bg-emerald-950/60 px-4 text-xs font-semibold text-emerald-300 transition-colors hover:bg-emerald-900/60 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 focus-visible:ring-emerald-500"
                 >
                   Approve website
                 </button>
@@ -238,7 +242,7 @@ export function QcReportView({ website, qc }: { website: GeneratedWebsite; qc: Q
                   type="button"
                   onClick={() => setShowRevisionForm(true)}
                   disabled={pending}
-                  className="h-9 rounded-lg bg-amber-600 px-4 text-xs font-semibold text-zinc-50 transition-colors hover:bg-amber-500 disabled:opacity-60"
+                  className="h-9 rounded-lg border border-amber-500/40 bg-amber-950/60 px-4 text-xs font-semibold text-amber-300 transition-colors hover:bg-amber-900/60 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 focus-visible:ring-amber-500"
                 >
                   Request revision
                 </button>
@@ -254,7 +258,7 @@ export function QcReportView({ website, qc }: { website: GeneratedWebsite; qc: Q
                     })
                   }
                   disabled={pending}
-                  className="h-9 rounded-lg border border-zinc-700 bg-zinc-900 px-4 text-xs font-semibold text-zinc-400 transition-colors hover:border-zinc-500 disabled:opacity-60"
+                  className="h-9 rounded-lg border border-zinc-700 bg-zinc-900 px-4 text-xs font-semibold text-zinc-400 transition-colors hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 focus-visible:ring-indigo-500"
                 >
                   Archive
                 </button>
@@ -283,7 +287,7 @@ export function QcReportView({ website, qc }: { website: GeneratedWebsite; qc: Q
                       withAction(() => approveWebsiteAction(website.id));
                     }}
                     disabled={pending}
-                    className="h-9 rounded-lg bg-emerald-600 px-4 text-xs font-semibold text-zinc-50 transition-colors hover:bg-emerald-500 disabled:opacity-60"
+                    className="h-9 rounded-lg border border-emerald-500/40 bg-emerald-950/60 px-4 text-xs font-semibold text-emerald-300 transition-colors hover:bg-emerald-900/60 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 focus-visible:ring-emerald-500"
                   >
                     {pending ? "Goedkeuren..." : "Ja, approve"}
                   </button>
@@ -309,7 +313,7 @@ export function QcReportView({ website, qc }: { website: GeneratedWebsite; qc: Q
                   onChange={(e) => setRevisionReason(e.target.value)}
                   placeholder="Reden voor de revisie (verplicht, minimaal 5 tekens)"
                   rows={3}
-                  className="mt-3 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600"
+                  className="mt-3 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-500"
                 />
                 {qc.issues.length > 0 && (
                   <div className="mt-3 space-y-1">

@@ -24,7 +24,7 @@ export default async function AnalyticsPage() {
     data.automation.totalRuns > 0;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight text-zinc-50">Analytics</h2>
         <p className="mt-1 text-sm text-zinc-400">
@@ -45,7 +45,8 @@ export default async function AnalyticsPage() {
 
       {data.leads.total > 0 && (
         <>
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Leads</h3>
+          <section className="space-y-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Leads</h3>
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <StatCard kpi={kpi("Totaal leads", data.leads.total)} />
             <StatCard kpi={kpi("Nieuw", data.leads.new)} />
@@ -55,12 +56,14 @@ export default async function AnalyticsPage() {
             <StatCard kpi={kpi("Gewonnen", data.leads.won)} />
             <StatCard kpi={kpi("Verloren", data.leads.lost)} />
           </div>
+          </section>
         </>
       )}
 
       {(data.outreach.drafts > 0 || data.outreach.sent > 0) && (
         <>
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Outreach</h3>
+          <section className="space-y-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Outreach</h3>
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <StatCard kpi={kpi("Concepten", data.outreach.drafts)} />
             <StatCard kpi={kpi("Klaar voor review", data.outreach.readyForReview)} />
@@ -71,12 +74,14 @@ export default async function AnalyticsPage() {
             <StatCard kpi={kpi("Geïnteresseerd", data.outreach.interested)} />
             <StatCard kpi={kpi("Opt-outs", data.outreach.optedOut)} />
           </div>
+          </section>
         </>
       )}
 
       {data.sales.inboundMessages > 0 && (
         <>
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Sales</h3>
+          <section className="space-y-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Sales</h3>
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <StatCard kpi={kpi("Inkomende berichten", data.sales.inboundMessages)} />
             <StatCard kpi={kpi("Gekwalificeerd", data.sales.qualified)} />
@@ -85,12 +90,14 @@ export default async function AnalyticsPage() {
             <StatCard kpi={kpi("Demo-aanvragen", data.sales.demoRequests)} />
             <StatCard kpi={kpi("Belverzoeken", data.sales.callRequests)} />
           </div>
+          </section>
         </>
       )}
 
       {data.projects.total > 0 && (
         <>
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Projecten</h3>
+          <section className="space-y-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Projecten</h3>
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <StatCard kpi={kpi("Totaal", data.projects.total)} />
             <StatCard kpi={kpi("Wacht op goedkeuring", data.projects.awaitingApproval)} />
@@ -99,12 +106,14 @@ export default async function AnalyticsPage() {
             <StatCard kpi={kpi("Afgerond", data.projects.completed)} />
             <StatCard kpi={kpi("Geannuleerd", data.projects.cancelled)} />
           </div>
+          </section>
         </>
       )}
 
       {data.websites.generated > 0 || data.websites.approved > 0 ? (
         <>
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Websites</h3>
+          <section className="space-y-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Websites</h3>
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <StatCard kpi={kpi("Gegenereerd", data.websites.generated)} />
             <StatCard kpi={kpi("QC geslaagd", data.websites.qcPass)} />
@@ -112,12 +121,14 @@ export default async function AnalyticsPage() {
             <StatCard kpi={kpi("Klaar voor Silvijn", data.websites.readyForSilvijn)} />
             <StatCard kpi={kpi("Goedgekeurd", data.websites.approved)} />
           </div>
+          </section>
         </>
       ) : null}
 
       {data.ai.totalRuns > 0 && (
         <>
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">AI</h3>
+          <section className="space-y-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">AI</h3>
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <StatCard kpi={kpi("Totaal AI-runs", data.ai.totalRuns)} />
             <StatCard kpi={kpi("Geslaagd", data.ai.successful)} />
@@ -132,12 +143,14 @@ export default async function AnalyticsPage() {
               )}
             />
           </div>
+          </section>
         </>
       )}
 
       {data.automation.totalRuns > 0 && (
         <>
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Automatisering</h3>
+          <section className="space-y-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Automatisering</h3>
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <StatCard kpi={kpi("Runs", data.automation.totalRuns)} />
             <StatCard kpi={kpi("Geslaagd", data.automation.completed)} />
@@ -146,6 +159,7 @@ export default async function AnalyticsPage() {
             <StatCard kpi={kpi("Gem. duur (ms)", data.automation.averageDurationMs ?? "—")} />
             <StatCard kpi={kpi("AI-calls", data.automation.aiCalls)} />
           </div>
+          </section>
         </>
       )}
     </div>

@@ -12,7 +12,7 @@ import { cn, scoreVariant } from "@/lib/utils";
 type SortKey = "created_desc" | "created_asc" | "name_asc" | "score_desc";
 
 const selectClass =
-  "h-9 rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 text-xs text-zinc-200 focus:border-zinc-600 focus:outline-none";
+  "h-9 rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 text-xs text-zinc-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none";
 
 export interface DemoLeadRow {
   demo: DemoWebsite;
@@ -112,7 +112,7 @@ export function DemoWebsitesView({ rows: allRows }: { rows: DemoLeadRow[] }) {
         onChange={(event) => setQuery(event.target.value)}
         placeholder="Zoek op bedrijfsnaam, locatie, branche of slug..."
         aria-label="Zoek demo's"
-        className="h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-zinc-600 focus:outline-none"
+        className="h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
       />
 
       <div className="flex flex-wrap items-center gap-2">

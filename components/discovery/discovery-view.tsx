@@ -4,6 +4,8 @@ import { useState, useTransition } from "react";
 import { runDiscovery, type DiscoveryFormInput } from "@/app/(dashboard)/lead-discovery/actions";
 import { DISCOVERY_SOURCES } from "@/lib/discovery/providers";
 import type { DiscoveryResult } from "@/lib/discovery/types";
+import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
 
 /**
@@ -12,14 +14,14 @@ import { cn } from "@/lib/utils";
  */
 
 const inputClass =
-  "h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-zinc-600 focus:outline-none";
+  "h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none";
 
-const statusStyles: Record<string, string> = {
-  created: "border-emerald-500/40 bg-emerald-950 text-emerald-300",
-  duplicate: "border-amber-500/40 bg-amber-950 text-amber-300",
-  invalid: "border-red-500/40 bg-red-950 text-red-300",
-  skipped: "border-zinc-700 bg-zinc-900 text-zinc-400",
-  new: "border-indigo-500/40 bg-indigo-950 text-indigo-300",
+const statusVariants: Record<string, "success" | "warning" | "danger" | "neutral" | "info"> = {
+  created: "success",
+  duplicate: "warning",
+  invalid: "danger",
+  skipped: "neutral",
+  new: "info",
 };
 
 const statusLabels: Record<string, string> = {
@@ -167,7 +169,7 @@ export function DiscoveryView() {
               type="button"
               onClick={submit}
               disabled={pending}
-              className="inline-flex h-9 w-full items-center justify-center rounded-lg bg-indigo-600 px-4 text-sm font-medium text-zinc-50 transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-9 w-full items-center justify-center rounded-lg bg-indigo-600 px-4 text-xs font-semibold text-zinc-50 transition-colors hover:bg-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {pending ? "Discovery draait..." : "Discover Leads"}
             </button>
@@ -198,9 +200,7 @@ export function DiscoveryView() {
           )}
 
           {result.candidates.length === 0 ? (
-            <p className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4 text-sm text-zinc-400">
-              Geen kandidaten gevonden voor deze filters.
-            </p>
+            <EmptyState title="Geen kandidaten gevonden" description="Probeer andere filters of een grotere limiet." />
           ) : (
             <div className="overflow-x-auto rounded-xl border border-zinc-800">
               <table className="w-full text-sm">
@@ -220,7 +220,7 @@ export function DiscoveryView() {
                       key={`${item.candidate.businessName}-${index}`}
                       className="border-b border-zinc-800/60 last:border-0"
                     >
-                      <td className="px-3 py-2.5 text-zinc-100">{item.candidate.businessName || <span className="text-zinc-600">(naamloos)</span>}</td>
+                      <td className="px-3 py-2.5 text-zinc-100">{item.candidate.businessName || <span className="text-zinc-500">(naamloos)</span>}</td>
                       <td className="px-3 py-2.5 text-zinc-300">{item.candidate.industry}</td>
                       <td className="px-3 py-2.5 text-zinc-300">{item.candidate.city}</td>
                       <td className="px-3 py-2.5 text-zinc-400">{item.candidate.website ?? "—"}</td>
@@ -228,14 +228,9 @@ export function DiscoveryView() {
                         {websiteStatusLabels[item.websiteStatus] ?? item.websiteStatus}
                       </td>
                       <td className="px-3 py-2.5">
-                        <span
-                          className={cn(
-                            "inline-flex rounded-md border px-2 py-0.5 text-xs font-medium",
-                            statusStyles[item.status]
-                          )}
-                        >
+                        <Badge variant={statusVariants[item.status] ?? "neutral"}>
                           {statusLabels[item.status]}
-                        </span>
+                        </Badge>
                         {item.reason && <span className="ml-2 text-xs text-zinc-500">{item.reason}</span>}
                       </td>
                     </tr>

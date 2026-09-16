@@ -9,21 +9,21 @@ export function DemoStatusPage({ demo, lead }: { demo: DemoWebsite; lead?: Lead 
   const generating = demo.status === "generating";
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4">
-      <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-8 text-center">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-zinc-100">
+    <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-4">
+      <div className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900/60 p-8 text-center">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-zinc-800/70">
           {generating ? (
             <span className="h-3 w-3 animate-ping rounded-full bg-indigo-500" />
           ) : (
-            <span className="text-xl">⚠</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-5 w-5 text-red-400"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /></svg>
           )}
         </div>
-        <h1 className="mt-4 text-lg font-semibold text-zinc-900">
+        <h1 className="mt-4 text-lg font-semibold text-zinc-50">
           {generating
             ? "Demo wordt voorbereid"
             : "Demo-generatie is mislukt"}
         </h1>
-        <p className="mt-2 text-sm leading-relaxed text-zinc-500">
+        <p className="mt-2 text-sm leading-relaxed text-zinc-400">
           {generating
             ? `De demo-website voor ${demo.businessName} is in opbouw. Straks is hij hier te bekijken.`
             : `Het aanmaken van de demo voor ${demo.businessName} is niet gelukt. De demo kan op een later moment opnieuw worden gegenereerd.`}
@@ -31,7 +31,7 @@ export function DemoStatusPage({ demo, lead }: { demo: DemoWebsite; lead?: Lead 
         {lead ? (
           <Link
             href={`/demo-websites/${demo.id}`}
-            className="mt-6 inline-block rounded-lg bg-zinc-900 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-zinc-700"
+            className="mt-6 inline-block rounded-lg bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-zinc-50 transition-colors hover:bg-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
           >
             Bekijk demo-details
           </Link>

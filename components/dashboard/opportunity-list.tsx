@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import { leadStatusMeta, websiteStatusMeta } from "@/lib/mock-data";
@@ -22,7 +23,7 @@ export function OpportunityList({ leads }: { leads: Lead[] }) {
         }
       />
       {top.length === 0 ? (
-        <p className="py-6 text-sm text-zinc-500">Nog geen leads — discovery levert ze later aan.</p>
+        <EmptyState title="Nog geen leads" description="Discovery levert ze later aan." className="border-0 bg-transparent py-6" />
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">

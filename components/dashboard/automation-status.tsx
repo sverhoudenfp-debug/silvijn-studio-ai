@@ -1,3 +1,4 @@
+import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import type { Automation } from "@/lib/automation/types";
@@ -18,7 +19,7 @@ export function AutomationStatus({ automations }: { automations: Automation[] })
     <Card>
       <CardHeader title="Automation Status" subtitle="Actuele automations — geen scheduler actief" />
       {automations.length === 0 ? (
-        <p className="py-4 text-sm text-zinc-500">Nog geen automations gedefinieerd.</p>
+        <EmptyState title="Nog geen automations gedefinieerd" className="border-0 bg-transparent py-4" />
       ) : (
         <ul className="space-y-3">
           {automations.map((automation) => (

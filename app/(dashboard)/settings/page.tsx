@@ -14,7 +14,14 @@ const sections = [
 
 export default function SettingsPage() {
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-semibold tracking-tight text-zinc-50">Settings</h2>
+        <p className="mt-1 text-sm text-zinc-400">
+          Configuratie van de studio — secties worden fase voor fase geactiveerd.
+        </p>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
       {sections.map((section) => (
         <Card key={section.title} className="cursor-pointer transition-colors hover:border-zinc-700">
           <div className="flex items-start justify-between">
@@ -26,6 +33,7 @@ export default function SettingsPage() {
           </div>
         </Card>
       ))}
+      </div>
     </div>
   );
 }

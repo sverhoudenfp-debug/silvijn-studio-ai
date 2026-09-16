@@ -21,10 +21,10 @@ import type { DemoStatus, DemoWebsite, Lead, LeadStatus, OutreachStatus } from "
 import { cn, scoreCategory, scoreVariant, slugify } from "@/lib/utils";
 
 const selectClass =
-  "h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 text-xs text-zinc-200 focus:border-zinc-600 focus:outline-none";
+  "h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 text-xs text-zinc-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none";
 
 const inputClass =
-  "h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-zinc-600 focus:outline-none";
+  "h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none";
 
 export function LeadDetail({
   lead,
@@ -274,7 +274,7 @@ export function LeadDetail({
               onChange={(event) => setNoteText(event.target.value)}
               rows={3}
               placeholder="Bijvoorbeeld: gebeld, belt terug na het weekend..."
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-zinc-600 focus:outline-none"
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
             />
             <button
               type="button"
@@ -381,14 +381,14 @@ export function LeadDetail({
                   {demo.status === "ready" ? (
                     <Link
                       href={demo.previewUrl}
-                      className="inline-flex h-8 items-center rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-white transition-colors hover:bg-indigo-500"
+                      className="inline-flex h-9 items-center rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-zinc-50 transition-colors hover:bg-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 focus-visible:ring-indigo-500"
                     >
                       View Demo
                     </Link>
                   ) : null}
                   <Link
                     href={`/demo-websites/${demo.id}`}
-                    className="inline-flex h-8 items-center rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-xs font-semibold text-zinc-200 transition-colors hover:border-zinc-600"
+                    className="inline-flex h-9 items-center rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-xs font-semibold text-zinc-200 transition-colors hover:border-zinc-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 focus-visible:ring-indigo-500"
                   >
                     Demo beheren
                   </Link>

@@ -58,7 +58,13 @@ export default async function DashboardPage() {
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         {kpis.map((kpi) => (
-          <StatCard key={kpi.label} kpi={kpi} />
+          <StatCard
+            key={kpi.label}
+            kpi={kpi}
+            deltaTone={
+              kpi.label === "Projecten" || kpi.label === "Outreach-concepten" ? "warning" : "info"
+            }
+          />
         ))}
       </div>
 

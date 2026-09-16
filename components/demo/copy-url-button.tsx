@@ -27,7 +27,7 @@ export function CopyUrlButton({
       type="button"
       onClick={copy}
       className={cn(
-        "inline-flex h-8 items-center rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-xs font-medium transition-colors",
+        "inline-flex h-9 items-center rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 focus-visible:ring-indigo-500",
         copied ? "border-emerald-700 text-emerald-300" : "text-zinc-300 hover:border-zinc-600 hover:text-zinc-100",
         className
       )}

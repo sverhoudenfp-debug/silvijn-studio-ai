@@ -1,3 +1,4 @@
+import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import type { OutreachDraft } from "@/lib/outreach/types";
@@ -20,7 +21,7 @@ export function OutreachList({ drafts }: { drafts: OutreachDraft[] }) {
     <Card>
       <CardHeader title="Recent Outreach" subtitle="Concepten — er worden geen echte e-mails verstuurd" />
       {recent.length === 0 ? (
-        <p className="py-6 text-sm text-zinc-500">Nog geen outreach-concepten.</p>
+        <EmptyState title="Nog geen outreach-concepten" className="border-0 bg-transparent py-6" />
       ) : (
         <ul className="divide-y divide-zinc-800/50">
           {recent.map((draft) => (

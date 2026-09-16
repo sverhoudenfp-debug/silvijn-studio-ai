@@ -49,9 +49,9 @@ const priceStatusMeta: Record<string, { label: string; variant: "info" | "succes
   rejected: { label: "Prijs afgewezen (mens)", variant: "neutral" },
 };
 
-const buttonClass = "h-9 rounded-lg px-4 text-xs font-semibold transition-colors disabled:opacity-60";
+const buttonClass = "h-9 rounded-lg px-4 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 focus-visible:ring-indigo-500";
 const inputClass =
-  "w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-zinc-600 focus:outline-none";
+  "w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none";
 
 function euro(amount: number): string {
   return `€ ${amount.toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -181,12 +181,12 @@ export function ProjectDetail({
 
   return (
     <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-semibold tracking-tight text-zinc-50">{project.name}</h2>
+        <p className="mt-1 text-sm text-zinc-400">Project voor lead {lead?.businessName ?? project.leadId}</p>
+      </div>
       {/* ===== PROJECT INFORMATION ===== */}
       <Card>
-        <CardHeader
-          title={project.name}
-          subtitle={`Project voor lead ${lead?.businessName ?? project.leadId}`}
-        />
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={projectStatusMeta[project.status].variant}>{projectStatusMeta[project.status].label}</Badge>
           <Badge variant={priceStatusMeta[project.priceStatus]?.variant ?? "neutral"}>
@@ -196,7 +196,7 @@ export function ProjectDetail({
           {project.timeline && <span className="text-xs text-zinc-500">Timeline: {project.timeline}</span>}
         </div>
         <p className="mt-3 text-sm text-zinc-400">{project.description}</p>
-        <p className="mt-2 text-xs text-zinc-600">
+        <p className="mt-2 text-xs text-zinc-500">
           Aangemaakt {new Date(project.createdAt).toLocaleDateString("nl-NL")} · Bijgewerkt{" "}
           {new Date(project.updatedAt).toLocaleDateString("nl-NL")}
         </p>
@@ -484,7 +484,7 @@ export function ProjectDetail({
                 </div>
               )}
 
-              <p className="text-xs text-zinc-600">
+              <p className="text-xs text-zinc-500">
                 Berekend op {new Date(latest.calculatedAt).toLocaleString("nl-NL")} · pricing versie {latest.pricingVersion} ·
                 een AI-berekende indicatie is pas bindend na menselijke goedkeuring.
               </p>
@@ -493,7 +493,7 @@ export function ProjectDetail({
         </div>
 
         {indications.length > 1 && (
-          <p className="mt-3 text-xs text-zinc-600">
+          <p className="mt-3 text-xs text-zinc-500">
             {indications.length} prijsindicaties in de historie — oudere indicaties blijven bewaard met hun eigen
             pricing-versie en worden nooit stilzwijgend overschreven.
           </p>

@@ -14,10 +14,10 @@ export const metadata = { title: "Automations | Silvijn Studio" };
  * zijn server actions; approve/deliver bestaan hier bewust NIET.
  */
 
-const statusVariant: Record<string, "success" | "warning" | "info" | "neutral"> = {
+const statusVariant: Record<string, "success" | "warning" | "danger" | "info" | "neutral"> = {
   active: "success",
   paused: "warning",
-  failed: "neutral",
+  failed: "danger",
   disabled: "neutral",
   draft: "info",
   completed: "success",
@@ -25,7 +25,7 @@ const statusVariant: Record<string, "success" | "warning" | "info" | "neutral"> 
 
 function StatTile({ label, count }: { label: string; count: number }) {
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 transition-colors hover:border-zinc-700">
       <p className="text-xs font-medium text-zinc-400">{label}</p>
       <p className="mt-1 text-2xl font-semibold text-zinc-50">{count}</p>
     </div>
@@ -105,7 +105,7 @@ export default async function AutomationsPage() {
                     <td className="py-2.5 pr-3 font-mono text-xs text-zinc-500">{run.id.slice(0, 18)}…</td>
                     <td className="py-2.5 pr-3 text-zinc-200">{automations.find((a) => a.id === run.automationId)?.name ?? run.automationId}</td>
                     <td className="py-2.5 pr-3">
-                      <Badge variant={run.status === "completed" ? "success" : run.status === "failed" ? "neutral" : run.status === "paused" ? "warning" : "info"}>
+                      <Badge variant={run.status === "completed" ? "success" : run.status === "failed" ? "danger" : run.status === "paused" ? "warning" : "info"}>
                         {run.status}
                       </Badge>
                     </td>

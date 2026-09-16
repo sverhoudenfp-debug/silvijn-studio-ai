@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Card, CardHeader } from "@/components/ui/card";
 import type { AIActivityRecord } from "@/lib/repositories/ai-activity-repository";
 
@@ -36,7 +37,7 @@ export function ActivityList({ activities }: { activities: AIActivityRecord[] })
         action={<Badge variant={activities.length > 0 ? "success" : "neutral"}>{activities.length > 0 ? "Live" : "Leeg"}</Badge>}
       />
       {activities.length === 0 ? (
-        <p className="py-6 text-sm text-zinc-500">Nog geen activiteit — zodra AI of automatisering draait, verschijnt dat hier.</p>
+        <EmptyState title="Nog geen activiteit" description="Zodra AI of automatisering draait, verschijnt dat hier." className="border-0 bg-transparent py-6" />
       ) : (
         <ol className="relative space-y-5 border-l border-zinc-800 pl-5">
           {activities.map((entry) => (

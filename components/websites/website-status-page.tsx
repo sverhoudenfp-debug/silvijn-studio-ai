@@ -16,14 +16,14 @@ export function WebsiteStatusPage({ website, qc }: { website: GeneratedWebsite; 
   const qcFailed = isFailed && website.buildStatus === "passed" && website.generationStatus === "completed";
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-16">
+    <div className="mx-auto max-w-2xl space-y-6 px-4 py-16">
+      <div>
+        <h2 className="text-2xl font-semibold tracking-tight text-zinc-50">{website.businessName}</h2>
+        <p className="mt-1 text-sm text-zinc-400">Website v{website.version} · template: {website.template}</p>
+      </div>
       <Card>
-        <CardHeader
-          title={website.businessName}
-          subtitle={`Website v${website.version} · template: ${website.template}`}
-        />
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={isFailed ? "neutral" : "info"}>
+          <Badge variant={isFailed ? "danger" : "info"}>
             {isFailed
               ? qcFailed
                 ? "Kwaliteitscontrole: FAIL"

@@ -128,7 +128,7 @@ export function OutreachView({
                               type="button"
                               onClick={() => updateStatus(draft.id, "approve")}
                               disabled={pending}
-                              className="h-7 rounded-md border border-emerald-500/40 bg-emerald-950/60 px-2.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-900/60 disabled:opacity-60"
+                              className="h-9 rounded-lg border border-emerald-500/40 bg-emerald-950/60 px-3 text-xs font-semibold text-emerald-300 hover:bg-emerald-900/60 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 focus-visible:ring-emerald-500"
                             >
                               Goedkeuren
                             </button>
@@ -136,7 +136,7 @@ export function OutreachView({
                               type="button"
                               onClick={() => updateStatus(draft.id, "cancel")}
                               disabled={pending}
-                              className="h-7 rounded-md border border-zinc-700 px-2.5 text-xs text-zinc-300 hover:border-zinc-500 disabled:opacity-60"
+                              className="h-9 rounded-lg border border-zinc-700 px-3 text-xs font-semibold text-zinc-300 hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 focus-visible:ring-indigo-500"
                             >
                               Annuleren
                             </button>

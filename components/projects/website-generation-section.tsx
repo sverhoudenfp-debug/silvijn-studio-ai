@@ -14,12 +14,12 @@ import type { GeneratedWebsite } from "@/lib/websites/types";
  * READY_FOR_QC — geen klantdelivery.
  */
 
-const statusMeta: Record<string, { label: string; variant: "info" | "success" | "warning" | "neutral" }> = {
+const statusMeta: Record<string, { label: string; variant: "info" | "success" | "warning" | "danger" | "neutral" }> = {
   generating: { label: "Genereren bezig", variant: "info" },
   generated: { label: "Gegenereerd", variant: "info" },
   building: { label: "Build/validatie bezig", variant: "info" },
   ready_for_qc: { label: "READY FOR QC", variant: "warning" },
-  failed: { label: "Mislukt", variant: "neutral" },
+  failed: { label: "Mislukt", variant: "danger" },
   archived: { label: "Gearchiveerd", variant: "neutral" },
 };
 
@@ -143,7 +143,7 @@ export function WebsiteGenerationSection({
             </button>
           </div>
           {websites.length > 1 && (
-            <p className="text-xs text-zinc-600">
+            <p className="text-xs text-zinc-500">
               {websites.length} versies bewaard — oudere versies zijn gearchiveerd en terugvindbaar (niets verwijderd).
             </p>
           )}

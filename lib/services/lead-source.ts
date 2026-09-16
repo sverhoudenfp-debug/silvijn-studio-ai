@@ -2,10 +2,9 @@ import { leads } from "@/lib/mock-data";
 import type { RawBusiness } from "@/lib/types";
 
 /**
- * LeadSource abstraction — alle lead discovery providers implementeren
- * deze interface, zodat databronnen later kunnen worden vervangen of
- * gecombineerd (Google Maps, openbare bedrijfs-APIs, etc.) zonder dat
- * de rest van het systeem verandert.
+ * @deprecated Superseded door de Lead Discovery Engine (lib/discovery, Fase 5).
+ * Deze Fase 2-abstractie blijft alleen als historische referentie bestaan —
+ * nieuwe providers implementeren LeadDiscoveryProvider (lib/discovery/types.ts).
  */
 
 export interface LeadSearchParams {

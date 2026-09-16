@@ -42,7 +42,7 @@ export const AI_AGENTS: Record<AgentType, AgentDefinition> = {
   lead_research: {
     id: "lead_research",
     name: "Lead Research Agent",
-    description: "Verzamelt bedrijfsdata voor nieuwe leads (latere fase).",
+    description: "AI-ondersteuning bovenop de Lead Discovery Engine (Fase 5); basis werkt zonder AI.",
     status: "planned",
     defaultTier: "fast",
     defaultTask: "generate_structured",

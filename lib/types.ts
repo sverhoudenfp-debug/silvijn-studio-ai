@@ -55,6 +55,10 @@ export interface Lead {
   source: LeadSourceType;
   notes: string[];
   aiAnalysis: LeadAiAnalysis | null;
+  /** Extern ID van de discovery-bron (optioneel, voor duplicate-detectie). */
+  externalId?: string | null;
+  /** URL van de bronpagina waar de lead is gevonden (optioneel). */
+  sourceUrl?: string | null;
   createdAt: string;
   updatedAt: string;
 }

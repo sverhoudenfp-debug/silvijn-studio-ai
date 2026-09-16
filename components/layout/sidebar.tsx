@@ -8,6 +8,9 @@ const icons: Record<string, React.ReactNode> = {
   home: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-4 w-4"><path d="M3 12l9-9 9 9" /><path d="M5 10v10h14V10" /></svg>
   ),
+  search: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-4 w-4"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
+  ),
   users: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-4 w-4"><circle cx="9" cy="7" r="4" /><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><path d="M16 3.5a4 4 0 0 1 0 7" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /></svg>
   ),
@@ -40,6 +43,7 @@ const icons: Record<string, React.ReactNode> = {
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: "home" },
   { href: "/leads", label: "Leads", icon: "users" },
+  { href: "/lead-discovery", label: "Lead Discovery", icon: "search" },
   { href: "/outreach", label: "AI Outreach", icon: "mail" },
   { href: "/conversations", label: "Conversations", icon: "chat" },
   { href: "/demo-websites", label: "Demo Websites", icon: "monitor" },

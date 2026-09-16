@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 import { OutreachSection } from "@/components/leads/outreach-section";
 import { SalesSection } from "@/components/sales/sales-section";
+import { ProjectSection } from "@/components/leads/project-section";
+import type { Project } from "@/lib/projects/types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import { scoreLead } from "@/lib/agents/lead-scoring";
@@ -24,7 +26,15 @@ const selectClass =
 const inputClass =
   "h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-zinc-600 focus:outline-none";
 
-export function LeadDetail({ lead, demo }: { lead: Lead; demo: DemoWebsite | null }) {
+export function LeadDetail({
+  lead,
+  demo,
+  project,
+}: {
+  lead: Lead;
+  demo: DemoWebsite | null;
+  project: Project | null;
+}) {
   const [current, setCurrent] = useState<Lead>(lead);
   const [notes, setNotes] = useState<string[]>(lead.notes);
   const [events, setEvents] = useState(() => mockLeadActivity(lead));
@@ -282,6 +292,13 @@ export function LeadDetail({ lead, demo }: { lead: Lead; demo: DemoWebsite | nul
           />
 
           <SalesSection leadId={current.id} leadBusinessName={current.businessName} />
+
+          <ProjectSection
+            leadId={current.id}
+            leadBusinessName={current.businessName}
+            leadStatus={current.leadStatus}
+            project={project}
+          />
         </div>
 
         <div className="space-y-6">

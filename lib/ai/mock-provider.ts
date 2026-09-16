@@ -52,6 +52,54 @@ const mockSalesAnalysis = `{
   "escalationReason": \${ESCALATION_REASON_TOKEN}
 }`;
 
+function buildMockRequirementsAnalysis(prompt: string): string {
+  const lower = prompt.toLowerCase();
+  const wantsEcommerce = /webshop|e-?commerce|shopify|bestellen/.test(lower);
+  const wantsCustom = /custom|integratie|koppeling|boekingssysteem|complexe/.test(lower);
+  const wantsPages = prompt.match(/(\d+)\s*pagina/);
+  const numberOfPages = wantsPages ? Number.parseInt(wantsPages[1], 10) : null;
+
+  const requirements = {
+    websiteType: wantsEcommerce ? "webshop" : "business_website",
+    numberOfPages,
+    designLevel: null,
+    responsive: true,
+    cms: null,
+    ecommerce: wantsEcommerce,
+    customFunctionality: wantsCustom ? "TESTDATA (mock): aangevraagde custom functionaliteit uit de reacties" : null,
+    integrations: wantsCustom ? ["TESTDATA (mock): koppeling boekingssysteem"] : null,
+    seo: null,
+    copywriting: null,
+    photography: null,
+    hosting: null,
+    maintenance: null,
+    deadline: null,
+    existingWebsite: null,
+    existingBranding: null,
+    contentAvailable: null,
+    specialRequirements: null,
+  };
+
+  const output = {
+    projectType: wantsEcommerce ? "webshop" : "website",
+    complexity: wantsCustom || wantsEcommerce ? "custom" : numberOfPages && numberOfPages > 5 ? "medium" : "low",
+    requirements,
+    missingInformation: [
+      "TESTDATA (mock): gewenste aantal pagina's is niet bekend.",
+      "TESTDATA (mock): designniveau, teksten en foto's zijn onbekend.",
+      "TESTDATA (mock): gewenste deadline en budget zijn niet bekend.",
+    ],
+    questions: [
+      "TESTDATA (mock): Hoeveel pagina's moet de website ongeveer krijgen?",
+      "TESTDATA (mock): Wanneer wilt u de website online hebben?",
+      "TESTDATA (mock): Heeft u al teksten en foto's, of moeten wij die verzorgen?",
+    ],
+    confidence: 0.55,
+  };
+
+  return JSON.stringify(output);
+}
+
 function buildMockSalesAnalysis(prompt: string): string {
   // Inbound-bericht uit de prompt halen (onder de Body:-marker, tot de lege regel)
   const match = prompt.match(/Body:\n([\s\S]*?)\n\n/);
@@ -101,7 +149,9 @@ export class MockAIProvider implements AIProvider {
             .replaceAll("\${INDUSTRY_TOKEN}", industryToken)
           : request.task === "sales_analysis"
             ? buildMockSalesAnalysis(request.prompt)
-            : `[MOCK AI] Antwoord op: ${request.prompt.slice(0, 80)}...`;
+            : request.task === "requirements_analysis"
+              ? buildMockRequirementsAnalysis(request.prompt)
+              : `[MOCK AI] Antwoord op: ${request.prompt.slice(0, 80)}...`;
 
     return {
       text,

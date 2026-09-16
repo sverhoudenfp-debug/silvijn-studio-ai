@@ -8,6 +8,8 @@
  * per agent te dupliceren.
  */
 
+import type { PricingConfiguration } from "@/lib/pricing/types";
+
 export interface AgencyConfiguration {
   companyName?: string;
   companyDescription?: string;
@@ -17,8 +19,8 @@ export interface AgencyConfiguration {
   geographicTargeting?: string;
   services?: string[];
   websitePackages?: string[];
-  priceIndicationRules?: string;
-  pricingBoundaries?: string;
+  /** Gestructureerde prijsconfiguratie (Fase 8) — LATER gevuld via de Master Configuration; nu leeg. */
+  pricingConfiguration?: PricingConfiguration | null;
   revisionRules?: string;
   paymentRules?: string;
   communicationTone?: string;
@@ -51,6 +53,39 @@ export const DEFAULT_OUTREACH_RULES: string[] = [
 export function getAgencyConfiguration(): AgencyConfiguration {
   // Master Configuration (latere fase) vult deze waarden centraal.
   return {};
+}
+
+/**
+ * De actieve prijsconfiguratie voor de PricingEngine. Nu LEEG (config.missing):
+ * zolang de Master Configuration niet is ingevuld, berekent de engine geen
+ * bedragen maar returned die CONFIGURATION_MISSING. Geen fallback-bedragen.
+ */
+export function getPricingConfiguration(): PricingConfiguration {
+  const config = getAgencyConfiguration();
+  return config.pricingConfiguration ?? emptyPricingConfiguration();
+}
+
+function emptyPricingConfiguration(): PricingConfiguration {
+  return {
+    currency: "EUR",
+    pricingVersion: "",
+    packages: {},
+    addOns: {},
+    extraPagePrice: null,
+    minimumPrice: null,
+    maximumPrice: null,
+    customProjectThreshold: null,
+    humanApprovalThreshold: null,
+    priceRangeDeviation: null,
+    vatRate: null,
+    pricingRules: [],
+    customProjectRules: [],
+    discountRules: [],
+    paymentRules: [],
+    revisionRules: [],
+    maintenanceRules: [],
+    hostingRules: [],
+  };
 }
 
 /**

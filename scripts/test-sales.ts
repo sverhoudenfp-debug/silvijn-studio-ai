@@ -9,7 +9,7 @@ import { getAIConfig } from "../lib/ai/config";
 import { classifyMockInbound } from "../lib/sales/mock-classification";
 import { checkSalesResponseQuality } from "../lib/sales/quality-check";
 import { SalesService, SalesNotFoundError } from "../lib/sales/service";
-import { getInboundMessageRepository, getSalesInteractionRepository } from "../lib/sales/repository";
+import { getInboundMessageRepository } from "../lib/sales/repository";
 import { getLeadRepository } from "../lib/repositories/lead-repository";
 import { MOCK_INBOUND_SCENARIOS } from "../lib/sales/mock-inbound";
 

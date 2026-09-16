@@ -8,7 +8,7 @@ import {
 import { estimateCost } from "./pricing";
 import { getAIProvider } from "./provider";
 import { withRetry } from "./retry";
-import { BusinessAnalysisSchema, OutreachMessageSchema, SalesAnalysisSchema, extractJSON } from "./schemas";
+import { BusinessAnalysisSchema, OutreachMessageSchema, RequirementsAnalysisSchema, SalesAnalysisSchema, extractJSON } from "./schemas";
 import {
   getAIActivityRepository,
   type AIActivityRepository,
@@ -30,6 +30,8 @@ import type {
   OutreachMessageInput,
   SalesAnalysis,
   SalesAnalysisInput,
+  RequirementsAnalysis,
+  RequirementsAnalysisInput,
 } from "./types";
 import {
   AIInvalidResponseError,
@@ -113,7 +115,9 @@ export class AIService {
           ? "outreach_generation"
           : call.agent === "sales"
             ? "sales_analysis"
-            : "generate_structured";
+            : call.agent === "pricing"
+              ? "requirements_analysis"
+              : "generate_structured";
     const model = getModelForTier(call.tier ?? agent.defaultTier);
     const started = Date.now();
 
@@ -334,6 +338,65 @@ export class AIService {
     }
   }
 
+  /**
+   * Pricing Agent (Fase 8) — interpreteert beschikbare context tot een
+   * requirements-voorstel + ontbrekende informatie + complexiteit.
+   * De AI berekent NOOIT een prijs: de deterministische PricingEngine
+   * doet de berekening (configuratiedriftig, geen AI-call nodig).
+   * Tier: standaard balanced; override via PRICING_AI_TIER (expliciet).
+   */
+  async generateRequirementsAnalysis(
+    input: RequirementsAnalysisInput,
+    leadId?: string | null
+  ): Promise<AIServiceResult<RequirementsAnalysis>> {
+    await this.activityRepository.log({
+      leadId: leadId ?? null,
+      type: "requirements_analysis",
+      status: "started",
+      message: `Requirements-analyse gestart voor ${input.businessName}`,
+    });
+
+    try {
+      const result = await this.generateStructured<RequirementsAnalysis>(
+        {
+          agent: "pricing",
+          tier: getPricingTier(),
+          leadId: leadId ?? null,
+          system: REQUIREMENTS_SYSTEM,
+          prompt: buildRequirementsPrompt(input),
+          maxTokens: 1500,
+          temperature: 0.3,
+        },
+        RequirementsAnalysisSchema
+      );
+
+      await this.activityRepository.log({
+        leadId: leadId ?? null,
+        type: "requirements_analysis",
+        status: "completed",
+        message: `Requirements-analyse voltooid voor ${input.businessName} (complexiteit: ${result.data.complexity ?? "onbekend"})`,
+        metadata: {
+          model: result.model,
+          mode: result.mode,
+          durationMs: result.durationMs,
+          cost: result.estimatedCost,
+          tokens: result.usage,
+        },
+      });
+
+      return result;
+    } catch (error) {
+      await this.activityRepository.log({
+        leadId: leadId ?? null,
+        type: "requirements_analysis",
+        status: "failed",
+        message: `Requirements-analyse mislukt voor ${input.businessName}`,
+        metadata: { reason: userFacingAIMessage(error) },
+      });
+      throw error;
+    }
+  }
+
   private guardSafetyLimit(): void {
     this.requestsThisRun += 1;
     if (this.requestsThisRun > this.config.maxRequestsPerRun) {
@@ -381,6 +444,65 @@ export class AIService {
       errorMessage: error instanceof Error ? error.message : userFacingAIMessage(error),
     });
   }
+}
+
+const REQUIREMENTS_SYSTEM = `Je bent de pricing-agent van een Nederlandse webagency. Je analyseert de beschikbare lead- en salescontext en stelt projectrequirements voor.
+
+Regels:
+- Gebruik uitsluitend de aangeleverde context; verzin geen feiten, wensen of functionaliteiten.
+- Zet velden op null zodra de informatie er niet is — NOOIT gokken of invullen.
+- Som in missingInformation precies op wat er ontbreekt voor een betrouwbaar prijsvoorstel.
+- Stel maximaal 3 concrete vervolgvragen.
+- Bepaal complexiteit: custom functionaliteit, integraties of webshops zijn "custom".
+- Je berekent NOOIT een prijs en noemt geen bedragen — de prijs komt uit de configuratie.
+- Output: uitsluitend geldig JSON conform het gevraagde schema.`;
+
+function getPricingTier(): AIModelTier {
+  const override = (process.env.PRICING_AI_TIER ?? "").trim().toLowerCase();
+  if (override === "fast" || override === "balanced" || override === "powerful") return override;
+  return AI_AGENTS.pricing.defaultTier;
+}
+
+function buildRequirementsPrompt(input: RequirementsAnalysisInput): string {
+  const config = getAgencyConfiguration();
+
+  const lines: string[] = [
+    "Stel projectrequirements voor op basis van de beschikbare context.",
+    "",
+    "LEADCONTEXT:",
+    `Bedrijf: ${input.businessName}`,
+    `Branche: ${input.industry}`,
+    `Stad: ${input.city}`,
+    ...(typeof input.leadScore === "number" ? [`Lead score: ${input.leadScore}`] : []),
+    ...(input.demoUrl ? [`Demo-website: ${input.demoUrl}`] : []),
+  ];
+
+  if (input.qualificationSummary) {
+    lines.push("", "LAATSTE KWALIFICATIE (samenvatting):", input.qualificationSummary);
+  }
+  if (input.inboundExcerpts?.length) {
+    lines.push("", "CITATEN UIT INKOMENDE BERICHTEN:", ...input.inboundExcerpts.map((excerpt) => `- "${excerpt}"`));
+  }
+  if (input.existingRequirements && Object.keys(input.existingRequirements).length > 0) {
+    lines.push("", "BESTAANDE REQUIREMENTS (respecteer deze tenzij context ze tegenspreekt):", JSON.stringify(input.existingRequirements));
+  }
+
+  lines.push(
+    "",
+    "REGELS:",
+    ...(config.qualificationRules?.length
+      ? config.qualificationRules.map((rule, i) => `${i + 1}. ${rule}`)
+      : [
+          "1. Vul alleen velden in die uit de context volgen; de rest null.",
+          "2. Gok nooit; onbekend = null + vermeld in missingInformation.",
+          "3. Noem geen bedragen of prijzen.",
+          "4. Nederlands, concreet, maximaal 3 vervolgvragen.",
+        ]),
+    "",
+    'Output: JSON met "projectType", "complexity", "requirements" (alle velden expliciet, null indien onbekend), "missingInformation", "questions", "confidence".'
+  );
+
+  return lines.join("\n");
 }
 
 const SALES_SYSTEM = `Je bent de sales-agent van een Nederlandse webagency. Je analyseert inkomende reacties van leads en bereidt een antwoord CONCEPT voor — nooit een definitieve toezegging, nooit automatisch verzenden.

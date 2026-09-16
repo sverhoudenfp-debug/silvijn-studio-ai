@@ -23,6 +23,7 @@ export type AITaskType =
   | "business_analysis"
   | "outreach_generation"
   | "sales_analysis"
+  | "requirements_analysis"
   | "lead_score"
   | "classify_lead"
   | "generate_structured";
@@ -191,6 +192,51 @@ export interface SalesAnalysis {
   questions: string[];
   escalationRequired: boolean;
   escalationReason: string | null;
+}
+
+/** Input voor de requirements-analyse — uitsluitend beschikbare context. */
+export interface RequirementsAnalysisInput {
+  businessName: string;
+  industry: string;
+  city: string;
+  leadScore?: number | null;
+  qualificationSummary?: string | null; // samenvatting laatste SalesInteraction
+  inboundExcerpts?: string[]; // korte citaten uit inkomende berichten
+  demoUrl?: string | null;
+  existingRequirements?: Record<string, unknown> | null;
+}
+
+/**
+ * AI-voorstel voor projectrequirements. De AI interpreteert informatie,
+ * identificeert ontbrekende informatie en schat complexiteit in —
+ * maar berekent NOOIT de prijs; dat doet de deterministische PricingEngine.
+ */
+export interface RequirementsAnalysis {
+  projectType: string | null;
+  complexity: "low" | "medium" | "high" | "custom" | null;
+  requirements: {
+    websiteType: string | null;
+    numberOfPages: number | null;
+    designLevel: string | null;
+    responsive: boolean | null;
+    cms: boolean | null;
+    ecommerce: boolean | null;
+    customFunctionality: string | null;
+    integrations: string[] | null;
+    seo: boolean | null;
+    copywriting: boolean | null;
+    photography: boolean | null;
+    hosting: boolean | null;
+    maintenance: boolean | null;
+    deadline: string | null;
+    existingWebsite: boolean | null;
+    existingBranding: boolean | null;
+    contentAvailable: boolean | null;
+    specialRequirements: string | null;
+  };
+  missingInformation: string[];
+  questions: string[];
+  confidence: number;
 }
 
 export interface AIJSONOutput<T> {

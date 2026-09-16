@@ -56,6 +56,34 @@ export const SalesAnalysisSchema = z.object({
   escalationReason: z.string().nullable(),
 });
 
+export const RequirementsAnalysisSchema = z.object({
+  projectType: z.string().nullable(),
+  complexity: z.enum(["low", "medium", "high", "custom"]).nullable(),
+  requirements: z.object({
+    websiteType: z.string().nullable(),
+    numberOfPages: z.number().int().positive().nullable(),
+    designLevel: z.string().nullable(),
+    responsive: z.boolean().nullable(),
+    cms: z.boolean().nullable(),
+    ecommerce: z.boolean().nullable(),
+    customFunctionality: z.string().nullable(),
+    integrations: z.array(z.string()).nullable(),
+    seo: z.boolean().nullable(),
+    copywriting: z.boolean().nullable(),
+    photography: z.boolean().nullable(),
+    hosting: z.boolean().nullable(),
+    maintenance: z.boolean().nullable(),
+    deadline: z.string().nullable(),
+    existingWebsite: z.boolean().nullable(),
+    existingBranding: z.boolean().nullable(),
+    contentAvailable: z.boolean().nullable(),
+    specialRequirements: z.string().nullable(),
+  }),
+  missingInformation: z.array(z.string()).max(10),
+  questions: z.array(z.string().min(5)).max(5),
+  confidence: z.number().min(0).max(1),
+});
+
 /** JSON extraheren uit een modelantwoord (tolereert code-fences en whitespace). */
 export function extractJSON(text: string): unknown {
   const stripped = text.replace(/```(?:json)?/g, "").trim();

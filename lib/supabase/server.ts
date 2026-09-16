@@ -1,4 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
+// Node.js 20 heeft geen native WebSocket — supabase-js vereist een expliciete
+// transport (ws) voor de realtime-client; zonder dit crasht createClient.
+// De @types/ws-signatuur wijkt licht af van de door realtime-js verwachte
+// constructor-signatuur en wordt daarom via een expliciete cast meegegeven.
+import ws from "ws";
+import type { WebSocketLikeConstructor } from "@supabase/realtime-js";
+
+const wsTransport = ws as unknown as WebSocketLikeConstructor;
 import { AIConfigurationError } from "@/lib/ai/errors";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -33,8 +41,6 @@ export function getSupabaseServerClient(): SupabaseClient {
     );
   }
 
-  cachedClient = createClient(url, secretKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  cachedClient = createClient(url, secretKey, { realtime: { transport: wsTransport } });
   return cachedClient;
 }

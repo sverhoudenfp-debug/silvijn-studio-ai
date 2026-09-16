@@ -54,7 +54,7 @@ const navItems = [
   { href: "/projects", label: "Projects", icon: "folder" },
   { href: "/generated-websites", label: "Websites", icon: "globe" },
   { href: "/analytics", label: "Analytics", icon: "chart" },
-  { href: "/automation", label: "Automation", icon: "zap" },
+  { href: "/automations", label: "Automations", icon: "zap" },
   { href: "/settings", label: "Settings", icon: "sliders" },
 ];
 

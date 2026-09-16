@@ -48,6 +48,10 @@ const testConfig: PricingConfiguration = {
 const emptyRequirements = { websiteType: null, numberOfPages: null };
 
 async function main() {
+  // TESTS draaien uitsluitend op mock-data (Fase-instructie): een eventueel
+  // aanwezige Supabase-configuratie wordt bewust genegeerd — géén live API-calls.
+  delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+  delete process.env.SUPABASE_SECRET_KEY;
   // ============ PRICING ENGINE (deterministisch, geen AI nodig) ============
   console.info("--- PricingEngine (pure functie — geen AI, geen provider geïnstantieerd) ---");
 

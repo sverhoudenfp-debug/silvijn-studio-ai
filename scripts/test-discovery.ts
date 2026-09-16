@@ -20,6 +20,10 @@ function check(name: string, condition: boolean, detail?: string) {
 }
 
 async function main() {
+  // TESTS draaien uitsluitend op mock-data (Fase-instructie): een eventueel
+  // aanwezige Supabase-configuratie wordt bewust genegeerd — géén live API-calls.
+  delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+  delete process.env.SUPABASE_SECRET_KEY;
   // 1) Mock provider retourneert kandidaten
   const provider = new MockDiscoveryProvider();
   const all = await provider.search({ country: "NL", limit: 50, source: "mock" });

@@ -8,7 +8,7 @@ import { getSupabaseServerClient, isSupabaseConfigured } from "@/lib/supabase/se
 export interface AIActivityInput {
   leadId?: string | null;
   type: string;
-  status: "started" | "completed" | "failed";
+  status: "started" | "completed" | "failed" | "blocked";
   message: string;
   metadata?: Record<string, unknown> | null;
 }

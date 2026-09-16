@@ -52,7 +52,19 @@ export const DEFAULT_OUTREACH_RULES: string[] = [
 
 export function getAgencyConfiguration(): AgencyConfiguration {
   // Master Configuration (latere fase) vult deze waarden centraal.
-  return {};
+  // TECHNISCHE OVERRIDE (Fase 11): zolang de Master Configuration er nog
+  // niet is, kan AGENCY_CONFIG_JSON als volledige configuratie dienen
+  // (bijv. voor lokale tests). Leeg/ongeldig → {} → alle velden UNKNOWN.
+  // Er worden nooit defaults of fallbacks verzonnen.
+  const raw = (process.env.AGENCY_CONFIG_JSON ?? "").trim();
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as AgencyConfiguration;
+    return typeof parsed === "object" && parsed !== null ? parsed : {};
+  } catch {
+    // Ongeldige JSON → bewust leeg (fail-safe), nooit gokken.
+    return {};
+  }
 }
 
 /**

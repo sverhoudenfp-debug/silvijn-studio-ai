@@ -11,10 +11,10 @@ import { runDeterministicChecks } from "../lib/qc/checks";
 import { computeOverallResult, computeScore } from "../lib/qc/rules";
 import { getQualityControlRepository } from "../lib/qc/repository";
 import { QualityControlService, getApproverName } from "../lib/qc/service";
-import type { QCCategoryCheck, QCIssue, QualityControl } from "../lib/qc/types";
+import type { QCCategoryCheck, QCIssue } from "../lib/qc/types";
 import { getGeneratedWebsiteRepository } from "../lib/websites/repository";
 import { WebsiteGenerationService } from "../lib/websites/service";
-import type { GeneratedWebsite, WebsiteSpecification } from "../lib/websites/types";
+import type { WebsiteSpecification } from "../lib/websites/types";
 
 let failures = 0;
 function check(name: string, condition: boolean, detail?: string) {
@@ -30,11 +30,11 @@ function categoryCheck(category: QCCategoryCheck["category"], result: QCCategory
   return { category, result, issues, notes: [] };
 }
 
-function findIssue(qc: QualityControl, rule: string): QCIssue | undefined {
-  return qc.issues.find((i) => i.rule === rule);
-}
-
 async function main() {
+  // TESTS draaien uitsluitend op mock-data (Fase-instructie): een eventueel
+  // aanwezige Supabase-configuratie wordt bewust genegeerd — géén live API-calls.
+  delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+  delete process.env.SUPABASE_SECRET_KEY;
   const qcRepo = getQualityControlRepository();
   const websiteRepo = getGeneratedWebsiteRepository();
   const leadRepo = getLeadRepository();

@@ -7,6 +7,7 @@ import {
 } from "./errors";
 import { estimateCost } from "./pricing";
 import { getAIProvider } from "./provider";
+import type { AIProvider } from "./types";
 import { withRetry } from "./retry";
 import {
   BusinessAnalysisSchema,
@@ -72,9 +73,12 @@ export interface AIServiceCall {
 }
 
 export class AIService {
-  private readonly provider = getAIProvider();
-  private readonly runRepository: AIRunRepository = getAIRunRepository();
-  private readonly activityRepository: AIActivityRepository = getAIActivityRepository();
+  // LAZY initialisatie: provider- en repository-keuze (mock vs. live) wordt
+  // pas bij de eerste call gemaakt tegen de DAN actuele configuratie — nooit
+  // ingebakken op constructie-/import-tijd (zelfde principe als de repositories).
+  private get provider(): AIProvider { return getAIProvider(); }
+  private get runRepository(): AIRunRepository { return getAIRunRepository(); }
+  private get activityRepository(): AIActivityRepository { return getAIActivityRepository(); }
   private requestsThisRun = 0;
   private readonly config = getAIConfig();
 

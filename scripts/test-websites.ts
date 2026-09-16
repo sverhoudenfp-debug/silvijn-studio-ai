@@ -56,6 +56,10 @@ function baseSpecification(overrides: Partial<WebsiteSpecification> = {}): Websi
 }
 
 async function main() {
+  // TESTS draaien uitsluitend op mock-data (Fase-instructie): een eventueel
+  // aanwezige Supabase-configuratie wordt bewust genegeerd — géén live API-calls.
+  delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+  delete process.env.SUPABASE_SECRET_KEY;
   const safetyContext = { allowedPhone: "+31612345678", allowedEmail: "info@testdakwerken.nl", allowedRating: null, allowedReviewCount: null, leadNotes: [] };
   const buildService = new WebsiteBuildService();
   const generator = new NextJsWebsiteGenerator();

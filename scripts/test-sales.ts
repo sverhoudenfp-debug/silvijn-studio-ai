@@ -21,6 +21,10 @@ function check(name: string, condition: boolean, detail?: string) {
 }
 
 async function main() {
+  // TESTS draaien uitsluitend op mock-data (Fase-instructie): een eventueel
+  // aanwezige Supabase-configuratie wordt bewust genegeerd — géén live API-calls.
+  delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+  delete process.env.SUPABASE_SECRET_KEY;
   console.info(`AI-mode: ${getAIConfig().mode} — sales-agent draait zonder Anthropic in mock mode`);
 
   const service = new SalesService();

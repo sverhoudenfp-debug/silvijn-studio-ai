@@ -17,5 +17,5 @@ export default async function ProjectsPage() {
   const leadNames: Record<string, string> = {};
   for (const lead of leads) leadNames[lead.id] = lead.businessName;
 
-  return <ProjectsView projects={projects} leadNames={leadNames} />;
+  return <ProjectsView projects={projects} leadNames={leadNames} leadStatuses={Object.fromEntries(leads.map(l=>[l.id,l.leadStatus]))} />;
 }

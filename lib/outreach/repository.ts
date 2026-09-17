@@ -8,6 +8,15 @@ import type { OutreachDraft, OutreachDraftStatus } from "./types";
  */
 
 export interface OutreachDraftCreateInput {
+  contactId?: OutreachDraft["contactId"];
+  conversationId?: OutreachDraft["conversationId"];
+  projectId?: OutreachDraft["projectId"];
+  priceApprovalId?: OutreachDraft["priceApprovalId"];
+  purpose?: OutreachDraft["purpose"];
+  sentAt?: OutreachDraft["sentAt"];
+  providerMessageId?: OutreachDraft["providerMessageId"];
+  providerAccountKey?: OutreachDraft["providerAccountKey"];
+
   leadId: string;
   channel: OutreachDraft["channel"];
   status: OutreachDraftStatus;
@@ -32,6 +41,14 @@ export interface OutreachRepository {
 
 function buildDraft(input: OutreachDraftCreateInput, id: string, now: string): OutreachDraft {
   return {
+    contactId: input.contactId,
+    conversationId: input.conversationId,
+    projectId: input.projectId,
+    priceApprovalId: input.priceApprovalId,
+    purpose: input.purpose ?? "initial",
+    sentAt: input.sentAt,
+    providerMessageId: input.providerMessageId,
+    providerAccountKey: input.providerAccountKey,
     id,
     leadId: input.leadId,
     channel: input.channel,
@@ -82,6 +99,15 @@ class MemoryOutreachRepository implements OutreachRepository {
 // ---------- Supabase ----------
 
 interface OutreachRow {
+  contact_id: string | null;
+  conversation_id: string | null;
+  project_id: string | null;
+  price_approval_id: string | null;
+  purpose: "initial" | "followup" | "demo_offer" | "demo_link" | "price_offer" | "sales_reply";
+  sent_at: string | null;
+  provider_message_id: string | null;
+  provider_account_key: string | null;
+
   id: string;
   lead_id: string;
   channel: OutreachDraft["channel"];
@@ -99,6 +125,14 @@ interface OutreachRow {
 
 function rowToDraft(row: OutreachRow): OutreachDraft {
   return {
+    contactId: row.contact_id,
+    conversationId: row.conversation_id,
+    projectId: row.project_id,
+    priceApprovalId: row.price_approval_id,
+    purpose: row.purpose,
+    sentAt: row.sent_at,
+    providerMessageId: row.provider_message_id,
+    providerAccountKey: row.provider_account_key,
     id: row.id,
     leadId: row.lead_id,
     channel: row.channel,
@@ -123,6 +157,14 @@ class SupabaseOutreachRepository implements OutreachRepository {
     const { data, error } = await getSupabaseServerClient()
       .from("outreach_drafts")
       .insert({
+        contact_id: draft.contactId,
+        conversation_id: draft.conversationId,
+        project_id: draft.projectId,
+        price_approval_id: draft.priceApprovalId,
+        purpose: draft.purpose,
+        sent_at: draft.sentAt,
+        provider_message_id: draft.providerMessageId,
+        provider_account_key: draft.providerAccountKey,
         lead_id: draft.leadId,
         channel: draft.channel,
         status: draft.status,

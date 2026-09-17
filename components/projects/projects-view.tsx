@@ -1,4 +1,6 @@
 import Link from "next/link";
+import type { LeadStatus } from "@/lib/types";
+import { leadLifecycleMeta } from "@/lib/leads/lifecycle";
 import { Badge } from "@/components/ui/badge";
 import type { Project } from "@/lib/projects/types";
 
@@ -32,9 +34,11 @@ const priceStatusMeta: Record<string, string> = {
 export function ProjectsView({
   projects,
   leadNames,
+  leadStatuses,
 }: {
   projects: Project[];
   leadNames: Record<string, string>;
+  leadStatuses: Record<string, LeadStatus>;
 }) {
   return (
     <div className="space-y-6">
@@ -78,6 +82,7 @@ export function ProjectsView({
                     </Link>
                   </td>
                   <td className="px-3 py-2.5">
+                    {leadStatuses[project.leadId]&&<div className="mb-1"><Badge variant={leadLifecycleMeta[leadStatuses[project.leadId]].variant}>{leadLifecycleMeta[leadStatuses[project.leadId]].label}</Badge></div>}
                     <Badge variant={projectStatusMeta[project.status]?.variant ?? "neutral"}>
                       {projectStatusMeta[project.status]?.label ?? project.status}
                     </Badge>

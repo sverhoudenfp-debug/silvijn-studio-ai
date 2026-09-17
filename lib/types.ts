@@ -1,13 +1,6 @@
 export type BadgeVariant = "neutral" | "success" | "warning" | "danger" | "info";
 
-export type LeadStatus =
-  | "new"
-  | "analyzing"
-  | "qualified"
-  | "contacted"
-  | "interested"
-  | "won"
-  | "lost";
+export type LeadStatus = import("./leads/lifecycle").LeadLifecycleStatus;
 
 export type WebsiteStatus = "no_website" | "has_website" | "website_poor" | "unknown";
 

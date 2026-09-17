@@ -1,0 +1,187 @@
+{
+  "new": [
+    "analyzing",
+    "contacted",
+    "qualified",
+    "interested",
+    "demo_offered",
+    "website_interested",
+    "not_interested",
+    "opted_out",
+    "lost"
+  ],
+  "analyzing": [
+    "qualified",
+    "contacted",
+    "interested",
+    "demo_offered",
+    "website_interested",
+    "not_interested",
+    "opted_out",
+    "lost"
+  ],
+  "qualified": [
+    "contacted",
+    "demo_offered",
+    "demo_interested",
+    "website_interested",
+    "qualifying",
+    "not_interested",
+    "opted_out",
+    "lost"
+  ],
+  "contacted": [
+    "interested",
+    "demo_offered",
+    "demo_interested",
+    "website_interested",
+    "qualifying",
+    "not_interested",
+    "opted_out",
+    "lost"
+  ],
+  "interested": [
+    "qualified",
+    "demo_interested",
+    "website_interested",
+    "qualifying",
+    "not_interested",
+    "opted_out",
+    "lost"
+  ],
+  "demo_offered": [
+    "demo_interested",
+    "website_interested",
+    "not_interested",
+    "opted_out",
+    "lost"
+  ],
+  "demo_interested": [
+    "demo_sent",
+    "website_interested",
+    "not_interested",
+    "opted_out",
+    "lost"
+  ],
+  "demo_sent": [
+    "website_interested",
+    "qualifying",
+    "not_interested",
+    "opted_out",
+    "lost"
+  ],
+  "website_interested": [
+    "qualifying",
+    "not_interested",
+    "opted_out",
+    "lost"
+  ],
+  "qualifying": [
+    "price_ready",
+    "not_interested",
+    "opted_out",
+    "lost"
+  ],
+  "price_ready": [
+    "silvijn_approval",
+    "qualifying",
+    "not_interested",
+    "opted_out",
+    "lost"
+  ],
+  "silvijn_approval": [
+    "price_presented",
+    "qualifying",
+    "not_interested",
+    "opted_out",
+    "lost"
+  ],
+  "price_presented": [
+    "price_accepted",
+    "qualifying",
+    "not_interested",
+    "opted_out",
+    "lost"
+  ],
+  "price_accepted": [
+    "payment_pending",
+    "not_interested",
+    "opted_out",
+    "lost"
+  ],
+  "payment_pending": [
+    "deposit_paid",
+    "paid",
+    "in_progress",
+    "not_interested",
+    "opted_out",
+    "lost"
+  ],
+  "deposit_paid": [
+    "in_progress",
+    "paid_in_full",
+    "not_interested",
+    "opted_out",
+    "lost"
+  ],
+  "paid": [
+    "in_progress",
+    "not_interested",
+    "opted_out",
+    "lost"
+  ],
+  "in_progress": [
+    "ready_for_silvijn",
+    "final_payment_pending",
+    "paid_in_full",
+    "not_interested",
+    "opted_out",
+    "lost"
+  ],
+  "ready_for_silvijn": [
+    "in_progress",
+    "approved",
+    "final_payment_pending",
+    "paid_in_full",
+    "not_interested",
+    "opted_out",
+    "lost"
+  ],
+  "final_payment_pending": [
+    "paid_in_full",
+    "not_interested",
+    "opted_out",
+    "lost"
+  ],
+  "paid_in_full": [
+    "in_progress",
+    "ready_for_silvijn",
+    "approved",
+    "not_interested",
+    "opted_out",
+    "lost"
+  ],
+  "approved": [
+    "final_payment_pending",
+    "paid_in_full",
+    "delivered",
+    "not_interested",
+    "opted_out",
+    "lost"
+  ],
+  "delivered": [
+    "opted_out"
+  ],
+  "won": [
+    "opted_out"
+  ],
+  "not_interested": [
+    "analyzing",
+    "opted_out"
+  ],
+  "opted_out": [],
+  "lost": [
+    "analyzing",
+    "opted_out"
+  ]
+}

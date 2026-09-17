@@ -1,5 +1,6 @@
 
 import Link from "next/link";
+import { LifecycleControl } from "@/components/leads/lifecycle-control";
 import { requireStudioOwner } from "@/lib/auth/server";
 import { notFound } from "next/navigation";
 import { ProjectDetail } from "@/components/projects/project-detail";
@@ -41,6 +42,7 @@ export default async function ProjectDetailPage(props: PageProps<"/projects/[id]
   return (
     <div className="space-y-4">
     <Link className="inline-block rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-200" href={`/projects/${id}/finance`}>Prijsgoedkeuring en betalingen</Link>
+    {lead && <div className="rounded-xl border border-zinc-800 p-5"><LifecycleControl key={lead.leadStatus} leadId={lead.id} status={lead.leadStatus} projectId={project.id}/></div>}
     <ProjectDetail
       project={project}
       lead={

@@ -1,5 +1,9 @@
 "use client";
 
+import Link from "next/link";
+import { listOutreachDrafts } from "@/app/actions/outreach";
+import type { OutreachDraft } from "@/lib/outreach/types";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, useTransition } from "react";
 import {
   analyzeInboundMessageAction,
@@ -50,6 +54,12 @@ const inputClass =
   "w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none";
 
 export function SalesSection({ leadId, leadBusinessName }: { leadId: string; leadBusinessName: string }) {
+  const router=useRouter();
+  const [confirmed,setConfirmed]=useState(false);
+  const [receivedAt,setReceivedAt]=useState("");
+  const [outreachOptions,setOutreachOptions]=useState<OutreachDraft[]>([]);
+  const [outreachId,setOutreachId]=useState("");
+  const [requestId,setRequestId]=useState(()=>crypto.randomUUID());
   const [inbound, setInbound] = useState<InboundMessage[]>([]);
   const [interactions, setInteractions] = useState<SalesInteraction[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -69,9 +79,10 @@ export function SalesSection({ leadId, leadBusinessName }: { leadId: string; lea
 
   useEffect(() => {
     let active = true;
-    Promise.all([listInboundMessagesAction(leadId), listSalesInteractionsAction(leadId)])
-      .then(([inboundList, interactionList]) => {
+    Promise.all([listInboundMessagesAction(leadId), listSalesInteractionsAction(leadId), listOutreachDrafts(leadId)])
+      .then(([inboundList, interactionList, outreach]) => {
         if (active) {
+          setOutreachOptions(outreach.filter(o=>o.status==="sent"));
           setInbound(inboundList);
           setInteractions(interactionList);
           setLoaded(true);
@@ -89,6 +100,7 @@ export function SalesSection({ leadId, leadBusinessName }: { leadId: string; lea
   }, [leadId]);
 
   function addInbound() {
+    if (!confirmed || !receivedAt || !form.sender.trim()) { setError("Bevestig een werkelijk ontvangen reactie, afzender en ontvangsttijd."); return; }
     if (!form.body.trim()) {
       setError("Berichttekst ontbreekt");
       return;
@@ -96,7 +108,8 @@ export function SalesSection({ leadId, leadBusinessName }: { leadId: string; lea
     setError(null);
     startTransition(async () => {
       try {
-        await createInboundMessageAction({ leadId, ...form });
+        await createInboundMessageAction({ leadId, ...form, confirmedReply:true, receivedAt:new Date(receivedAt).toISOString(), requestId, outreachId:outreachId||null });
+        setRequestId(crypto.randomUUID()); setConfirmed(false); setReceivedAt(""); setOutreachId(""); router.refresh();
         setForm({ sender: "", subject: "", body: "" });
         await refresh();
       } catch (e) {
@@ -141,13 +154,13 @@ export function SalesSection({ leadId, leadBusinessName }: { leadId: string; lea
         {/* Inkomend bericht toevoegen (mock/dev: handmatig; echte inbox volgt later) */}
         <div className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-            Inkomende reactie registreren <span className="normal-case text-zinc-500">(mock/dev — echte e-mailinbox volgt in een latere fase)</span>
+            Inkomende reactie registreren <span className="normal-case text-zinc-500">(handmatig vastgelegde echte reactie; Gmail is niet gekoppeld)</span>
           </p>
           <div className="grid gap-2 sm:grid-cols-2">
             <input
               value={form.sender}
               onChange={(e) => setForm((f) => ({ ...f, sender: e.target.value }))}
-              placeholder="Afzender (bijv. Jeroen van Jansen Dakwerken)"
+              aria-label="E-mailadres afzender" type="email" placeholder="E-mailadres van de afzender"
               className={inputClass}
             />
             <input
@@ -164,6 +177,9 @@ export function SalesSection({ leadId, leadBusinessName }: { leadId: string; lea
             rows={3}
             className={inputClass}
           />
+          <label className="block text-xs text-zinc-300">Werkelijke ontvangsttijd (lokale tijd)<input type="datetime-local" className={inputClass} value={receivedAt} onChange={e=>setReceivedAt(e.target.value)} required/></label>
+          <label className="block text-xs text-zinc-300">Beantwoord outreachbericht (optioneel)<select className={inputClass} value={outreachId} onChange={e=>setOutreachId(e.target.value)}><option value="">Niet gekoppeld / zelfstandig ontvangen</option>{outreachOptions.map(o=><option key={o.id} value={o.id}>{o.subject||o.purpose||"Outreach"} ({new Date(o.sentAt??o.createdAt).toLocaleDateString("nl-NL")})</option>)}</select></label>
+          <label className="flex items-start gap-2 text-xs text-zinc-300"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>Ik leg een daadwerkelijk ontvangen reactie vast, geen voorbeeld of testbericht.</label>
           <button
             type="button"
             onClick={addInbound}
@@ -205,7 +221,7 @@ export function SalesSection({ leadId, leadBusinessName }: { leadId: string; lea
                           <button
                             type="button"
                             onClick={() => analyze(message.id)}
-                            disabled={pending}
+                            disabled={pending || !message.replyConfirmed}
                             className="h-9 rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-zinc-50 transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 focus-visible:ring-indigo-500"
                           >
                             Analyze Response
@@ -214,6 +230,7 @@ export function SalesSection({ leadId, leadBusinessName }: { leadId: string; lea
                       </div>
                     </div>
                     <p className="mt-2 whitespace-pre-line text-sm text-zinc-300">{message.body}</p>
+                    {message.conversationId?<Link className="mt-2 block text-xs text-indigo-300" href={`/conversations?id=${message.conversationId}`}>Volledig gesprek bekijken</Link>:<p className="mt-2 text-xs text-amber-300">Onbevestigd oud bericht. Geen actief gesprek en geen bewijs voor salesstatus.</p>}
                   </div>
                 );
               })}

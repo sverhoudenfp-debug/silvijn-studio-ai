@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { LifecycleControl } from "./lifecycle-control";
 import { useState } from "react";
 import { OutreachSection } from "@/components/leads/outreach-section";
 import { SalesSection } from "@/components/sales/sales-section";
@@ -17,11 +18,8 @@ import {
   outreachStatusMeta,
   websiteStatusMeta,
 } from "@/lib/mock-data";
-import type { DemoStatus, DemoWebsite, Lead, LeadStatus, OutreachStatus } from "@/lib/types";
+import type { DemoWebsite, Lead } from "@/lib/types";
 import { cn, scoreCategory, scoreVariant, slugify } from "@/lib/utils";
-
-const selectClass =
-  "h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 text-xs text-zinc-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none";
 
 const inputClass =
   "h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none";
@@ -56,21 +54,6 @@ export function LeadDetail({
       ...prev,
       { time: new Date().toISOString().slice(0, 10) + " " + new Date().toTimeString().slice(0, 5), label },
     ]);
-  }
-
-  function changeLeadStatus(value: LeadStatus) {
-    setCurrent((prev) => ({ ...prev, leadStatus: value }));
-    addEvent(`Lead status changed to ${leadStatusMeta[value].label}`);
-  }
-
-  function changeOutreachStatus(value: OutreachStatus) {
-    setCurrent((prev) => ({ ...prev, outreachStatus: value }));
-    addEvent(`Outreach status changed to ${outreachStatusMeta[value].label}`);
-  }
-
-  function changeDemoStatus(value: DemoStatus) {
-    setCurrent((prev) => ({ ...prev, demoStatus: value }));
-    addEvent(`Demo status changed to ${demoStatusMeta[value].label}`);
   }
 
   function addNote() {
@@ -110,8 +93,8 @@ export function LeadDetail({
             <Badge variant={scoreVariant(score)}>
               {score} · {scoreCategory(score)}
             </Badge>
-            <Badge variant={leadStatusMeta[current.leadStatus].variant}>
-              {leadStatusMeta[current.leadStatus].label}
+            <Badge variant={leadStatusMeta[lead.leadStatus].variant}>
+              {leadStatusMeta[lead.leadStatus].label}
             </Badge>
           </div>
           <p className="mt-1 text-sm text-zinc-400">
@@ -296,7 +279,7 @@ export function LeadDetail({
           <ProjectSection
             leadId={current.id}
             leadBusinessName={current.businessName}
-            leadStatus={current.leadStatus}
+            leadStatus={lead.leadStatus}
             project={project}
           />
         </div>
@@ -402,57 +385,9 @@ export function LeadDetail({
           </Card>
 
           <Card>
-            <CardHeader
-              title="Status"
-              subtitle="Client-side — wijzigingen zijn tijdelijk (mock)"
-            />
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="status-lead" className="mb-1.5 block text-xs text-zinc-400">
-                  Lead status
-                </label>
-                <select
-                  id="status-lead"
-                  value={current.leadStatus}
-                  onChange={(event) => changeLeadStatus(event.target.value as LeadStatus)}
-                  className={selectClass}
-                >
-                  {(Object.keys(leadStatusMeta) as LeadStatus[]).map((key) => (
-                    <option key={key} value={key}>{leadStatusMeta[key].label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="status-outreach" className="mb-1.5 block text-xs text-zinc-400">
-                  Outreach status
-                </label>
-                <select
-                  id="status-outreach"
-                  value={current.outreachStatus}
-                  onChange={(event) => changeOutreachStatus(event.target.value as OutreachStatus)}
-                  className={selectClass}
-                >
-                  {(Object.keys(outreachStatusMeta) as OutreachStatus[]).map((key) => (
-                    <option key={key} value={key}>{outreachStatusMeta[key].label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="status-demo" className="mb-1.5 block text-xs text-zinc-400">
-                  Demo status
-                </label>
-                <select
-                  id="status-demo"
-                  value={current.demoStatus}
-                  onChange={(event) => changeDemoStatus(event.target.value as DemoStatus)}
-                  className={selectClass}
-                >
-                  {(Object.keys(demoStatusMeta) as DemoStatus[]).map((key) => (
-                    <option key={key} value={key}>{demoStatusMeta[key].label}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
+            <CardHeader title="Status" subtitle="Opgeslagen in Supabase. Servervalidatie verplicht." />
+            <LifecycleControl key={lead.leadStatus} leadId={lead.id} status={lead.leadStatus} projectId={project?.id}/>
+            <div className="mt-4 flex flex-wrap gap-2"><Badge variant={outreachStatusMeta[lead.outreachStatus].variant}>{outreachStatusMeta[lead.outreachStatus].label}</Badge><Badge variant={demoStatusMeta[lead.demoStatus].variant}>{demoStatusMeta[lead.demoStatus].label}</Badge></div>
           </Card>
         </div>
       </div>

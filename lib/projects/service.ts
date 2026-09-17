@@ -1,3 +1,5 @@
+import { canCreateProjectForLead } from "@/lib/leads/lifecycle";
+import { startProjectProduction } from "@/lib/leads/service";
 import { humanRpc } from "@/lib/auth/server";
 import { getAIActivityRepository } from "@/lib/repositories/ai-activity-repository";
 import { getLeadRepository } from "@/lib/repositories/lead-repository";
@@ -17,7 +19,7 @@ import { type Project, type ProjectRequirements, type ProjectStatus } from "./ty
  * menselijke goedkeuring.
  *
  * Garanties:
- * - De AI start nooit een project en zet nooit approved/in_progress/completed.
+ * - De AI mag productie starten na bevestigde betaling en complete requirements; approved/completed blijven menselijke besluiten.
  * - calculatePrice() vereist GEEN AI-call — puur de PricingEngine + configuratie.
  * - Ontbreekt de pricing configuration → CONFIGURATION_MISSING, geen bedrag.
  * - "Send to Silvijn" is intern escaleren; er bestaat geen klantcommunicatie.
@@ -49,7 +51,6 @@ export class ProjectValidationError extends Error {
   }
 }
 
-/** Geldige statusovergangen (menselijke acties; AI komt hier nooit). */
 /** Deterministische mapping: laatste kwalificatie → initiële requirements. Geen gokken. */
 function requirementsFromQualification(project: { needsEcommerce: boolean; projectType: string | null; timeline: string | null; needsWebsite: boolean }): ProjectRequirements {
   return {
@@ -68,8 +69,7 @@ export class ProjectService {
     const lead = await getLeadRepository().get(leadId);
     if (!lead) throw new ProjectValidationError("Lead niet gevonden");
 
-    const allowedStatuses = ["qualified", "interested", "contacted"];
-    if (!allowedStatuses.includes(lead.leadStatus)) {
+    if (!canCreateProjectForLead(lead.leadStatus)) {
       throw new ProjectValidationError(
         `Project aanmaken is alleen mogelijk bij een gekwalificeerde lead (huidige status: ${lead.leadStatus})`
       );
@@ -287,9 +287,10 @@ export class ProjectService {
     return this.get(id);
   }
 
-  /** Statusovergang — alleen via expliciete menselijke actie; AI komt hier nooit. */
+  /** Production can start through its payment/requirements gate; other manual transitions retain their RPC. */
   async updateStatus(id: string, status: ProjectStatus): Promise<Project> {
-    await humanRpc("set_studio_project_status", { p_project: id, p_status: status });
+    if (status === "in_progress") await startProjectProduction(id);
+    else await humanRpc("set_studio_project_status", { p_project: id, p_status: status });
     return this.get(id);
   }
 }

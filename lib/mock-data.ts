@@ -8,7 +8,6 @@ import type {
   Lead,
   LeadAiAnalysis,
   LeadSourceType,
-  LeadStatus,
   OutreachStatus,
   PipelineStage,
   WebsiteStatus,
@@ -64,15 +63,7 @@ export const leads: Lead[] = rawLeads.map((lead) => ({
   demoStatus: demoStatusForLead(lead.id),
 }));
 
-export const leadStatusMeta: Record<LeadStatus, { label: string; variant: BadgeVariant }> = {
-  new: { label: "New", variant: "neutral" },
-  analyzing: { label: "Analyzing", variant: "info" },
-  qualified: { label: "Qualified", variant: "info" },
-  contacted: { label: "Contacted", variant: "info" },
-  interested: { label: "Interested", variant: "success" },
-  won: { label: "Won", variant: "success" },
-  lost: { label: "Lost", variant: "danger" },
-};
+export { leadLifecycleMeta as leadStatusMeta } from "./leads/lifecycle";
 
 export const websiteStatusMeta: Record<WebsiteStatus, { label: string; variant: BadgeVariant }> = {
   no_website: { label: "No website", variant: "warning" },

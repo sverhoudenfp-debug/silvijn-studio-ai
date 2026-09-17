@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { canCreateProjectForLead } from "@/lib/leads/lifecycle";
 import { useState, useTransition } from "react";
 import { createProjectAction } from "@/app/actions/projects";
 import { Badge } from "@/components/ui/badge";
@@ -49,7 +50,7 @@ export function ProjectSection({
   const [pending, startTransition] = useTransition();
 
   const canCreate =
-    !project && ["qualified", "interested", "contacted"].includes(leadStatus);
+    !project && canCreateProjectForLead(leadStatus);
 
   function createProject() {
     setError(null);
@@ -112,7 +113,7 @@ export function ProjectSection({
         </div>
       ) : (
         <p className="text-sm text-zinc-500">
-          Nog geen project. Project aanmaken is mogelijk zodra de lead de status qualified, interested of contacted heeft
+          Nog geen project. Project aanmaken is mogelijk zodra de lead de status website_interested of qualifying heeft (legacy qualified/interested/contacted blijven ondersteund)
           (huidig: {leadStatus}).
         </p>
       )}

@@ -15,5 +15,5 @@ export default async function LeadDetailPage(props: PageProps<"/leads/[id]">) {
     getDemoRepository().findByLeadId(lead.id),
     getProjectRepository().getByLeadId(lead.id),
   ]);
-  return <LeadDetail lead={lead} demo={demo} project={project} />;
+  return <LeadDetail key={lead.updatedAt} lead={lead} demo={demo} project={project} />;
 }

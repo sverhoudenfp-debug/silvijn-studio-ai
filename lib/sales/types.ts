@@ -9,6 +9,12 @@ import type { ObjectionType, SalesIntent } from "@/lib/ai/types";
 export type InboundChannel = "email" | "linkedin" | "phone" | "other";
 
 export interface InboundMessage {
+  contactId?: string | null;
+  conversationId?: string | null;
+  inReplyToOutreachId?: string | null;
+  replyConfirmed?: boolean;
+  providerMessageId?: string | null;
+  providerAccountKey?: string | null;
   id: string;
   leadId: string;
   channel: InboundChannel;

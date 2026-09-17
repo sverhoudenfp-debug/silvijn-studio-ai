@@ -1,3 +1,4 @@
+import { isOutreachSuppressed } from "@/lib/leads/lifecycle";
 import { getDemoRepository } from "@/lib/repositories/demo-repository";
 import { getLeadRepository } from "@/lib/repositories/lead-repository";
 import { scoreLead } from "@/lib/agents/lead-scoring";
@@ -59,6 +60,7 @@ export class OutreachService {
     const leadRepository = getLeadRepository();
     const lead = await leadRepository.get(leadId);
     if (!lead) throw new OutreachNotFoundError("Lead niet gevonden");
+    if (isOutreachSuppressed(lead.leadStatus,lead.outreachStatus)) throw new Error("OUTREACH_SUPPRESSED");
 
     // 2) Demo-data indien beschikbaar (alleen een bestaande READY demo mag genoemd worden)
     const demoRepository = getDemoRepository();

@@ -1,3 +1,4 @@
+import { leadLifecycleStates } from "@/lib/leads/lifecycle";
 /**
  * Fase 12 §P — productie-analytics.
  * ALLE cijfers komen uit de echte repositories (live Supabase indien
@@ -117,7 +118,7 @@ function countBy<T>(items: T[], key: (item: T) => string): Record<string, number
 }
 
 function zeroLeadStatuses(): Record<LeadStatus, number> {
-  return { new: 0, analyzing: 0, qualified: 0, contacted: 0, interested: 0, won: 0, lost: 0 };
+  return Object.fromEntries(leadLifecycleStates.map(status => [status, 0])) as Record<LeadStatus, number>;
 }
 
 export async function getAgencyAnalytics(): Promise<AgencyAnalytics> {

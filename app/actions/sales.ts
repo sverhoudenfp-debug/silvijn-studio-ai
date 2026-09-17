@@ -4,6 +4,8 @@ import { requireStudioOwner } from "@/lib/auth/server";
 
 
 import { revalidatePath } from "next/cache";
+import { recordConfirmedReply } from "@/lib/sales/conversations";
+import { getInboundMessageRepository } from "@/lib/sales/repository";
 import { SalesService } from "@/lib/sales/service";
 import type { InboundMessage, SalesInteraction } from "@/lib/sales/types";
 
@@ -24,22 +26,14 @@ export async function listSalesInteractionsAction(leadId: string): Promise<Sales
 }
 
 export async function createInboundMessageAction(input: {
-  leadId: string;
-  sender: string;
-  subject: string;
-  body: string;
+ leadId:string; sender:string; subject:string; body:string; receivedAt:string; requestId:string; confirmedReply:true; outreachId?:string|null; threadKey?:string;
 }): Promise<InboundMessage> {
-  await requireStudioOwner();
-  const message = await new SalesService().createInboundMessage({
-    leadId: input.leadId,
-    channel: "email",
-    sender: input.sender,
-    subject: input.subject,
-    body: input.body,
-    source: "manual",
-  });
-  revalidatePath("/sales");
-  return message;
+ await requireStudioOwner();
+ const id=await recordConfirmedReply(input);
+ const message=await getInboundMessageRepository().getById(id);
+ if(!message) throw new Error("Recorded reply could not be loaded");
+ revalidatePath("/sales"); revalidatePath("/conversations"); revalidatePath(`/leads/${input.leadId}`);
+ return message;
 }
 
 export async function analyzeInboundMessageAction(leadId: string, inboundMessageId: string) {

@@ -62,6 +62,7 @@ function computeLeadStatusUpdate(
 
   if (analysis.intent === "opt_out") {
     update.outreachStatus = "opted_out";
+    update.leadStatus = "opted_out";
     return update;
   }
 
@@ -98,9 +99,10 @@ export class SalesService {
     const lead = await getLeadRepository().get(input.leadId);
     if (!lead) throw new SalesNotFoundError("Lead niet gevonden");
     if (!input.body?.trim()) throw new Error("Berichttekst ontbreekt");
+    if (!input.sender?.trim()) throw new Error("Afzender ontbreekt");
     return getInboundMessageRepository().create({
       ...input,
-      sender: input.sender?.trim() || "Onbekend (TESTDATA)",
+      sender: input.sender.trim(),
       subject: input.subject?.trim() || "",
       channel: input.channel ?? "email",
       source: input.source || "manual",
@@ -123,6 +125,8 @@ export class SalesService {
     const inboundRepository = getInboundMessageRepository();
     const message = await inboundRepository.getById(inboundMessageId);
     if (!message || message.leadId !== leadId) throw new SalesNotFoundError("Inkomend bericht niet gevonden voor deze lead");
+
+    if (!message.replyConfirmed && inboundRepository.source === "supabase") throw new Error("CONFIRMED_PROSPECT_REPLY_REQUIRED");
 
     // Context: eerdere berichten, analyses, outreach-concepten, demo
     const [previousInbound, previousInteractions, outreachDrafts, demo] = await Promise.all([

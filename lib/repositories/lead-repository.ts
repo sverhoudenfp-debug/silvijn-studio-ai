@@ -235,7 +235,7 @@ export class SupabaseLeadRepository implements LeadRepository {
     const { data, error } = await getSupabaseServerClient()
       .from("leads")
       .update({
-        ...(update.leadStatus ? { lead_status: update.leadStatus } : {}),
+        ...(update.leadStatus ? { lead_status: update.leadStatus, status_reason: "Server-side lead service transition" } : {}),
         ...(update.outreachStatus ? { outreach_status: update.outreachStatus } : {}),
       })
       .eq("id", id)

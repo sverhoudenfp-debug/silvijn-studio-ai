@@ -64,6 +64,12 @@ class MemoryInboundMessageRepository implements InboundMessageRepository {
 }
 
 interface InboundRow {
+  contact_id: string | null;
+  conversation_id: string | null;
+  in_reply_to_outreach_id: string | null;
+  reply_confirmed: boolean;
+  provider_message_id: string | null;
+  provider_account_key: string | null;
   id: string;
   lead_id: string;
   channel: InboundChannel;
@@ -78,6 +84,7 @@ interface InboundRow {
 
 function rowToInbound(row: InboundRow): InboundMessage {
   return {
+    contactId: row.contact_id, conversationId:row.conversation_id, inReplyToOutreachId:row.in_reply_to_outreach_id, replyConfirmed:row.reply_confirmed, providerMessageId:row.provider_message_id, providerAccountKey:row.provider_account_key,
     id: row.id,
     leadId: row.lead_id,
     channel: row.channel,

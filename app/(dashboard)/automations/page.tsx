@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import { AutomationControls } from "@/components/automation/automation-controls";
+import { QueuePanel } from "@/components/automation/queue-panel";
 import { AutomationService } from "@/lib/automation/service";
 import { getAutomationLimits, getAutonomyLevel } from "@/lib/automation/limits";
 import type { Automation } from "@/lib/automation/types";
@@ -39,6 +40,7 @@ export default async function AutomationsPage() {
   const service = new AutomationService();
   const automations = await service.listAutomations();
   const runs = await service.listRuns(100);
+  const queue = await service.listQueue(20);
   const limits = getAutomationLimits();
 
   const activeAutomations = automations.filter((a) => a.status === "active" && a.enabled);
@@ -70,6 +72,8 @@ export default async function AutomationsPage() {
         <StatTile label="Wacht op mens" count={waitingRuns.length} />
         <StatTile label="Runs totaal" count={runs.length} />
       </div>
+
+      <QueuePanel items={queue} />
 
       {automations.length === 0 ? (
         <p className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5 text-sm text-zinc-400">

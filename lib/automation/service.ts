@@ -1,5 +1,8 @@
 import { AutomationOrchestrator } from "./orchestrator";
+import { AutomationRuntime, getRuntimeConfig, type DrainResult } from "./runtime";
 import { AutomationScheduler } from "./scheduler";
+import { AutomationQueue } from "./queue";
+import type { AutomationQueueItem } from "./types";
 import {
   getAutomationRepository,
   getAutomationRunRepository,
@@ -26,7 +29,13 @@ export const AUTOMATION_IDS = {
 export class AutomationService {
   constructor(
     private readonly scheduler: AutomationScheduler = new AutomationScheduler(),
-    private readonly orchestrator: AutomationOrchestrator = new AutomationOrchestrator()
+    private readonly orchestrator: AutomationOrchestrator = new AutomationOrchestrator(),
+    private readonly runtime: AutomationRuntime = new AutomationRuntime(
+      // De runtime hergebruikt de BESTAANDE orchestrator (guards/capability
+      // matrix/human gates onverkort) — hij voegt alleen claiming + herstel toe.
+      new AutomationOrchestrator(),
+      new AutomationQueue()
+    )
   ) {}
 
   /** Voorbeeldworkflows idempotent aanmaken (bestaande blijven ongewijzigd). */
@@ -99,6 +108,22 @@ export class AutomationService {
 
   getAutonomyLevel(): 0 | 1 | 2 | 3 {
     return getAutonomyLevel();
+  }
+
+  // ---- Productie-runtime (queue-drain) ----
+
+  /** Queue-items lezen voor de dashboardweergave (owner-only server action). */
+  async listQueue(limit = 50): Promise<AutomationQueueItem[]> {
+    return new AutomationQueue().list(limit);
+  }
+
+  /**
+   * Verwerk de bestaande queue via de productie-runtime. Dezelfde code als
+   * de cron-drain; handmatig door de eigenaar te triggeren (server action).
+   * De runtime claimt alleen bestaande items — hij start niets zelf.
+   */
+  async drainQueue(): Promise<DrainResult> {
+    return this.runtime.drain(getRuntimeConfig());
   }
 
   // ---- Manual controls (server actions) ----

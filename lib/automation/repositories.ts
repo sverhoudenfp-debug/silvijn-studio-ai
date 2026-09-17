@@ -511,6 +511,21 @@ export interface AutomationQueueRepository {
   readonly source: "mock" | "supabase";
   enqueue(item: Omit<AutomationQueueItem, "id" | "enqueuedAt">): Promise<AutomationQueueItem>;
   next(): Promise<AutomationQueueItem | null>;
+  /**
+   * ATOMAIR claimen van het oudste queued item (status → processing,
+   * claimedAt = nu). In Supabase via claim_next_automation_queue_item()
+   * met FOR UPDATE SKIP LOCKED: parallelle runtime-aanroepen krijgen
+   * nooit hetzelfde item. Niet-geclaimde concurrent ziet null.
+   * pExclude: items die in deze drain al een herkansing kregen —
+   * tijdelijke fouten krijgen uitstel tot de volgende drain (backoff).
+   */
+  claimNext(exclude?: string[]): Promise<AutomationQueueItem | null>;
+  /**
+   * Stale 'processing'-items (claimedAt ouder dan de drempel) terug naar
+   * de queue met pogingen+1, of definitief 'failed' na max pogingen.
+   * Retourneert het aantal teruggewonnen items.
+   */
+  reclaimStale(olderThanMs: number, maxAttempts: number): Promise<number>;
   get(id: string): Promise<AutomationQueueItem | null>;
   list(limit?: number): Promise<AutomationQueueItem[]>;
   update(id: string, update: Partial<AutomationQueueItem>): Promise<AutomationQueueItem | null>;
@@ -525,12 +540,45 @@ class MemoryAutomationQueueRepository implements AutomationQueueRepository {
       ...item,
       id: `q-${(this.records.length + 1).toString().padStart(5, "0")}`,
       enqueuedAt: new Date().toISOString(),
+      claimedAt: null,
     };
     this.records.push(stored);
     return stored;
   }
   async next(): Promise<AutomationQueueItem | null> {
     return this.records.find((r) => r.status === "queued") ?? null;
+  }
+  async claimNext(exclude: string[] = []): Promise<AutomationQueueItem | null> {
+    const excluded = new Set(exclude);
+    const candidate = [...this.records]
+      .filter((r) => r.status === "queued" && !excluded.has(r.id))
+      .sort((a, b) => a.enqueuedAt.localeCompare(b.enqueuedAt))[0];
+    if (!candidate) return null;
+    // Atomair binnen één process (memory-mode): direct claimen.
+    return this.update(candidate.id, { status: "processing", claimedAt: new Date().toISOString() });
+  }
+  async reclaimStale(olderThanMs: number, maxAttempts: number): Promise<number> {
+    const threshold = Date.now() - olderThanMs;
+    let reclaimed = 0;
+    for (const record of this.records) {
+      if (record.status !== "processing" || !record.claimedAt) continue;
+      if (Date.parse(record.claimedAt) > threshold) continue;
+      if (record.attempts >= maxAttempts) {
+        await this.update(record.id, {
+          status: "failed",
+          processedAt: new Date().toISOString(),
+          error: `${record.error ?? ""}${record.error ? " | " : ""}verwerking vastgelopen (stale) — definitief gefaald na max pogingen`.trim(),
+        });
+      } else {
+        await this.update(record.id, {
+          status: "queued",
+          attempts: record.attempts + 1,
+          claimedAt: null,
+        });
+      }
+      reclaimed += 1;
+    }
+    return reclaimed;
   }
   async get(id: string): Promise<AutomationQueueItem | null> {
     return this.records.find((r) => r.id === id) ?? null;
@@ -555,6 +603,7 @@ interface AutomationQueueRow {
   status: AutomationQueueItem["status"];
   attempts: number;
   enqueued_at: string;
+  claimed_at: string | null;
   processed_at: string | null;
   error: string | null;
 }
@@ -569,6 +618,7 @@ function rowToQueueItem(row: AutomationQueueRow): AutomationQueueItem {
     status: row.status,
     attempts: row.attempts,
     enqueuedAt: row.enqueued_at,
+    claimedAt: row.claimed_at,
     processedAt: row.processed_at,
     error: row.error,
   };
@@ -603,6 +653,23 @@ class SupabaseAutomationQueueRepository implements AutomationQueueRepository {
       .maybeSingle();
     if (error) throw new Error(`AutomationQueueRepository: dequeue mislukt: ${error.message}`);
     return data ? rowToQueueItem(data as AutomationQueueRow) : null;
+  }
+  async claimNext(exclude: string[] = []): Promise<AutomationQueueItem | null> {
+    // RPC met FOR UPDATE SKIP LOCKED — één winnaar per item.
+    const { data, error } = await getSupabaseServerClient().rpc("claim_next_automation_queue_item", {
+      p_exclude: exclude,
+    });
+    if (error) throw new Error(`AutomationQueueRepository: claimen mislukt: ${error.message}`);
+    return data ? rowToQueueItem(data as AutomationQueueRow) : null;
+  }
+  async reclaimStale(olderThanMs: number, maxAttempts: number): Promise<number> {
+    const olderThan = new Date(Date.now() - olderThanMs).toISOString();
+    const { data, error } = await getSupabaseServerClient().rpc("reclaim_stale_processing_items", {
+      p_older_than: olderThan,
+      p_max_attempts: maxAttempts,
+    });
+    if (error) throw new Error(`AutomationQueueRepository: reclaim mislukt: ${error.message}`);
+    return typeof data === "number" ? data : 0;
   }
   async get(id: string): Promise<AutomationQueueItem | null> {
     const { data, error } = await getSupabaseServerClient().from("automation_queue").select("*").eq("id", id).maybeSingle();

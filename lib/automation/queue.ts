@@ -22,11 +22,28 @@ export class AutomationQueue {
       (item) => item.status === "queued" && item.automationId === input.automationId && item.entityId === input.entityId
     );
     if (existing) return existing;
-    return repo.enqueue({ ...input, status: "queued", attempts: 0, processedAt: null, error: null });
+    return repo.enqueue({ ...input, status: "queued", attempts: 0, claimedAt: null, processedAt: null, error: null });
   }
 
   async dequeue(): Promise<AutomationQueueItem | null> {
     return getAutomationQueueRepository().next();
+  }
+
+  /**
+   * ATOMAIR claimen (productie-runtime): het oudste queued item wordt in
+   * één databasetransactie op 'processing' gezet. Parallelle aanroepen
+   * krijgen nooit hetzelfde item (SKIP LOCKED).
+   */
+  async claimNext(exclude?: string[]): Promise<AutomationQueueItem | null> {
+    return getAutomationQueueRepository().claimNext(exclude);
+  }
+
+  /**
+   * Vastgelopen 'processing'-items terugwinnen (crash/cold-stop).
+   * Terug naar de queue met pogingen+1, of definitief faal na max pogingen.
+   */
+  async reclaimStale(olderThanMs: number, maxAttempts: number): Promise<number> {
+    return getAutomationQueueRepository().reclaimStale(olderThanMs, maxAttempts);
   }
 
   async markProcessing(item: AutomationQueueItem): Promise<AutomationQueueItem | null> {
@@ -51,9 +68,10 @@ export class AutomationQueue {
         attempts,
         processedAt: new Date().toISOString(),
         error,
+        claimedAt: null,
       });
     }
-    return repo.update(item.id, { status: "queued", attempts, error });
+    return repo.update(item.id, { status: "queued", attempts, error, claimedAt: null });
   }
 
   async fail(item: AutomationQueueItem, error: string): Promise<AutomationQueueItem | null> {
@@ -61,6 +79,7 @@ export class AutomationQueue {
       status: "failed",
       processedAt: new Date().toISOString(),
       error,
+      claimedAt: null,
     });
   }
 

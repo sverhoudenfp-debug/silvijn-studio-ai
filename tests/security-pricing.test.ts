@@ -39,7 +39,7 @@ test("every exported protected server action awaits owner authorization first", 
       assert.match(n.body.statements[0].getText(source),/^await requireStudioOwner\(\);$/,`${f}:${n.name?.text}`); checked++;
     }
   }
-  assert.equal(checked,53);
+  assert.equal(checked,55);
 });
 test("all protected pages and layouts authorize before reads", () => {
   for(const f of files(path.join(root,"app/(dashboard)")).filter(f=>/\/(page|layout)\.tsx$/.test(f))){

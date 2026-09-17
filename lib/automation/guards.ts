@@ -162,6 +162,7 @@ const TRANSIENT_PATTERNS = [
   /ECONN/i,
   /5\d\d/i, // provider 5xx
   /overloaded/i,
+  /concurrency|gelijktijdig/i, // technische limiet: later opnieuw (gebonden)
 ];
 
 export function isTransientError(error: unknown): boolean {

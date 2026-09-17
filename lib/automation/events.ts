@@ -62,4 +62,9 @@ export const EVENT_LABELS: Record<AutomationEventType, string> = {
   automation_completed: "Automation voltooid",
   automation_failed: "Automation mislukt",
   automation_cancelled: "Automation geannuleerd",
+  queue_item_claimed: "Queue-item geclaimd door de runtime",
+  queue_item_completed: "Queue-item verwerkt (run afgerond)",
+  queue_item_retried: "Queue-item teruggeplaatst voor herkansing",
+  queue_item_failed: "Queue-item definitief gefaald",
+  queue_item_reclaimed: "Vastgelopen queue-item teruggewonnen",
 };

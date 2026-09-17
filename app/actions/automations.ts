@@ -5,7 +5,8 @@ import { requireStudioOwner } from "@/lib/auth/server";
 
 import { revalidatePath } from "next/cache";
 import { AutomationService } from "@/lib/automation/service";
-import type { Automation, AutomationRun } from "@/lib/automation/types";
+import type { DrainResult } from "@/lib/automation/runtime";
+import type { Automation, AutomationRun, AutomationQueueItem } from "@/lib/automation/types";
 
 /**
  * Server actions voor de Automation Engine (Fase 11) — manual controls.
@@ -68,4 +69,21 @@ export async function cancelAutomationAction(automationId: string): Promise<Auto
   revalidatePath("/automations");
   revalidatePath(`/automations/${automationId}`);
   return automation;
+}
+
+/**
+ * Queue-inzage en handmatige runtime-drain (owner-only). Hergebruikt exact
+ * de productie-runtime van de cron-drain — geen afwijkend pad.
+ */
+export async function listAutomationQueueAction(): Promise<AutomationQueueItem[]> {
+  await requireStudioOwner();
+  return new AutomationService().listQueue();
+}
+
+export async function drainAutomationQueueAction(): Promise<DrainResult> {
+  await requireStudioOwner();
+  const result = await new AutomationService().drainQueue();
+  revalidatePath("/automations");
+  revalidatePath("/automation-runs");
+  return result;
 }

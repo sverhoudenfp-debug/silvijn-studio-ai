@@ -63,7 +63,12 @@ export type AutomationEventType =
   | "automation_waiting_for_human"
   | "automation_completed"
   | "automation_failed"
-  | "automation_cancelled";
+  | "automation_cancelled"
+  | "queue_item_claimed"
+  | "queue_item_completed"
+  | "queue_item_retried"
+  | "queue_item_failed"
+  | "queue_item_reclaimed";
 
 /** Autonomieniveaus — deterministisch, alléén menselijk te wijzigen. */
 export type AutonomyLevel = 0 | 1 | 2 | 3;
@@ -168,6 +173,8 @@ export interface AutomationQueueItem {
   status: "queued" | "processing" | "completed" | "failed" | "cancelled";
   attempts: number;
   enqueuedAt: string;
+  /** Moment van atomair claimen door de runtime (stale-detectie). */
+  claimedAt: string | null;
   processedAt: string | null;
   error: string | null;
 }

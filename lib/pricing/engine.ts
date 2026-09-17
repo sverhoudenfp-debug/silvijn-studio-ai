@@ -109,7 +109,10 @@ function buildLineItems(config: PricingConfiguration, requirements: ProjectRequi
   for (const mapping of REQUIREMENT_ADDON_KEYS) {
     if (requirements[mapping.requirementKey] !== true) continue;
     const addOn = config.addOns[mapping.addOnKey];
-    if (!addOn) continue; // geen prijs bekend → geen bedrag verzinnen
+    if (!addOn) {
+      missingInformation.push(`Prijs voor gevraagde functionaliteit ${mapping.label} is niet geconfigureerd.`);
+      continue;
+    }
     lineItems.push({
       key: `addon:${addOn.key}`,
       label: `Add-on — ${addOn.label}`,

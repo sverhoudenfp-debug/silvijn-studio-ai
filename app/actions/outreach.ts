@@ -1,5 +1,8 @@
 "use server";
 
+import { requireStudioOwner } from "@/lib/auth/server";
+
+
 import { revalidatePath } from "next/cache";
 import { OutreachService } from "@/lib/outreach/service";
 import type { OutreachDraft, OutreachGenerationResult } from "@/lib/outreach/types";
@@ -11,11 +14,13 @@ import type { OutreachDraft, OutreachGenerationResult } from "@/lib/outreach/typ
  */
 
 export async function listOutreachDrafts(leadId: string): Promise<OutreachDraft[]> {
+  await requireStudioOwner();
   const service = new OutreachService();
   return service.listByLead(leadId);
 }
 
 export async function generateOutreachDraft(leadId: string): Promise<OutreachGenerationResult> {
+  await requireStudioOwner();
   const service = new OutreachService();
   const result = await service.generateDraftForLead(leadId);
   revalidatePath("/outreach");
@@ -23,6 +28,7 @@ export async function generateOutreachDraft(leadId: string): Promise<OutreachGen
 }
 
 export async function approveOutreachDraft(draftId: string): Promise<OutreachDraft> {
+  await requireStudioOwner();
   const service = new OutreachService();
   const draft = await service.updateDraftStatus(draftId, "approved");
   revalidatePath("/outreach");
@@ -30,6 +36,7 @@ export async function approveOutreachDraft(draftId: string): Promise<OutreachDra
 }
 
 export async function cancelOutreachDraft(draftId: string): Promise<OutreachDraft> {
+  await requireStudioOwner();
   const service = new OutreachService();
   const draft = await service.updateDraftStatus(draftId, "cancelled");
   revalidatePath("/outreach");
@@ -38,5 +45,6 @@ export async function cancelOutreachDraft(draftId: string): Promise<OutreachDraf
 
 /** Gereserveerd voor een latere fase — in Fase 6 bestaat er geen verzenden. */
 export async function sendOutreachDraft(): Promise<never> {
+  await requireStudioOwner();
   throw new Error("Verzenden is niet mogelijk in Fase 6 — e-mails worden nog niet verstuurd");
 }

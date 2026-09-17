@@ -1,3 +1,4 @@
+import { assertProductionAuthorized } from "@/lib/payments/service";
 import { getAIActivityRepository } from "@/lib/repositories/ai-activity-repository";
 import { getLeadRepository } from "@/lib/repositories/lead-repository";
 import { getProjectRepository } from "@/lib/projects/repository";
@@ -96,7 +97,8 @@ export class WebsiteGenerationService {
    * Volledige websitegeneratie — expliciete interne actie.
    * Eén gecontroleerde AI-call voor de planning; de rest is deterministisch.
    */
-  async generateWebsite(projectId: string, framework: "nextjs" | "shopify" = "nextjs"): Promise<GeneratedWebsite> {
+  async generateWebsite(projectId: string, framework: "nextjs" | "shopify" = "shopify"): Promise<GeneratedWebsite> {
+    await assertProductionAuthorized(projectId);
     // ---- 1. Project ophalen + guards (guard-failures consumeren géén AI-budget)
     const project = await getProjectRepository().getById(projectId);
     if (!project) throw new WebsiteGenerationError("Project niet gevonden");

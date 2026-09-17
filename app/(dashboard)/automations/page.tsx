@@ -1,3 +1,5 @@
+
+import { requireStudioOwner } from "@/lib/auth/server";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -33,6 +35,7 @@ function StatTile({ label, count }: { label: string; count: number }) {
 }
 
 export default async function AutomationsPage() {
+  await requireStudioOwner();
   const service = new AutomationService();
   const automations = await service.listAutomations();
   const runs = await service.listRuns(100);

@@ -1,5 +1,8 @@
 "use server";
 
+import { requireStudioOwner } from "@/lib/auth/server";
+
+
 import { revalidatePath } from "next/cache";
 import { AutomationService } from "@/lib/automation/service";
 import type { Automation, AutomationRun } from "@/lib/automation/types";
@@ -14,10 +17,12 @@ import type { Automation, AutomationRun } from "@/lib/automation/types";
  */
 
 export async function listAutomationsAction(): Promise<Automation[]> {
+  await requireStudioOwner();
   return new AutomationService().listAutomations();
 }
 
 export async function listAutomationRunsAction(limit = 50): Promise<AutomationRun[]> {
+  await requireStudioOwner();
   return new AutomationService().listRuns(limit);
 }
 
@@ -25,6 +30,7 @@ export async function runAutomationAction(
   automationId: string,
   entityId: string | null = null
 ): Promise<AutomationRun> {
+  await requireStudioOwner();
   const run = await new AutomationService().runNow(automationId, entityId);
   revalidatePath("/automations");
   revalidatePath(`/automations/${automationId}`);
@@ -32,6 +38,7 @@ export async function runAutomationAction(
 }
 
 export async function pauseAutomationAction(automationId: string): Promise<Automation> {
+  await requireStudioOwner();
   const automation = await new AutomationService().pause(automationId);
   revalidatePath("/automations");
   revalidatePath(`/automations/${automationId}`);
@@ -39,6 +46,7 @@ export async function pauseAutomationAction(automationId: string): Promise<Autom
 }
 
 export async function resumeAutomationAction(automationId: string): Promise<Automation> {
+  await requireStudioOwner();
   const automation = await new AutomationService().resume(automationId);
   revalidatePath("/automations");
   revalidatePath(`/automations/${automationId}`);
@@ -46,6 +54,7 @@ export async function resumeAutomationAction(automationId: string): Promise<Auto
 }
 
 export async function resumeAutomationRunAction(runId: string): Promise<AutomationRun> {
+  await requireStudioOwner();
   const run = await new AutomationService().resumeRun(runId);
   revalidatePath("/automations");
   revalidatePath(`/automation-runs/${runId}`);
@@ -54,6 +63,7 @@ export async function resumeAutomationRunAction(runId: string): Promise<Automati
 }
 
 export async function cancelAutomationAction(automationId: string): Promise<Automation> {
+  await requireStudioOwner();
   const automation = await new AutomationService().cancel(automationId);
   revalidatePath("/automations");
   revalidatePath(`/automations/${automationId}`);

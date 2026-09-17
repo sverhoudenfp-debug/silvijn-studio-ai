@@ -1,3 +1,5 @@
+
+import { requireStudioOwner } from "@/lib/auth/server";
 import { ActivityList } from "@/components/dashboard/activity-list";
 import { AutomationStatus } from "@/components/dashboard/automation-status";
 import { LeadPipeline } from "@/components/dashboard/lead-pipeline";
@@ -19,6 +21,7 @@ import { getLeadRepository } from "@/lib/repositories/lead-repository";
  */
 
 export default async function DashboardPage() {
+  await requireStudioOwner();
   const [analytics, activities, outreachDrafts, automations, leads] = await Promise.all([
     getAgencyAnalytics(),
     getAIActivityRepository().listRecent(8),

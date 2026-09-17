@@ -242,13 +242,11 @@ export async function getAgencyAnalytics(): Promise<AgencyAnalytics> {
       blocked: automationRuns.filter((r: AutomationRun) => r.status === "blocked").length,
       averageDurationMs: runDurations.length > 0 ? Math.round(runDurations.reduce((a, b) => a + b, 0) / runDurations.length) : null,
       aiCalls: automationRuns.reduce((sum, r: AutomationRun) => {
-        const meta = r.metadata as { aiCalls?: number } | null;
-        return sum + (meta?.aiCalls ?? 0);
+        return sum + (r.aiCalls ?? 0);
       }, 0),
       estimatedCostUsd: Math.round(
         automationRuns.reduce((sum, r: AutomationRun) => {
-          const meta = r.metadata as { estimatedCostUsd?: number } | null;
-          return sum + (meta?.estimatedCostUsd ?? 0);
+          return sum + (r.estimatedCostUsd ?? 0);
         }, 0) * 1_000_000
       ) / 1_000_000,
       recentRuns: automationRuns.slice(0, 10),

@@ -13,11 +13,7 @@ import { getLeadRepository } from "@/lib/repositories/lead-repository";
  * Onbekende slug of geen demo-record → 404 (geen fake demo's).
  */
 
-export async function generateStaticParams() {
-  // SSG-slugs uit de repository (mock-mode: de bekende demo-slugs).
-  const demoList = await getDemoRepository().list();
-  return demoList.map((demo) => ({ slug: demo.slug }));
-}
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata(props: PageProps<"/demo/[slug]">): Promise<Metadata> {
   const { slug } = await props.params;

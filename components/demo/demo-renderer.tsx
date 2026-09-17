@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { demoTemplates } from "@/lib/demo-templates";
 import type { DemoWebsite, Lead } from "@/lib/types";
 import { DemoAbout } from "./demo-about";
@@ -20,10 +19,7 @@ export function DemoRenderer({ demo, lead }: { demo: DemoWebsite; lead: Lead }) 
   return (
     <div className="min-h-screen bg-white text-zinc-900">
       <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-xs text-amber-800">
-        Demo website — automatisch gegenereerd door Silvijn Studio ·{" "}
-        <Link href="/dashboard" className="font-medium underline underline-offset-2">
-          Terug naar dashboard
-        </Link>
+        Vrijblijvend demo-concept van Silvijn Studio. Geen gepubliceerde klantwebsite.
       </div>
 
       <DemoHeader demo={demo} accent={template.accent} />

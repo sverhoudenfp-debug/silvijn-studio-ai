@@ -1,3 +1,5 @@
+
+import { requireStudioOwner } from "@/lib/auth/server";
 import { ProjectsView } from "@/components/projects/projects-view";
 import { getLeadRepository } from "@/lib/repositories/lead-repository";
 import { ProjectService } from "@/lib/projects/service";
@@ -6,6 +8,7 @@ import { ProjectService } from "@/lib/projects/service";
  * Projects-overzicht — echte data uit de project-repository (Fase 8).
  */
 export default async function ProjectsPage() {
+  await requireStudioOwner();
   const [projects, leads] = await Promise.all([
     new ProjectService().list(),
     getLeadRepository().list(),

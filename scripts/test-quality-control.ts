@@ -186,8 +186,8 @@ async function main() {
   }
   const approved = await qcService.approveWebsite(passWebsite.id);
   check("approve zet status APPROVED", approved.website.status === "approved");
-  check("approval gelogd met approver + versie", approved.qc.approval?.action === "approved" && approved.qc.approval.by === getApproverName() && approved.qc.approval.websiteVersion === passWebsite.version);
-  check("approver is de agency-user-abstraction (Silvijn)", getApproverName() === "Silvijn");
+  check("approval gelogd met approver + versie", approved.qc.approval?.action === "approved" && approved.qc.approval.by === await getApproverName() && approved.qc.approval.websiteVersion === passWebsite.version);
+  check("approver is een geverifieerde user-ID", (await getApproverName()).length > 0);
   let doubleApproveError = "";
   try { await qcService.approveWebsite(passWebsite.id); } catch (e) { doubleApproveError = e instanceof Error ? e.message : ""; }
   check("dubbele approve geblokkeerd (al APPROVED)", doubleApproveError.length > 0);

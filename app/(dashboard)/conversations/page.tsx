@@ -1,9 +1,12 @@
+
+import { requireStudioOwner } from "@/lib/auth/server";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import { conversationMessages, leads } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 
-export default function ConversationsPage() {
+export default async function ConversationsPage() {
+  await requireStudioOwner();
   const conversations = leads.filter(
     (lead) => lead.leadStatus === "interested" || lead.outreachStatus === "replied"
   );

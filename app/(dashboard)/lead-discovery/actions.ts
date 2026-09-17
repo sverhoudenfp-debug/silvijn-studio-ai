@@ -1,5 +1,8 @@
 "use server";
 
+import { requireStudioOwner } from "@/lib/auth/server";
+
+
 import { revalidatePath } from "next/cache";
 import { LeadDiscoveryService } from "@/lib/discovery/service";
 import type { DiscoveryRequest, DiscoverySource } from "@/lib/discovery/types";
@@ -22,6 +25,7 @@ export interface DiscoveryFormInput {
 const KNOWN_SOURCES: DiscoverySource[] = ["mock", "google", "directory"];
 
 export async function runDiscovery(input: DiscoveryFormInput) {
+  await requireStudioOwner();
   const source = KNOWN_SOURCES.includes(input.source as DiscoverySource)
     ? (input.source as DiscoverySource)
     : "mock";

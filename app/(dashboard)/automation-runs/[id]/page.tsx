@@ -1,3 +1,5 @@
+
+import { requireStudioOwner } from "@/lib/auth/server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +25,7 @@ const stepVariant: Record<string, "success" | "warning" | "danger" | "info" | "n
 };
 
 export default async function AutomationRunPage(props: PageProps<"/automation-runs/[id]">) {
+  await requireStudioOwner();
   const { id } = await props.params;
   const service = new AutomationService();
   const run = await service.getRun(id);

@@ -71,7 +71,6 @@ export class AutomationService {
   }
 
   async listAutomations(): Promise<Automation[]> {
-    await this.ensureWorkflows();
     return getAutomationRepository().list();
   }
 

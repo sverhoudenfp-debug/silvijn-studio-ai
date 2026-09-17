@@ -1,3 +1,6 @@
+
+import Link from "next/link";
+import { requireStudioOwner } from "@/lib/auth/server";
 import { notFound } from "next/navigation";
 import { ProjectDetail } from "@/components/projects/project-detail";
 import { getLeadRepository } from "@/lib/repositories/lead-repository";
@@ -7,6 +10,7 @@ import { QualityControlService } from "@/lib/qc/service";
 import { getGeneratedWebsiteRepository } from "@/lib/websites/repository";
 
 export async function generateMetadata(props: PageProps<"/projects/[id]">) {
+  await requireStudioOwner();
   const { id } = await props.params;
   const project = await getProjectRepository().getById(id);
   return { title: project ? `${project.name} | Silvijn Studio` : "Project | Silvijn Studio" };
@@ -17,6 +21,7 @@ export async function generateMetadata(props: PageProps<"/projects/[id]">) {
  * server actions (Fase 8).
  */
 export default async function ProjectDetailPage(props: PageProps<"/projects/[id]">) {
+  await requireStudioOwner();
   const { id } = await props.params;
 
   const project = await getProjectRepository().getById(id);
@@ -34,6 +39,8 @@ export default async function ProjectDetailPage(props: PageProps<"/projects/[id]
   const latestQualification = interactions[0]?.qualification ?? null;
 
   return (
+    <div className="space-y-4">
+    <Link className="inline-block rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-200" href={`/projects/${id}/finance`}>Prijsgoedkeuring en betalingen</Link>
     <ProjectDetail
       project={project}
       lead={
@@ -62,5 +69,6 @@ export default async function ProjectDetailPage(props: PageProps<"/projects/[id]
           : null
       }
     />
+    </div>
   );
 }

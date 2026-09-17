@@ -1,3 +1,5 @@
+
+import { requireStudioOwner } from "@/lib/auth/server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +16,7 @@ export const metadata = { title: "Automation | Silvijn Studio" };
  */
 
 export default async function AutomationDetailPage(props: PageProps<"/automations/[id]">) {
+  await requireStudioOwner();
   const { id } = await props.params;
   const service = new AutomationService();
   const { automation, runs } = await service.getAutomationWithRuns(id);

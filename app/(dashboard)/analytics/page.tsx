@@ -1,3 +1,5 @@
+
+import { requireStudioOwner } from "@/lib/auth/server";
 import { Card } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
 import { getAgencyAnalytics } from "@/lib/services/analytics";
@@ -13,6 +15,7 @@ function kpi(label: string, value: string | number, delta?: string) {
 }
 
 export default async function AnalyticsPage() {
+  await requireStudioOwner();
   const data = await getAgencyAnalytics();
 
   const hasAnyData =

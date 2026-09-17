@@ -1,5 +1,8 @@
 "use server";
 
+import { requireStudioOwner } from "@/lib/auth/server";
+
+
 import { revalidatePath } from "next/cache";
 import { SalesService } from "@/lib/sales/service";
 import type { InboundMessage, SalesInteraction } from "@/lib/sales/types";
@@ -11,10 +14,12 @@ import type { InboundMessage, SalesInteraction } from "@/lib/sales/types";
  */
 
 export async function listInboundMessagesAction(leadId: string): Promise<InboundMessage[]> {
+  await requireStudioOwner();
   return new SalesService().listInboundByLead(leadId);
 }
 
 export async function listSalesInteractionsAction(leadId: string): Promise<SalesInteraction[]> {
+  await requireStudioOwner();
   return new SalesService().listInteractionsByLead(leadId);
 }
 
@@ -24,6 +29,7 @@ export async function createInboundMessageAction(input: {
   subject: string;
   body: string;
 }): Promise<InboundMessage> {
+  await requireStudioOwner();
   const message = await new SalesService().createInboundMessage({
     leadId: input.leadId,
     channel: "email",
@@ -37,6 +43,7 @@ export async function createInboundMessageAction(input: {
 }
 
 export async function analyzeInboundMessageAction(leadId: string, inboundMessageId: string) {
+  await requireStudioOwner();
   const result = await new SalesService().analyzeInboundMessage(leadId, inboundMessageId);
   revalidatePath("/sales");
   revalidatePath(`/leads/${leadId}`);
@@ -44,12 +51,14 @@ export async function analyzeInboundMessageAction(leadId: string, inboundMessage
 }
 
 export async function markReadyForSilvijnAction(interactionId: string): Promise<SalesInteraction> {
+  await requireStudioOwner();
   const interaction = await new SalesService().markReadyForSilvijn(interactionId);
   revalidatePath("/sales");
   return interaction;
 }
 
 export async function markHandledAction(interactionId: string): Promise<SalesInteraction> {
+  await requireStudioOwner();
   const interaction = await new SalesService().markHandled(interactionId);
   revalidatePath("/sales");
   return interaction;

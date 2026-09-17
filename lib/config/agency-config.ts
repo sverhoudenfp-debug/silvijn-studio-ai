@@ -72,32 +72,12 @@ export function getAgencyConfiguration(): AgencyConfiguration {
  * zolang de Master Configuration niet is ingevuld, berekent de engine geen
  * bedragen maar returned die CONFIGURATION_MISSING. Geen fallback-bedragen.
  */
-export function getPricingConfiguration(): PricingConfiguration {
-  const config = getAgencyConfiguration();
-  return config.pricingConfiguration ?? emptyPricingConfiguration();
-}
-
-function emptyPricingConfiguration(): PricingConfiguration {
-  return {
-    currency: "EUR",
-    pricingVersion: "",
-    packages: {},
-    addOns: {},
-    extraPagePrice: null,
-    minimumPrice: null,
-    maximumPrice: null,
-    customProjectThreshold: null,
-    humanApprovalThreshold: null,
-    priceRangeDeviation: null,
-    vatRate: null,
-    pricingRules: [],
-    customProjectRules: [],
-    discountRules: [],
-    paymentRules: [],
-    revisionRules: [],
-    maintenanceRules: [],
-    hostingRules: [],
-  };
+export async function getPricingConfiguration(): Promise<PricingConfiguration> {
+  const { getSupabaseServerClient } = await import("@/lib/supabase/server");
+  const { masterPricingConfiguration } = await import("@/lib/pricing/master-config");
+  const { data, error } = await getSupabaseServerClient().from("studio_settings").select("value").eq("key", "pricing").single();
+  if (error || !data) throw new Error("BLOCKED_EXTERNAL_CONFIGURATION: centrale prijsconfiguratie ontbreekt");
+  return masterPricingConfiguration(data.value);
 }
 
 /**

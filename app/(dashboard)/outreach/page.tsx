@@ -1,3 +1,5 @@
+
+import { requireStudioOwner } from "@/lib/auth/server";
 import { OutreachView } from "@/components/outreach/outreach-view";
 import { getDemoRepository } from "@/lib/repositories/demo-repository";
 import { getLeadRepository } from "@/lib/repositories/lead-repository";
@@ -9,6 +11,7 @@ import { OutreachService } from "@/lib/outreach/service";
  * vervangen; de dashboard-analytics uit een latere fase pakt dit centraal op.
  */
 export default async function OutreachPage() {
+  await requireStudioOwner();
   const service = new OutreachService();
   const [drafts, leads, demos] = await Promise.all([
     service.listAll(),

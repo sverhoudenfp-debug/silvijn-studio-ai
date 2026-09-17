@@ -1,5 +1,8 @@
 "use server";
 
+import { requireStudioOwner } from "@/lib/auth/server";
+
+
 import { revalidatePath } from "next/cache";
 import { QualityControlService } from "@/lib/qc/service";
 import type { QualityControl } from "@/lib/qc/types";
@@ -16,6 +19,7 @@ import type { GeneratedWebsite } from "@/lib/websites/types";
  */
 
 export async function generateWebsiteAction(projectId: string): Promise<GeneratedWebsite> {
+  await requireStudioOwner();
   const website = await new WebsiteGenerationService().generateWebsite(projectId);
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/generated-websites");
@@ -25,16 +29,19 @@ export async function generateWebsiteAction(projectId: string): Promise<Generate
 // ============ QUALITY CONTROL + HUMAN APPROVAL (Fase 10) ============
 
 export async function runQualityControlAction(websiteId: string): Promise<QualityControl> {
+  await requireStudioOwner();
   const qc = await new QualityControlService().runQualityControl(websiteId);
   revalidatePath("/generated-websites");
   return qc;
 }
 
 export async function getLatestQcAction(websiteId: string): Promise<QualityControl | null> {
+  await requireStudioOwner();
   return new QualityControlService().getLatestQcForWebsite(websiteId);
 }
 
 export async function approveWebsiteAction(websiteId: string): Promise<GeneratedWebsite> {
+  await requireStudioOwner();
   const { website } = await new QualityControlService().approveWebsite(websiteId);
   revalidatePath("/generated-websites");
   revalidatePath(`/projects/${website.projectId}`);
@@ -46,6 +53,7 @@ export async function requestWebsiteRevisionAction(
   reason: string,
   options?: { selectedIssueIds?: string[]; notes?: string }
 ): Promise<GeneratedWebsite> {
+  await requireStudioOwner();
   const { website } = await new QualityControlService().requestWebsiteRevision(websiteId, reason, options);
   revalidatePath("/generated-websites");
   revalidatePath(`/projects/${website.projectId}`);
@@ -53,6 +61,7 @@ export async function requestWebsiteRevisionAction(
 }
 
 export async function archiveWebsiteAction(websiteId: string): Promise<GeneratedWebsite> {
+  await requireStudioOwner();
   const website = await new QualityControlService().archiveWebsite(websiteId);
   revalidatePath("/generated-websites");
   revalidatePath(`/projects/${website.projectId}`);
@@ -60,9 +69,11 @@ export async function archiveWebsiteAction(websiteId: string): Promise<Generated
 }
 
 export async function listWebsitesAction(): Promise<GeneratedWebsite[]> {
+  await requireStudioOwner();
   return new WebsiteGenerationService().list();
 }
 
 export async function listWebsitesByProjectAction(projectId: string): Promise<GeneratedWebsite[]> {
+  await requireStudioOwner();
   return new WebsiteGenerationService().listByProject(projectId);
 }

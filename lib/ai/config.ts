@@ -52,6 +52,7 @@ export function getAIConfig(): AIConfig {
       "AI_MODE ontbreekt in de productie-omgeving — stel AI_MODE=live (of expliciet mock) in via de deployment-omgeving."
     );
   }
+  if (modeEnv && modeEnv !== "live" && modeEnv !== "mock") throw new AIConfigurationError("AI_MODE must be live or mock");
   const mode: AIMode = modeEnv === "live" ? "live" : "mock";
   const apiKey = process.env.ANTHROPIC_API_KEY?.trim() || null;
   const maxRequests = Number.parseInt(process.env.AI_MAX_REQUESTS_PER_RUN ?? "", 10);

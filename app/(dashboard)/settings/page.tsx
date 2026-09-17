@@ -1,3 +1,5 @@
+
+import { requireStudioOwner } from "@/lib/auth/server";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 
@@ -12,7 +14,8 @@ const sections = [
   { title: "Security & AVG", description: "Gegevensbewaring, logging, toestemmingen" },
 ];
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  await requireStudioOwner();
   return (
     <div className="space-y-6">
       <div>

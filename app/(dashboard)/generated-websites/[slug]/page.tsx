@@ -1,3 +1,5 @@
+
+import { requireStudioOwner } from "@/lib/auth/server";
 import { notFound } from "next/navigation";
 import { GeneratedWebsiteRenderer } from "@/components/websites/generated-website-renderer";
 import { QcBanner } from "@/components/websites/qc-banner";
@@ -6,6 +8,7 @@ import { QualityControlService } from "@/lib/qc/service";
 import { getGeneratedWebsiteRepository } from "@/lib/websites/repository";
 
 export async function generateMetadata(props: PageProps<"/generated-websites/[slug]">) {
+  await requireStudioOwner();
   const { slug } = await props.params;
   const website = await getGeneratedWebsiteRepository().getBySlug(slug);
   return {
@@ -20,6 +23,7 @@ export async function generateMetadata(props: PageProps<"/generated-websites/[sl
  * onbekende slug → echte 404.
  */
 export default async function GeneratedWebsitePage(props: PageProps<"/generated-websites/[slug]">) {
+  await requireStudioOwner();
   const { slug } = await props.params;
   const website = await getGeneratedWebsiteRepository().getBySlug(slug);
   if (!website) notFound();

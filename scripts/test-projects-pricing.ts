@@ -56,7 +56,7 @@ async function main() {
   console.info("--- PricingEngine (pure functie — geen AI, geen provider geïnstantieerd) ---");
 
   // 1) Missing configuration: géén bedrag verzinnen
-  const appConfig = getPricingConfiguration();
+  const appConfig = await getPricingConfiguration();
   check("app-configuratie is leeg tot de Master Configuration", appConfig.pricingVersion === "" && Object.keys(appConfig.packages).length === 0);
   const missingConfigResult = calculatePriceIndication({ projectId: "proj-test", requirements: { websiteType: "business_website", numberOfPages: 3 } }, appConfig);
   check("lege configuratie → CONFIGURATION_MISSING", missingConfigResult.status === "configuration_missing");

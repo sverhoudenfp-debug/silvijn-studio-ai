@@ -1,3 +1,4 @@
+import { humanRpc, requireStudioOwner } from "@/lib/auth/server";
 import { getAIActivityRepository } from "@/lib/repositories/ai-activity-repository";
 import { getLeadRepository } from "@/lib/repositories/lead-repository";
 import { getProjectRepository } from "@/lib/projects/repository";
@@ -41,8 +42,8 @@ export class QualityControlError extends Error {
  * Agency-user-abstraction voor de approver. Een volledig auth-systeem
  * bestaat nog niet; zodra dat er is, wordt dit de echte ingelogde gebruiker.
  */
-export function getApproverName(): string {
-  return (process.env.AGENCY_APPROVER_NAME ?? "").trim() || "Silvijn";
+export async function getApproverName(): Promise<string> {
+  return (await requireStudioOwner()).user.id;
 }
 
 function summarizeRequirements(project: Project): string {
@@ -287,54 +288,11 @@ export class QualityControlService {
    * issues + build geslaagd + security niet failed.
    */
   async approveWebsite(websiteId: string): Promise<{ website: GeneratedWebsite; qc: QualityControl }> {
+    await humanRpc("approve_studio_website", { p_website: websiteId });
     const website = await getGeneratedWebsiteRepository().getById(websiteId);
-    if (!website) throw new QualityControlError("Website niet gevonden");
-    if (website.status !== "ready_for_silvijn") {
-      throw new QualityControlError(
-        `Alleen een website met status READY_FOR_SILVIJN kan worden goedgekeurd (huidig: ${website.status})`
-      );
-    }
-
     const qc = await getQualityControlRepository().getLatestByWebsiteId(websiteId);
-    if (!qc) throw new QualityControlError("Er is geen kwaliteitscontrole uitgevoerd — goedkeuring is geblokkeerd");
-    if (qc.status !== "completed") {
-      throw new QualityControlError(`Kwaliteitscontrole is niet voltooid (status: ${qc.status}) — goedkeuring is geblokkeerd`);
-    }
-    if (qc.overallResult !== "pass") {
-      throw new QualityControlError(`QC-resultaat is ${qc.overallResult.toUpperCase()} — alleen PASS kan worden goedgekeurd`);
-    }
-    if (qc.issues.some((i) => i.severity === "critical")) {
-      throw new QualityControlError("Er bestaat nog een CRITICAL issue — goedkeuring is geblokkeerd (geen override in deze fase)");
-    }
-    if (website.buildStatus !== "passed") {
-      throw new QualityControlError(`Build-status is ${website.buildStatus} — goedkeuring is geblokkeerd`);
-    }
-    const securityCheck = qc.checks.find((c) => c.category === "security");
-    if (securityCheck?.result === "failed") {
-      throw new QualityControlError("De security-check is FAILED — goedkeuring is geblokkeerd");
-    }
-
-    const approval = {
-      action: "approved" as const,
-      by: getApproverName(),
-      at: new Date().toISOString(),
-      websiteVersion: website.version,
-    };
-    const updatedQc = (await getQualityControlRepository().update(qc.id, { approval })) ?? qc;
-    const updatedWebsite = await getGeneratedWebsiteRepository().update(website.id, { status: "approved" });
-    if (!updatedWebsite) throw new QualityControlError("Website bijwerken mislukt");
-
-    await getAIActivityRepository().log({
-      leadId: website.leadId,
-      type: "website_quality_control",
-      status: "completed",
-      message: `WEBSITE GOEDGEKEURD door ${approval.by}: "${website.businessName}" v${website.version} (QC ${qc.id})`,
-      metadata: { websiteId: website.id, projectId: website.projectId, qcId: qc.id, action: "approved", by: approval.by },
-    });
-
-    // Belangrijk: approval betekent NIET dat het project is geleverd.
-    // Project.status wordt hier bewust NIET gewijzigd (delivery = latere fase).
-    return { website: updatedWebsite, qc: updatedQc };
+    if (!website || !qc) throw new QualityControlError("Goedgekeurde versie kon niet worden geladen");
+    return { website, qc };
   }
 
   /**
@@ -347,80 +305,18 @@ export class QualityControlService {
     reason: string,
     options?: { selectedIssueIds?: string[]; notes?: string }
   ): Promise<{ website: GeneratedWebsite; qc: QualityControl }> {
+    await humanRpc("review_studio_website", { p_website: websiteId, p_action: "revision_requested", p_reason: reason, p_issues: options?.selectedIssueIds ?? [], p_notes: options?.notes ?? "" });
     const website = await getGeneratedWebsiteRepository().getById(websiteId);
-    if (!website) throw new QualityControlError("Website niet gevonden");
-    if (!["ready_for_silvijn", "needs_revision"].includes(website.status)) {
-      throw new QualityControlError(
-        `Revisie kan alleen worden aangevraagd voor een website met status ready_for_silvijn of needs_revision (huidig: ${website.status})`
-      );
-    }
-    if (!reason || reason.trim().length < 5) {
-      throw new QualityControlError("Een revisieverzoek vereist een reden (minimaal 5 tekens)");
-    }
     const qc = await getQualityControlRepository().getLatestByWebsiteId(websiteId);
-    if (!qc || qc.status !== "completed") {
-      throw new QualityControlError("Revisieverzoek vereist een voltooide kwaliteitscontrole");
-    }
-
-    const approval = {
-      action: "revision_requested" as const,
-      by: getApproverName(),
-      at: new Date().toISOString(),
-      reason: reason.trim(),
-      selectedIssueIds: options?.selectedIssueIds ?? [],
-      notes: options?.notes,
-      websiteVersion: website.version,
-    };
-    const updatedQc = (await getQualityControlRepository().update(qc.id, { approval })) ?? qc;
-    const updatedWebsite = await getGeneratedWebsiteRepository().update(website.id, { status: "needs_revision" });
-    if (!updatedWebsite) throw new QualityControlError("Website bijwerken mislukt");
-
-    await getAIActivityRepository().log({
-      leadId: website.leadId,
-      type: "website_quality_control",
-      status: "completed",
-      message: `REVISIE AANGEVRAAGD door ${approval.by}: "${website.businessName}" v${website.version} — ${reason.trim()}`,
-      metadata: {
-        websiteId: website.id,
-        projectId: website.projectId,
-        qcId: qc.id,
-        action: "revision_requested",
-        selectedIssueIds: approval.selectedIssueIds,
-      },
-    });
-
-    return { website: updatedWebsite, qc: updatedQc };
+    if (!website || !qc) throw new QualityControlError("Revisiebesluit kon niet worden geladen");
+    return { website, qc };
   }
 
   /** ARCHIVE — menselijke actie; de versie blijft bewaard en terugvindbaar. */
   async archiveWebsite(websiteId: string): Promise<GeneratedWebsite> {
+    await humanRpc("review_studio_website", { p_website: websiteId, p_action: "archived" });
     const website = await getGeneratedWebsiteRepository().getById(websiteId);
-    if (!website) throw new QualityControlError("Website niet gevonden");
-    if (website.status === "archived") throw new QualityControlError("Website is al gearchiveerd");
-
-    const updated = await getGeneratedWebsiteRepository().update(website.id, { status: "archived" });
-    if (!updated) throw new QualityControlError("Website bijwerken mislukt");
-
-    const qc = await getQualityControlRepository().getLatestByWebsiteId(websiteId);
-    if (qc && qc.status === "completed") {
-      await getQualityControlRepository().update(qc.id, {
-        approval: {
-          action: "archived",
-          by: getApproverName(),
-          at: new Date().toISOString(),
-          websiteVersion: website.version,
-        },
-      });
-    }
-
-    await getAIActivityRepository().log({
-      leadId: website.leadId,
-      type: "website_quality_control",
-      status: "completed",
-      message: `WEBSITE GEARCHIVEERD door ${getApproverName()}: "${website.businessName}" v${website.version}`,
-      metadata: { websiteId: website.id, projectId: website.projectId, action: "archived" },
-    });
-
-    return updated;
+    if (!website) throw new QualityControlError("Gearchiveerde versie kon niet worden geladen");
+    return website;
   }
 }

@@ -1,3 +1,4 @@
+import { humanRpc } from "@/lib/auth/server";
 import { getAIActivityRepository } from "@/lib/repositories/ai-activity-repository";
 import { getLeadRepository } from "@/lib/repositories/lead-repository";
 import { getSalesInteractionRepository } from "@/lib/sales/repository";
@@ -6,7 +7,7 @@ import { getPricingConfiguration } from "@/lib/config/agency-config";
 import { calculatePriceIndication } from "@/lib/pricing/engine";
 import { getPriceIndicationRepository } from "@/lib/pricing/repository";
 import { getProjectRepository, type ProjectCreateInput, type ProjectUpdateInput } from "./repository";
-import { HUMAN_ONLY_PROJECT_STATUSES, type Project, type ProjectRequirements, type ProjectStatus } from "./types";
+import { type Project, type ProjectRequirements, type ProjectStatus } from "./types";
 
 /**
  * ProjectService (Fase 8).
@@ -49,17 +50,6 @@ export class ProjectValidationError extends Error {
 }
 
 /** Geldige statusovergangen (menselijke acties; AI komt hier nooit). */
-const ALLOWED_TRANSITIONS: Record<ProjectStatus, ProjectStatus[]> = {
-  quotation_pending: ["price_ready", "awaiting_approval", "cancelled"],
-  price_ready: ["awaiting_approval", "quotation_pending", "cancelled"],
-  awaiting_approval: ["approved", "price_ready", "cancelled"],
-  approved: ["in_progress", "cancelled"],
-  in_progress: ["ready_for_review", "cancelled"],
-  ready_for_review: ["completed", "in_progress"],
-  completed: [],
-  cancelled: [],
-};
-
 /** Deterministische mapping: laatste kwalificatie → initiële requirements. Geen gokken. */
 function requirementsFromQualification(project: { needsEcommerce: boolean; projectType: string | null; timeline: string | null; needsWebsite: boolean }): ProjectRequirements {
   return {
@@ -217,7 +207,8 @@ export class ProjectService {
    */
   async calculatePrice(id: string): Promise<Project> {
     const project = await this.get(id);
-    const config = getPricingConfiguration();
+    if (project.priceStatus === "approved") throw new ProjectValidationError("Goedgekeurde prijs is vergrendeld. Wijzigingen vereisen expliciete menselijke herbeoordeling.");
+    const config = await getPricingConfiguration();
     const indication = calculatePriceIndication(
       { projectId: project.id, requirements: project.requirements },
       config
@@ -287,47 +278,18 @@ export class ProjectService {
   }
 
   async approvePrice(id: string): Promise<Project> {
-    const project = await this.get(id);
-    if (project.priceStatus !== "ready" && project.priceStatus !== "requires_human") {
-      throw new ProjectValidationError("Er is geen goedgekeurde prijsindicatie om goed te keuren");
-    }
-    const updated = await getProjectRepository().update(id, { priceStatus: "approved" });
-    if (!updated) throw new ProjectNotFoundError();
-    await getAIActivityRepository().log({
-      leadId: project.leadId,
-      type: "price_approved",
-      status: "completed",
-      message: `Prijsindicatie voor "${project.name}" GOEDGEKEURD door Silvijn (menselijke actie)`,
-    });
-    return updated;
+    await humanRpc("approve_project_price", { p_project: id });
+    return this.get(id);
   }
 
   async rejectPrice(id: string, reason?: string): Promise<Project> {
-    const project = await this.get(id);
-    const updated = await getProjectRepository().update(id, { priceStatus: "rejected" });
-    if (!updated) throw new ProjectNotFoundError();
-    await getAIActivityRepository().log({
-      leadId: project.leadId,
-      type: "price_rejected",
-      status: "completed",
-      message: `Prijsindicatie voor "${project.name}" afgewezen door Silvijn${reason ? `: ${reason}` : ""}`,
-    });
-    return updated;
+    await humanRpc("reject_project_price", { p_project: id, p_reason: reason ?? "" });
+    return this.get(id);
   }
 
   /** Statusovergang — alleen via expliciete menselijke actie; AI komt hier nooit. */
   async updateStatus(id: string, status: ProjectStatus): Promise<Project> {
-    const project = await this.get(id);
-    if (project.status === status) return project;
-    const allowed = ALLOWED_TRANSITIONS[project.status] ?? [];
-    if (!allowed.includes(status)) {
-      const humanNote = HUMAN_ONLY_PROJECT_STATUSES.includes(status) ? " (menselijke actie vereist)" : "";
-      throw new ProjectValidationError(
-        `Statusovergang ${project.status} → ${status} is niet toegestaan${humanNote}`
-      );
-    }
-    const updated = await getProjectRepository().update(id, { status });
-    if (!updated) throw new ProjectNotFoundError();
-    return updated;
+    await humanRpc("set_studio_project_status", { p_project: id, p_status: status });
+    return this.get(id);
   }
 }

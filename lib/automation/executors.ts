@@ -188,7 +188,7 @@ export async function executeCreatePriceIndication(context: StepContext): Promis
   const projectId = (context.context.projectId as string | undefined) ?? requireEntity(context);
   await projectService.calculatePrice(projectId);
   const indications = await getPriceIndicationRepository().listByProject(projectId);
-  const indication = indications[indications.length - 1];
+  const indication = indications[0];
   if (!indication) {
     throw new StepExecutionBlockedError("Prijsindicatie kon niet worden opgehaald — automation stopt.", "blocked");
   }

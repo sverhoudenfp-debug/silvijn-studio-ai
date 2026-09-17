@@ -1,11 +1,10 @@
-import Link from "next/link";
 import type { DemoWebsite, Lead } from "@/lib/types";
 
 /**
  * Statuspagina voor demo's die nog niet bekenbaar zijn:
  * GENERATING → "wordt voorbereid", FAILED → foutstatus.
  */
-export function DemoStatusPage({ demo, lead }: { demo: DemoWebsite; lead?: Lead }) {
+export function DemoStatusPage({ demo }: { demo: DemoWebsite; lead?: Lead }) {
   const generating = demo.status === "generating";
 
   return (
@@ -28,14 +27,7 @@ export function DemoStatusPage({ demo, lead }: { demo: DemoWebsite; lead?: Lead 
             ? `De demo-website voor ${demo.businessName} is in opbouw. Straks is hij hier te bekijken.`
             : `Het aanmaken van de demo voor ${demo.businessName} is niet gelukt. De demo kan op een later moment opnieuw worden gegenereerd.`}
         </p>
-        {lead ? (
-          <Link
-            href={`/demo-websites/${demo.id}`}
-            className="mt-6 inline-block rounded-lg bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-zinc-50 transition-colors hover:bg-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
-          >
-            Bekijk demo-details
-          </Link>
-        ) : null}
+
       </div>
     </div>
   );

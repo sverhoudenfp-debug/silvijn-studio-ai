@@ -1,3 +1,4 @@
+import "server-only";
 import { createClient } from "@supabase/supabase-js";
 // Node.js 20 heeft geen native WebSocket — supabase-js vereist een expliciete
 // transport (ws) voor de realtime-client; zonder dit crasht createClient.
@@ -23,10 +24,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 let cachedClient: SupabaseClient | null = null;
 
 export function isSupabaseConfigured(): boolean {
-  return Boolean(
+  const configured = Boolean(
     (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim() &&
     (process.env.SUPABASE_SECRET_KEY ?? "").trim()
   );
+  if (!configured && process.env.NODE_ENV === "production" && process.env.NEXT_PHASE !== "phase-production-build") {
+    throw new AIConfigurationError("BLOCKED_EXTERNAL_CONFIGURATION: Supabase ontbreekt. Productie gebruikt nooit mock repositories.");
+  }
+  return configured;
 }
 
 export function getSupabaseServerClient(): SupabaseClient {
@@ -41,6 +46,6 @@ export function getSupabaseServerClient(): SupabaseClient {
     );
   }
 
-  cachedClient = createClient(url, secretKey, { realtime: { transport: wsTransport } });
+  cachedClient = createClient(url, secretKey, { auth: { persistSession: false, autoRefreshToken: false }, realtime: { transport: wsTransport } });
   return cachedClient;
 }

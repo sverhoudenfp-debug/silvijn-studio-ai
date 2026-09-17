@@ -13,7 +13,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         <button className="w-full rounded-lg bg-indigo-600 px-4 py-3 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">Stuur beveiligde inloglink</button>
       </form>}
       {params.sent && <p role="status" className="mt-4 text-sm text-zinc-300">Controleer je studio-inbox en open de inloglink in deze browser.</p>}
-      {params.error && <p role="alert" className="mt-4 text-sm text-amber-400">{params.error === "delivery" ? "De inlogmail kon niet worden verstuurd. Controleer de Supabase e-mailconfiguratie en probeer later opnieuw." : "Geen toegang of ongeldige inloglink. Gebruik het geautoriseerde studio-account."}</p>}
+      {params.error && <p role="alert" className="mt-4 text-sm text-amber-400">{params.error === "rate_limit" ? "Er is net al een inlogmail aangevraagd. Wacht ongeveer een minuut en probeer het opnieuw (maximaal 2 mails per uur)." : params.error === "delivery" ? "De inlogmail kon niet worden verstuurd. Controleer of de Supabase e-mailconfiguratie juist is en probeer later opnieuw." : "Geen toegang of ongeldige inloglink. Gebruik het geautoriseerde studio-account."}</p>}
     </section>
   </main>;
 }

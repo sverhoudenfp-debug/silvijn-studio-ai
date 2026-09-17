@@ -113,4 +113,12 @@ export const AI_AGENTS: Record<AgentType, AgentDefinition> = {
     defaultTier: "balanced",
     defaultTask: "generate_structured",
   },
+  questionnaire: {
+    id: "questionnaire",
+    name: "Questionnaire Agent",
+    description: "Genereert klantvragenlijsten uit bekende lead-/projectcontext en beoordeelt de volledigheid van antwoorden.",
+    status: "implemented",
+    defaultTier: "balanced",
+    defaultTask: "questionnaire_generation",
+  },
 };

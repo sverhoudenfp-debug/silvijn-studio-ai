@@ -6,7 +6,9 @@ import { useState } from "react";
 import { OutreachSection } from "@/components/leads/outreach-section";
 import { SalesSection } from "@/components/sales/sales-section";
 import { ProjectSection } from "@/components/leads/project-section";
+import { QuestionnaireSection } from "@/components/leads/questionnaire-section";
 import type { Project } from "@/lib/projects/types";
+import type { Questionnaire } from "@/lib/questionnaire/repository";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import { scoreLead } from "@/lib/agents/lead-scoring";
@@ -28,10 +30,12 @@ export function LeadDetail({
   lead,
   demo,
   project,
+  questionnaires,
 }: {
   lead: Lead;
   demo: DemoWebsite | null;
   project: Project | null;
+  questionnaires: Questionnaire[];
 }) {
   const [current, setCurrent] = useState<Lead>(lead);
   const [notes, setNotes] = useState<string[]>(lead.notes);
@@ -276,7 +280,8 @@ export function LeadDetail({
 
           <SalesSection leadId={current.id} leadBusinessName={current.businessName} />
 
-          <ProjectSection
+          <QuestionnaireSection leadId={current.id} leadBusinessName={current.businessName} projectId={project?.id ?? null} questionnaires={questionnaires} />
+      <ProjectSection
             leadId={current.id}
             leadBusinessName={current.businessName}
             leadStatus={lead.leadStatus}

@@ -7,7 +7,15 @@ import type { QuestionnaireQuestion } from "@/lib/questionnaire/validation";
 const inputClass =
   "w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500";
 
-export function QuestionnaireForm({ slug, questions }: { slug: string; questions: QuestionnaireQuestion[] }) {
+export function QuestionnaireForm({
+  slug,
+  questions,
+  followUp = false,
+}: {
+  slug: string;
+  questions: QuestionnaireQuestion[];
+  followUp?: boolean;
+}) {
   const [state, formAction, pending] = useActionState<QuestionnaireSubmitState, FormData>(
     submitQuestionnaireResponseAction,
     { error: null }
@@ -22,6 +30,7 @@ export function QuestionnaireForm({ slug, questions }: { slug: string; questions
             {question.label}
             {question.required && <span className="ml-1 text-amber-400">*</span>}
           </label>
+          {question.help && <p className="text-xs text-zinc-500">{question.help}</p>}
           {question.type === "textarea" ? (
             <textarea
               id={`q_${question.id}`}
@@ -42,6 +51,15 @@ export function QuestionnaireForm({ slug, questions }: { slug: string; questions
                 </option>
               ))}
             </select>
+          ) : question.type === "upload" ? (
+            <input
+              id={`q_${question.id}`}
+              name={`f_${question.id}`}
+              type="file"
+              multiple
+              accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.doc,.docx"
+              className="w-full cursor-pointer rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-300 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-800 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
           ) : (
             <input
               id={`q_${question.id}`}
@@ -64,7 +82,7 @@ export function QuestionnaireForm({ slug, questions }: { slug: string; questions
         disabled={pending}
         className="w-full rounded-lg bg-indigo-600 px-4 py-3 font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-60"
       >
-        {pending ? "Versturen..." : "Verstuur antwoorden"}
+        {pending ? "Versturen..." : followUp ? "Verstuur aanvullende antwoorden" : "Verstuur antwoorden"}
       </button>
       <p className="text-xs text-zinc-500">
         Je antwoorden worden veilig opgeslagen bij Silvijn Studio en uitsluitend gebruikt voor jouw website-traject.

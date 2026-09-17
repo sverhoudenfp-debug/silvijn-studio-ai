@@ -62,7 +62,7 @@ test("public questionnaire submit lives outside the owner-protected action map",
   const s = read("app/questionnaire/actions.ts");
   assert.match(s, /"use server"/);
   assert.doesNotMatch(s, /requireStudioOwner/);
-  assert.match(s, /submitQuestionnaireResponse\(slug\.data, raw\)/);
+  assert.match(s, /submitQuestionnaireResponse\(slug\.data, raw, files\)/);
 });
 
 test("answers validate strictly against the questionnaire definitions", () => {

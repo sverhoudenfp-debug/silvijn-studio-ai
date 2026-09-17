@@ -9,6 +9,8 @@ import { getSalesInteractionRepository } from "@/lib/sales/repository";
 import { getProjectRepository } from "@/lib/projects/repository";
 import { QualityControlService } from "@/lib/qc/service";
 import { getGeneratedWebsiteRepository } from "@/lib/websites/repository";
+import { findQuestionnairesByLead } from "@/lib/questionnaire/service";
+import { QuestionnaireSection } from "@/components/leads/questionnaire-section";
 
 export async function generateMetadata(props: PageProps<"/projects/[id]">) {
   await requireStudioOwner();
@@ -28,10 +30,11 @@ export default async function ProjectDetailPage(props: PageProps<"/projects/[id]
   const project = await getProjectRepository().getById(id);
   if (!project) notFound();
 
-  const [lead, interactions, websites] = await Promise.all([
+  const [lead, interactions, websites, questionnaires] = await Promise.all([
     getLeadRepository().get(project.leadId),
     getSalesInteractionRepository().listByLead(project.leadId),
     getGeneratedWebsiteRepository().listByProject(project.id),
+    findQuestionnairesByLead(project.leadId),
   ]);
   const latestWebsite = websites.find((w) => w.status !== "archived") ?? websites[0] ?? null;
   const latestQc = latestWebsite
@@ -43,6 +46,7 @@ export default async function ProjectDetailPage(props: PageProps<"/projects/[id]
     <div className="space-y-4">
     <Link className="inline-block rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-200" href={`/projects/${id}/finance`}>Prijsgoedkeuring en betalingen</Link>
     {lead && <div className="rounded-xl border border-zinc-800 p-5"><LifecycleControl key={lead.leadStatus} leadId={lead.id} status={lead.leadStatus} projectId={project.id}/></div>}
+    {lead && <QuestionnaireSection leadId={lead.id} leadBusinessName={lead.businessName} projectId={project.id} questionnaires={questionnaires} />}
     <ProjectDetail
       project={project}
       lead={

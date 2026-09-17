@@ -35,6 +35,7 @@ const PROTECTED_PREFIXES = [
   "/automation",
   "/automations",
   "/automation-runs",
+  "/questionnaires",
 ];
 
 function hostname(request: NextRequest): string {

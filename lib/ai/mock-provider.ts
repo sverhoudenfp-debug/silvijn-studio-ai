@@ -289,11 +289,52 @@ function buildMockSalesAnalysis(prompt: string): string {
     .replaceAll("${ESCALATION_REASON_TOKEN}", JSON.stringify(c.escalationReason ?? null));
 }
 
+function buildMockQuestionnaire(prompt: string): string {
+  const nameMatch = prompt.match(/Bedrijf: (.+)/);
+  const businessName = nameMatch ? nameMatch[1].split("\n")[0].trim() : "Testbedrijf";
+  const output = {
+    title: `Vragenlijst website voor ${businessName}`,
+    intro: `Bedankt voor je interesse! Met deze korte vragenlijst stellen wij jouw website op maat samen. (TESTDATA mock)`,
+    questions: [
+      { id: "main_goal", label: "Wat is het belangrijkste doel van jouw website?", type: "select", options: ["Meer aanvragen", "Meer telefoontjes", "Betere uitstraling", "Verkopen via de website"], required: true },
+      { id: "pages", label: "Hoeveel pagina's heb je ongeveer nodig?", type: "select", options: ["1 (one-pager)", "3-5", "5-10"], required: true },
+      { id: "inspiration", label: "Zijn er websites die je mooi vindt? Noem er maximaal 3 (optioneel).", type: "textarea" },
+      { id: "logo_brand", label: "Heb je al een logo en huisstijl?", type: "select", options: ["Ja, compleet", "Alleen een logo", "Nog niets"], required: true },
+      { id: "content_upload", label: "Heb je teksten of foto\'s die we kunnen gebruiken? Upload ze hier (optioneel).", type: "upload" },
+    ],
+  };
+  return JSON.stringify(output);
+}
+
+function buildMockQuestionnaireCompletion(prompt: string): string {
+  const round2 = /RONDE 2/.test(prompt);
+  const output = round2
+    ? {
+        sufficient: true,
+        summary: "TESTDATA (mock): met de aanvullende antwoorden is er voldoende betrouwbare informatie voor een ontwerp- en bouwvoorstel.",
+        resolvedInformation: [{ key: "regio", value: "TESTDATA (mock): regio al bekend uit leadgegevens" }],
+        missingInformation: [],
+        followUpQuestions: [],
+      }
+    : {
+        sufficient: false,
+        summary: "TESTDATA (mock): de kern is bekend, maar een paar noodzakelijke details ontbreken nog.",
+        resolvedInformation: [{ key: "bedrijfsnaam", value: "TESTDATA (mock): bedrijfsnaam al bekend uit leadgegevens" }],
+        missingInformation: ["TESTDATA (mock): gewenste paginastructuur", "TESTDATA (mock): beschikbare teksten/foto\'s"],
+        followUpQuestions: [
+          { id: "follow_up_pages", label: "Welke pagina\'s wil je zeker terugzien? (bijv. Home, Diensten, Over ons, Contact)", type: "textarea", required: true },
+          { id: "follow_up_content", label: "Heb je teksten en foto\'s beschikbaar voor de website?", type: "select", options: ["Ja, alles", "Deels", "Nee, maken jullie die?"], required: true },
+        ],
+      };
+  return JSON.stringify(output);
+}
+
 export class MockAIProvider implements AIProvider {
   readonly id = "mock";
   readonly mode = "mock" as const;
 
-  async generateText(request: AIProviderRequest): Promise<AIProviderResult> {
+  
+async generateText(request: AIProviderRequest): Promise<AIProviderResult> {
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     const businessToken = request.prompt.match(/Bedrijf: (.+)/)?.[1]?.split("\n")[0] ?? "het bedrijf";
@@ -316,7 +357,11 @@ export class MockAIProvider implements AIProvider {
                 ? buildMockWebsiteSpecification(request.prompt)
               : request.task === "website_quality_analysis"
                 ? buildMockQualityAnalysis(request.prompt)
-                : `[MOCK AI] Antwoord op: ${request.prompt.slice(0, 80)}...`;
+                : request.task === "questionnaire_generation"
+                  ? buildMockQuestionnaire(request.prompt)
+                  : request.task === "questionnaire_completion"
+                    ? buildMockQuestionnaireCompletion(request.prompt)
+                    : `[MOCK AI] Antwoord op: ${request.prompt.slice(0, 80)}...`;
 
     return {
       text,

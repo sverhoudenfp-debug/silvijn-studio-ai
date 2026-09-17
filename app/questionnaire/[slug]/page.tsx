@@ -6,9 +6,10 @@ import { QuestionnaireForm } from "./questionnaire-form";
 /**
  * Publieke questionnaire — questionnaire.silvijnstudio.com/{slug}.
  * GEEN login, GEEN dashboard-toegang: de pagina toont uitsluitend de
- * actieve questionnaire die bij deze slug hoort (titel, intro, vragen).
+ * questionnaire die bij deze slug hoort (titel, intro, vragen).
  * Lead-, project- of andere klantgegevens worden nooit getoond.
- * Onbekende, draft- of gesloten slugs → nette 404.
+ * Draft → nette 404. Closed → nette gesloten-pagina (niet invulbaar).
+ * Na ronde 1 met ontbrekende informatie: max 3 AI-follow-upvragen (ronde 2).
  */
 
 export const dynamic = "force-dynamic";
@@ -25,8 +26,9 @@ export async function generateMetadata(props: PageProps<"/questionnaire/[slug]">
 
 export default async function QuestionnairePage(props: PageProps<"/questionnaire/[slug]">) {
   const { slug } = await props.params;
-  const { searchParams } = await props;
-  const submitted = (await searchParams).submitted === "1";
+  const params = await props.searchParams;
+  const submitted = params.submitted === "1";
+  const followUp = params.follow_up === "1";
 
   let questionnaire;
   try {
@@ -35,20 +37,41 @@ export default async function QuestionnairePage(props: PageProps<"/questionnaire
     notFound();
   }
 
+  const isClosed = questionnaire.status === "closed";
+  const inFollowUp = questionnaire.followUpQuestions.length > 0 && questionnaire.completionStatus === "QUESTIONNAIRE_FOLLOW_UP";
+  const showFollowUpForm = !isClosed && !submitted && followUp && inFollowUp;
+
   return (
     <main className="flex min-h-screen justify-center bg-zinc-950 px-4 py-16 text-zinc-100">
       <section className="w-full max-w-2xl rounded-xl border border-zinc-800 bg-zinc-900 p-8">
         <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Silvijn Studio</p>
         <h1 className="mt-2 text-2xl font-semibold">{questionnaire.title}</h1>
-        {questionnaire.intro && <p className="mt-3 whitespace-pre-line text-sm text-zinc-400">{questionnaire.intro}</p>}
+        {questionnaire.intro && !showFollowUpForm && (
+          <p className="mt-3 whitespace-pre-line text-sm text-zinc-400">{questionnaire.intro}</p>
+        )}
+        {showFollowUpForm && (
+          <p className="mt-3 text-sm text-zinc-400">
+            Bedankt voor je eerste antwoorden! Om jouw website goed op te bouwen hebben we nog een paar korte
+            aanvullende vragen:
+          </p>
+        )}
 
-        {submitted ? (
+        {isClosed ? (
+          <div className="mt-8 rounded-lg border border-zinc-700 bg-zinc-950 p-5">
+            <p className="text-sm font-medium text-zinc-300">Deze vragenlijst is gesloten.</p>
+            <p className="mt-1 text-sm text-zinc-500">
+              Hij kan niet meer worden ingevuld. Neem contact op met Silvijn Studio als je toch iets wilt aanvullen.
+            </p>
+          </div>
+        ) : submitted ? (
           <div className="mt-8 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-5">
             <p className="text-sm font-medium text-emerald-300">Bedankt! Je antwoorden zijn ontvangen.</p>
             <p className="mt-1 text-sm text-zinc-400">
               Silvijn Studio neemt zo snel mogelijk contact met je op over de volgende stappen.
             </p>
           </div>
+        ) : showFollowUpForm ? (
+          <QuestionnaireForm slug={questionnaire.slug} questions={questionnaire.followUpQuestions} followUp />
         ) : (
           <QuestionnaireForm slug={questionnaire.slug} questions={questionnaire.questions} />
         )}

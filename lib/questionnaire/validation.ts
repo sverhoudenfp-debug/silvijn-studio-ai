@@ -7,7 +7,7 @@ import { z } from "zod";
  * vraagdefinities van dát questionnaire gevalideerd.
  */
 
-export const questionnaireQuestionTypeSchema = z.enum(["text", "textarea", "email", "tel", "select"]);
+export const questionnaireQuestionTypeSchema = z.enum(["text", "textarea", "email", "tel", "select", "upload"]);
 
 export const questionnaireQuestionSchema = z.object({
   id: z.string().trim().min(1).max(80),
@@ -15,6 +15,7 @@ export const questionnaireQuestionSchema = z.object({
   type: questionnaireQuestionTypeSchema,
   options: z.array(z.string().trim().min(1).max(200)).max(20).optional(),
   required: z.boolean().optional(),
+  help: z.string().trim().max(200).optional(),
 });
 
 export type QuestionnaireQuestion = z.infer<typeof questionnaireQuestionSchema>;
@@ -23,6 +24,17 @@ export const questionnaireQuestionsSchema = z
   .array(questionnaireQuestionSchema)
   .min(1, "Een questionnaire heeft minimaal één vraag nodig")
   .max(50);
+
+/** Dashboard-flow: dynamisch gegenereerde vragenlijsten blijven begrensd. */
+export const generatedQuestionsSchema = z
+  .array(questionnaireQuestionSchema)
+  .min(1)
+  .max(15, "Een gegenereerde questionnaire heeft maximaal 15 vragen");
+
+export type QuestionnaireCompletionStatus =
+  | "QUESTIONNAIRE_FOLLOW_UP" // afwachtende follow-upantwoorden (ronde 2)
+  | "QUESTIONNAIRE_COMPLETE" // voldoende betrouwbare informatie
+  | "QUESTIONNAIRE_ATTENTION"; // onvoldoende na ronde 2 → aandachtspunt Silvijn
 
 export const questionnaireSlugSchema = z
   .string()

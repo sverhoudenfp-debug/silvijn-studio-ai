@@ -17,7 +17,8 @@ export type AgentType =
   | "pricing"
   | "website_generation"
   | "website_quality_control"
-  | "quality_control";
+  | "quality_control"
+  | "questionnaire";
 
 export type AITaskType =
   | "generate_text"
@@ -29,6 +30,8 @@ export type AITaskType =
   | "website_quality_analysis"
   | "lead_score"
   | "classify_lead"
+  | "questionnaire_generation"
+  | "questionnaire_completion"
   | "generate_structured";
 
 export interface AIUsage {
@@ -242,6 +245,27 @@ export interface RequirementsAnalysis {
   questions: string[];
   confidence: number;
 }
+export interface QuestionnaireGeneration {
+  title: string;
+  intro: string;
+  questions: {
+    id: string;
+    label: string;
+    type: "text" | "textarea" | "email" | "tel" | "select" | "upload";
+    options?: string[];
+    required?: boolean;
+    help?: string;
+  }[];
+}
+
+export interface QuestionnaireCompletion {
+  sufficient: boolean;
+  summary: string;
+  resolvedInformation: { key: string; value: string }[];
+  missingInformation: string[];
+  followUpQuestions: QuestionnaireGeneration["questions"];
+}
+
 
 /**
  * Context voor de AI-websiteplanning — uitsluitend beschikbare, echte

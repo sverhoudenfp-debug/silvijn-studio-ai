@@ -178,3 +178,27 @@ export function extractJSON(text: string): unknown {
   }
   return JSON.parse(stripped.slice(start, end + 1));
 }
+
+export const QuestionnaireQuestionSchema = z.object({
+  id: z.string().regex(/^[a-z0-9]+(_[a-z0-9]+)*$/, "vraag-id moet snake_case zijn").min(1).max(80),
+  label: z.string().min(5, "vraag te kort").max(300),
+  type: z.enum(["text", "textarea", "email", "tel", "select", "upload"]),
+  options: z.array(z.string().min(1).max(200)).max(10).optional(),
+  required: z.boolean().optional(),
+  help: z.string().max(200).optional(),
+});
+
+export const QuestionnaireGenerationSchema = z.object({
+  title: z.string().min(3).max(120),
+  intro: z.string().max(1000),
+  questions: z.array(QuestionnaireQuestionSchema).min(1).max(15),
+});
+
+export const QuestionnaireCompletionSchema = z.object({
+  sufficient: z.boolean(),
+  summary: z.string().min(10).max(1500),
+  /** Veig herleide informatie uit bestaande context (nooit verzonnen feiten). */
+  resolvedInformation: z.array(z.object({ key: z.string().min(2).max(60), value: z.string().min(1).max(500) })).max(15),
+  missingInformation: z.array(z.string().min(5).max(300)).max(5),
+  followUpQuestions: z.array(QuestionnaireQuestionSchema).max(3),
+});

@@ -660,7 +660,12 @@ class SupabaseAutomationQueueRepository implements AutomationQueueRepository {
       p_exclude: exclude,
     });
     if (error) throw new Error(`AutomationQueueRepository: claimen mislukt: ${error.message}`);
-    return data ? rowToQueueItem(data as AutomationQueueRow) : null;
+    if (!data) return null;
+    const claimed = rowToQueueItem(data as AutomationQueueRow);
+    // PostgREST serialiseert een lege claim (NULL-composite) als object met
+    // alleen null-velden. Alleen een echte uuid-id is een geldige claim;
+    // anders zou de runtime een fantoomitem "verwerken".
+    return claimed.id ? claimed : null;
   }
   async reclaimStale(olderThanMs: number, maxAttempts: number): Promise<number> {
     const olderThan = new Date(Date.now() - olderThanMs).toISOString();

@@ -429,6 +429,16 @@ test("cron-endpoint is fail-loud beveiligd en de Vercel-cron staat juist geconfi
 });
 
 // ---------------------------------------------------------------------------
+// 13b. PostgREST fantoom-claim: NULL-composite mag nooit als item tellen
+// ---------------------------------------------------------------------------
+test("lege PostgREST-claim (NULL-composite met null-velden) geldt niet als item", () => {
+  const source = readFileSync("lib/automation/repositories.ts", "utf8");
+  // claimNext moet het null-veldenobject van PostgREST afwijzen: alleen een
+  // echte uuid-id is een geldige claim (productiebug 17-09-2026).
+  assert.match(source, /return claimed\.id \? claimed : null;/);
+});
+
+// ---------------------------------------------------------------------------
 // 14. Migratie: atomair claimen + stale-reclaim + rechten op de database
 // ---------------------------------------------------------------------------
 test("migratie 0016 bevat SKIP LOCKED-claim, stale-reclaim en service-role-restrictie", () => {

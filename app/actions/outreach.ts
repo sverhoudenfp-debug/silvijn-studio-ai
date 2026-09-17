@@ -43,8 +43,8 @@ export async function cancelOutreachDraft(draftId: string): Promise<OutreachDraf
   return draft;
 }
 
-/** Gereserveerd voor een latere fase — in Fase 6 bestaat er geen verzenden. */
-export async function sendOutreachDraft(): Promise<never> {
-  await requireStudioOwner();
-  throw new Error("Verzenden is niet mogelijk in Fase 6 — e-mails worden nog niet verstuurd");
-}
+/**
+ * Verzenden bestaat uitsluitend als expliciete eigenaarsactie via Gmail
+ * (zie app/actions/gmail.ts → sendApprovedOutreachDraft). Er is géén
+ * automatische/autonome verzendweg; deze stub is vervangen door die actie.
+ */

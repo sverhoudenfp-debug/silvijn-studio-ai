@@ -4,6 +4,7 @@ import { OutreachView } from "@/components/outreach/outreach-view";
 import { getDemoRepository } from "@/lib/repositories/demo-repository";
 import { getLeadRepository } from "@/lib/repositories/lead-repository";
 import { OutreachService } from "@/lib/outreach/service";
+import { gmailIngestStatus } from "@/lib/gmail/ingest";
 
 /**
  * Outreach-overzicht — echte data uit de draft-repository (geen mockstats).
@@ -13,10 +14,11 @@ import { OutreachService } from "@/lib/outreach/service";
 export default async function OutreachPage() {
   await requireStudioOwner();
   const service = new OutreachService();
-  const [drafts, leads, demos] = await Promise.all([
+  const [drafts, leads, demos, gmail] = await Promise.all([
     service.listAll(),
     getLeadRepository().list(),
     getDemoRepository().list(),
+    gmailIngestStatus(),
   ]);
 
   const leadNames: Record<string, { name: string; hasDemo: boolean; demoUrl: string | null }> = {};
@@ -29,5 +31,5 @@ export default async function OutreachPage() {
     };
   }
 
-  return <OutreachView initialDrafts={drafts} leadNames={leadNames} />;
+  return <OutreachView initialDrafts={drafts} leadNames={leadNames} gmailReady={gmail.configured && gmail.connected} />;
 }

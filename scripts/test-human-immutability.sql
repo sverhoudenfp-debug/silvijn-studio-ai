@@ -2,7 +2,14 @@ begin;
 do $$
 declare uid uuid:=gen_random_uuid(); lid uuid; pid uuid; wid uuid; qid uuid;
 begin
- insert into auth.users(id,email,email_confirmed_at) values(uid,'silvijn@silvijnstudio.com',now());
+-- Eigenaarsaccount bestaat mogelijk al (login-flow): herbruik dan het
+ -- bestaande id; maak anders de fixture aan. Rollback maakt alles ongedaan.
+ if exists (select 1 from auth.users where email = 'silvijn@silvijnstudio.com' and is_sso_user = false) then
+   select id into uid from auth.users where email = 'silvijn@silvijnstudio.com' and is_sso_user = false;
+   update auth.users set email_confirmed_at = now() where id = uid and email_confirmed_at is null;
+ else
+   insert into auth.users(id,email,email_confirmed_at) values(uid,'silvijn@silvijnstudio.com',now());
+ end if;
  perform set_config('request.jwt.claims',jsonb_build_object('sub',uid,'role','authenticated','email','silvijn@silvijnstudio.com')::text,true);
  insert into public.leads(business_name,industry,city,province,website_status,source) values('IMMUTABILITY TRANSACTION FIXTURE','test','test','test','no_website','manual') returning id into lid;
  insert into public.projects(lead_id,name) values(lid,'IMMUTABILITY TRANSACTION FIXTURE') returning id into pid;

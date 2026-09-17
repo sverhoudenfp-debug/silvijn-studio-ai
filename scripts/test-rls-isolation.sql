@@ -1,7 +1,13 @@
 begin;
+-- Eigenaarsaccount bestaat mogelijk al (login-flow): herbruik het id.
 insert into auth.users(id,email,email_confirmed_at) values
- ('d29c4450-0000-4000-8000-000000000001','silvijn@silvijnstudio.com',now()),
+ ('d29c4450-0000-4000-8000-000000000001','silvijn@silvijnstudio.com',now())
+ on conflict (email) where is_sso_user = false do update set email_confirmed_at = now();
+insert into auth.users(id,email,email_confirmed_at) values
  ('d29c4450-0000-4000-8000-000000000002','isolation-fixture@example.invalid',now());
+-- Eigenaarsaccount bestaat mogelijk al: los het id dynamisch op.
+create temp table _owner_id as
+ select id from auth.users where email='silvijn@silvijnstudio.com' and is_sso_user=false limit 1;
 select set_config('request.jwt.claims','{"sub":"d29c4450-0000-4000-8000-000000000002","role":"authenticated","email":"isolation-fixture@example.invalid"}',true);
 set local role authenticated;
 do $$ begin
@@ -15,7 +21,7 @@ do $$ begin
  exception when insufficient_privilege then null; end;
 end $$;
 reset role;
-select set_config('request.jwt.claims','{"sub":"d29c4450-0000-4000-8000-000000000001","role":"authenticated","email":"silvijn@silvijnstudio.com"}',true);
+select set_config('request.jwt.claims', jsonb_build_object('sub',(select id from _owner_id),'role','authenticated','email','silvijn@silvijnstudio.com')::text, true);
 set local role authenticated;
 do $$ begin
  if not public.is_studio_owner() then raise exception 'TEST: owner rejected'; end if;
@@ -27,7 +33,7 @@ do $$ begin
  exception when insufficient_privilege then null; end;
 end $$;
 reset role;
-update auth.users set email_confirmed_at=null where id='d29c4450-0000-4000-8000-000000000001';
+update auth.users set email_confirmed_at=null where id=(select id from _owner_id);
 set local role authenticated;
 do $$ begin
  if public.is_studio_owner() then raise exception 'TEST: unverified email became owner'; end if;

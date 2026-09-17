@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test tests/*.test.ts",
+    "test": "NODE_OPTIONS=--conditions=react-server tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit --incremental false"
   },
   "dependencies": {

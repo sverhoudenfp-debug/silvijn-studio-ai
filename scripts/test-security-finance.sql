@@ -4,7 +4,15 @@ do $$
 declare owner_id uuid:=gen_random_uuid(); outsider_id uuid:=gen_random_uuid(); lead_id uuid; project_id uuid; approval_id uuid; event_id uuid; key_id uuid:=gen_random_uuid(); gate jsonb; count_before bigint;
 begin
  select count(*) into count_before from public.leads;
- insert into auth.users(id,email,email_confirmed_at) values(owner_id,'silvijn@silvijnstudio.com',now()),(outsider_id,'security-fixture@example.invalid',now());
+-- Eigenaarsaccount bestaat mogelijk al (login-flow): herbruik dan het
+ -- bestaande id; maak anders de fixture aan. Rollback maakt alles ongedaan.
+ if exists (select 1 from auth.users where email = 'silvijn@silvijnstudio.com' and is_sso_user = false) then
+   select id into owner_id from auth.users where email = 'silvijn@silvijnstudio.com' and is_sso_user = false;
+   update auth.users set email_confirmed_at = now() where id = owner_id and email_confirmed_at is null;
+ else
+   insert into auth.users(id,email,email_confirmed_at) values(owner_id,'silvijn@silvijnstudio.com',now());
+ end if;
+ insert into auth.users(id,email,email_confirmed_at) values(outsider_id,'security-fixture@example.invalid',now());
  perform set_config('request.jwt.claims',jsonb_build_object('sub',outsider_id,'role','authenticated','email','security-fixture@example.invalid')::text,true);
  if public.is_studio_owner() then raise exception 'TEST: outsider became owner'; end if;
  begin

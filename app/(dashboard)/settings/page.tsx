@@ -1,7 +1,8 @@
-
 import { requireStudioOwner } from "@/lib/auth/server";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { gmailIngestStatus } from "@/lib/gmail/ingest";
+import { GmailSettingsCard } from "@/components/settings/gmail-settings-card";
 
 const sections = [
   { title: "Studio gegevens", description: "Bedrijfsnaam, e-mailadres, handtekening voor outreach" },
@@ -14,8 +15,13 @@ const sections = [
   { title: "Security & AVG", description: "Gegevensbewaring, logging, toestemmingen" },
 ];
 
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ gmail_error?: string; gmail_connected?: string }>;
+}) {
   await requireStudioOwner();
+  const [params, gmail] = await Promise.all([searchParams, gmailIngestStatus()]);
   return (
     <div className="space-y-6">
       <div>
@@ -24,6 +30,7 @@ export default async function SettingsPage() {
           Configuratie van de studio — secties worden fase voor fase geactiveerd.
         </p>
       </div>
+      <GmailSettingsCard gmail={gmail} flash={{ error: params.gmail_error ?? null, connected: params.gmail_connected ?? null }} />
       <div className="grid gap-4 md:grid-cols-2">
       {sections.map((section) => (
         <Card key={section.title} className="cursor-pointer transition-colors hover:border-zinc-700">

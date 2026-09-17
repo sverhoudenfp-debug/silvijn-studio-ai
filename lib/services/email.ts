@@ -4,6 +4,8 @@
  * uit environment variables, nooit uit de code.
  */
 
+import { GmailEmailProvider } from "@/lib/gmail/provider";
+
 export interface OutboundEmail {
   to: string;
   subject: string;
@@ -38,8 +40,16 @@ export class MockEmailProvider implements EmailProvider {
 }
 
 export function getEmailProvider(): EmailProvider {
-  // Later: keuze op basis van EMAIL_PROVIDER + API key uit environment
-  // variables (Resend, Postmark, SendGrid, etc.). Zonder configuratie
-  // blijft het systeem veilig in mock mode.
+  // EMAIL_PROVIDER bepaalt de provider; credentials komen altijd uit
+  // environment variables. Standaard (en in tests) blijft de mock.
+  // EMAIL_PROVIDER=gmail zonder complete OAuth-configuratie faalt
+  // expliciet (fail-loud): er wordt nooit stil mock verzonden.
+  const provider = (process.env.EMAIL_PROVIDER ?? "").trim().toLowerCase();
+  if (provider === "gmail") {
+    return new GmailEmailProvider();
+  }
+  if (provider && provider !== "mock") {
+    throw new Error(`BLOCKED_EXTERNAL_CONFIGURATION: onbekende EMAIL_PROVIDER '${provider}'`);
+  }
   return new MockEmailProvider();
 }

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { approveOutreachDraft, cancelOutreachDraft } from "@/app/actions/outreach";
+import { sendApprovedOutreachDraft } from "@/app/actions/gmail";
 import { Badge } from "@/components/ui/badge";
 import type { OutreachDraft } from "@/lib/outreach/types";
 
@@ -33,13 +34,32 @@ function Stat({ label, value }: { label: string; value: number }) {
 export function OutreachView({
   initialDrafts,
   leadNames,
+  gmailReady = false,
 }: {
   initialDrafts: OutreachDraft[];
   leadNames: Record<string, { name: string; hasDemo: boolean; demoUrl: string | null }>;
+  gmailReady?: boolean;
 }) {
   const [drafts, setDrafts] = useState(initialDrafts);
   const [error, setError] = useState<string | null>(null);
+  const [pendingId, setPendingId] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  function sendDraft(draftId: string) {
+    startTransition(async () => {
+      setPendingId(draftId);
+      try {
+        await sendApprovedOutreachDraft(draftId);
+        setError(null);
+        // Ververs via router: sent-status + provider-bewijs komen uit de server.
+        window.location.reload();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Verzenden mislukt");
+      } finally {
+        setPendingId(null);
+      }
+    });
+  }
 
   function updateStatus(draftId: string, action: "approve" | "cancel") {
     startTransition(async () => {
@@ -61,7 +81,7 @@ export function OutreachView({
       <div>
         <h2 className="text-2xl font-semibold tracking-tight text-zinc-50">Outreach</h2>
         <p className="mt-1 text-sm text-zinc-400">
-          AI-gegenereerde concepten per lead. Concepten worden nooit automatisch verzonden — verzenden volgt in een latere fase.
+          AI-gegenereerde concepten per lead. Concepten worden nooit automatisch verzonden; versturen is uitsluitend een expliciete eigenaarsactie via het verbonden Gmail-account.
         </p>
       </div>
 
@@ -143,7 +163,18 @@ export function OutreachView({
                           </>
                         )}
                         {draft.status === "approved" && (
-                          <span className="text-xs text-zinc-500">Wacht op verzendfase</span>
+                          gmailReady ? (
+                            <button
+                              type="button"
+                              onClick={() => sendDraft(draft.id)}
+                              disabled={pending}
+                              className="h-9 rounded-lg border border-indigo-500/40 bg-indigo-950/60 px-3 text-xs font-semibold text-indigo-300 hover:bg-indigo-900/60 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 focus-visible:ring-indigo-500"
+                            >
+                              {pendingId === draft.id ? "Versturen…" : "Versturen via Gmail"}
+                            </button>
+                          ) : (
+                            <span className="text-xs text-zinc-500">Versturen vereist een verbonden Gmail-account (Settings)</span>
+                          )
                         )}
                       </div>
                     </td>

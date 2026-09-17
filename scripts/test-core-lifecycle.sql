@@ -3,7 +3,15 @@ begin;
 do $$
 declare uid uuid:=gen_random_uuid(); outsider uuid:=gen_random_uuid(); l1 uuid; l2 uuid; o1 uuid; o2 uuid; m1 uuid; m2 uuid; cid uuid; contact1 uuid; k uuid:=gen_random_uuid(); received timestamptz:=now(); p uuid; ap uuid; pm uuid;
 begin
- insert into auth.users(id,email,email_confirmed_at) values(uid,'silvijn@silvijnstudio.com',now()),(outsider,'core-outsider@example.invalid',now());
+-- Eigenaarsaccount bestaat mogelijk al (login-flow): herbruik dan het
+ -- bestaande id; maak anders de fixture aan. Rollback maakt alles ongedaan.
+ if exists (select 1 from auth.users where email = 'silvijn@silvijnstudio.com' and is_sso_user = false) then
+   select id into uid from auth.users where email = 'silvijn@silvijnstudio.com' and is_sso_user = false;
+   update auth.users set email_confirmed_at = now() where id = uid and email_confirmed_at is null;
+ else
+   insert into auth.users(id,email,email_confirmed_at) values(uid,'silvijn@silvijnstudio.com',now());
+ end if;
+ insert into auth.users(id,email,email_confirmed_at) values(outsider,'core-outsider@example.invalid',now());
  perform set_config('request.jwt.claims',jsonb_build_object('sub',uid,'role','authenticated','email','silvijn@silvijnstudio.com')::text,true);
  insert into public.leads(business_name,industry,city,province,website_status,source,email) values('CORE FIXTURE ONE','test','test','test','no_website','manual','reply@example.invalid') returning id into l1;
  insert into public.leads(business_name,industry,city,province,website_status,source,email) values('CORE FIXTURE TWO','test','test','test','no_website','manual','reply@example.invalid') returning id into l2;

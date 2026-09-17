@@ -181,7 +181,7 @@ export class AutomationRuntime {
   private async processItem(item: AutomationQueueItem, config: RuntimeConfig): Promise<QueueItemOutcome> {
     await emitEvent({
       type: "queue_item_claimed",
-      entityType: item.entityType,
+      entityType: item.entityType ?? "none",
       entityId: item.entityId,
       payload: { queueItemId: item.id, automationId: item.automationId, attempts: item.attempts },
       source: "runtime",
@@ -310,7 +310,7 @@ export class AutomationRuntime {
           : outcome === "retried"
             ? "queue_item_retried"
             : "queue_item_failed",
-      entityType: item.entityType,
+      entityType: item.entityType ?? "none",
       entityId: item.entityId,
       payload: {
         queueItemId: item.id,

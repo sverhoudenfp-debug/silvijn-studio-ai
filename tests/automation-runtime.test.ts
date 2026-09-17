@@ -436,7 +436,7 @@ test("migratie 0016 bevat SKIP LOCKED-claim, stale-reclaim en service-role-restr
   assert.match(migration, /for update skip locked/i);
   assert.match(migration, /claim_next_automation_queue_item/);
   assert.match(migration, /reclaim_stale_processing_items/);
-  assert.match(migration, /revoke all on function public\.claim_next_automation_queue_item\(\) from public, anon, authenticated/);
+  assert.match(migration, /revoke all on function public\.claim_next_automation_queue_item\(uuid\[\]\) from public, anon, authenticated/);
   assert.match(migration, /add column if not exists claimed_at/);
   // Queue-uitkomsten zijn typed events (audit):
   for (const evt of ["queue_item_claimed", "queue_item_completed", "queue_item_retried", "queue_item_failed", "queue_item_reclaimed"]) {

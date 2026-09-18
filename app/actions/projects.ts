@@ -5,6 +5,10 @@ import { requireStudioOwner } from "@/lib/auth/server";
 
 import { revalidatePath } from "next/cache";
 import { ProjectService } from "@/lib/projects/service";
+import { humanRpc } from "@/lib/auth/server";
+import { getProjectRepository } from "@/lib/projects/repository";
+import { evaluateRequirementsCompleteness, type CompletenessEvaluation } from "@/lib/projects/completeness";
+import { getQuestionnaireRepository } from "@/lib/questionnaire/repository";
 import type { Project, ProjectRequirements, ProjectStatus } from "@/lib/projects/types";
 import type { PriceIndication } from "@/lib/pricing/types";
 
@@ -97,4 +101,46 @@ export async function updateProjectStatusAction(projectId: string, status: Proje
   const project = await new ProjectService().updateStatus(projectId, status);
   revalidatePath(`/projects/${projectId}`);
   return project;
+}
+
+// ============================================================
+// Fase I.1 — DETERMINISTISCHE requirements-completeness
+// ============================================================
+
+/**
+ * Compleetheid beoordelen (expliciete owner-actie). De app-laag geeft de
+ * uitspraak leesbaar weer; requirements_complete wordt uitsluitend gezet
+ * door de owner-RPC set_project_requirements_complete, die dezelfde zes
+ * blokkerende checks onafhankelijk herverifieert in SQL. Bij onvoldoende
+ * informatie wordt de missende lijst getoond — er wordt nooit gegokt en
+ * de productie-gate blijft dicht.
+ */
+export async function evaluateRequirementsCompletenessAction(projectId: string): Promise<{
+  evaluation: CompletenessEvaluation;
+  requirementsComplete: boolean;
+}> {
+  await requireStudioOwner();
+  const project = await getProjectRepository().getById(projectId);
+  if (!project) throw new Error("Project niet gevonden");
+  const questionnaires = await getQuestionnaireRepository().findByLeadId(project.leadId);
+  const evaluation = evaluateRequirementsCompleteness(project.requirements, questionnaires.map((q) => ({
+    status: q.status,
+    completionStatus: q.completionStatus,
+  })));
+  let requirementsComplete = project.requirementsComplete;
+  if (evaluation.complete) {
+    // Enige weg naar true: de RPC herverifieert in SQL en auditeert.
+    await humanRpc("set_project_requirements_complete", { p_project: projectId });
+    requirementsComplete = true;
+  }
+  revalidatePath(`/projects/${projectId}`);
+  return { evaluation, requirementsComplete };
+}
+
+/** Compleetheid expliciet intrekken (owner-RPC, geauditeerd). */
+export async function markRequirementsIncompleteAction(projectId: string, reason: string): Promise<boolean> {
+  await requireStudioOwner();
+  await humanRpc("set_project_requirements_incomplete", { p_project: projectId, p_reason: reason ?? "" });
+  revalidatePath(`/projects/${projectId}`);
+  return true;
 }

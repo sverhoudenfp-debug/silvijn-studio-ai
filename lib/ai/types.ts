@@ -16,6 +16,7 @@ export type AgentType =
   | "qualification"
   | "pricing"
   | "website_generation"
+  | "design_planning"
   | "website_quality_control"
   | "quality_control"
   | "questionnaire";
@@ -27,6 +28,7 @@ export type AITaskType =
   | "sales_analysis"
   | "requirements_analysis"
   | "website_planning"
+  | "design_planning"
   | "website_quality_analysis"
   | "lead_score"
   | "classify_lead"
@@ -297,6 +299,30 @@ export interface WebsiteSpecificationInput {
  * De AI is ADVISEREND: ze mag analyseren en classificeren, maar nooit
  * goedkeuren, leveren, publiceren of harde FAIL-regels overrulen.
  */
+/**
+ * Context voor de AI-designplanning (Fase I.1) — uitsluitend beschikbare,
+ * echte informatie uit lead, project, requirements, questionnaires en
+ * salescontext. De AI verzint hier GEEN feiten aan toe; het plan is intern
+ * en nooit klantzichtbaar.
+ */
+export interface DesignPlanInput {
+  businessName: string;
+  industry: string;
+  city: string;
+  province: string | null;
+  leadNotes: string[];
+  requirementsSummary: string;
+  numberOfPages: number | null;
+  ecommerce: boolean | null;
+  specialRequirements: string | null;
+  existingWebsite: boolean;
+  googleRating: number | null;
+  reviewCount: number | null;
+  questionnaireSummary: string[];
+  hasCompletedQuestionnaire: boolean;
+  suggestedTemplate: string;
+}
+
 export interface WebsiteQualityAnalysisInput {
   businessName: string;
   industry: string;

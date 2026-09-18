@@ -122,3 +122,18 @@ export function checkWebsiteSpecificationSafety(
 
   return { passed: issues.length === 0, issues };
 }
+
+/**
+ * Fase I.1: hergebruik van de fabricatie-patronen voor willekeurige interne
+ * documenten (bijv. het Design Plan). Puur tekstscan — geen lead-context
+ * nodig; dezelfde PATTERNS als de websitecontent-controle.
+ */
+export function scanTextForFabricationPatterns(text: string): WebsiteSafetyIssue[] {
+  const issues: WebsiteSafetyIssue[] = [];
+  for (const { rule, pattern, reason } of PATTERNS) {
+    if (pattern.test(text)) {
+      issues.push({ rule, reason });
+    }
+  }
+  return issues;
+}

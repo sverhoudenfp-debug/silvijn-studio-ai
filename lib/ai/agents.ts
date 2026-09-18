@@ -96,6 +96,15 @@ export const AI_AGENTS: Record<AgentType, AgentDefinition> = {
     defaultTier: "balanced",
     defaultTask: "website_planning",
   },
+  design_planning: {
+    id: "design_planning",
+    name: "Design Planning Agent",
+    description:
+      "Plant het INTERNE Design Plan per project (doelen, doelgroep, navigatie, paginastructuur, hiërarchie, branding, typografie, kleur, spacing, componenten, CTA, beeld, responsive, animatie, functionaliteit, accessibility, SEO/performance) als Zod-gevalideerde JSON. Uitsluitend echte informatie; het plan is nooit klantzichtbaar.",
+    status: "implemented",
+    defaultTier: "balanced",
+    defaultTask: "design_planning",
+  },
   website_quality_control: {
     id: "website_quality_control",
     name: "Website Quality Control Agent",

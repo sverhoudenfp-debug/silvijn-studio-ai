@@ -17,6 +17,10 @@ import { Card, CardHeader } from "@/components/ui/card";
 import type { Project, ProjectRequirements, ProjectStatus } from "@/lib/projects/types";
 import type { PriceIndication } from "@/lib/pricing/types";
 import { WebsiteGenerationSection } from "@/components/projects/website-generation-section";
+import { DesignPlanSection } from "@/components/projects/design-plan-section";
+import { RequirementsCompletenessSection } from "@/components/projects/requirements-completeness-section";
+import type { DesignPlanRecord } from "@/lib/websites/design-plan";
+import type { CompletenessEvaluation } from "@/lib/projects/completeness";
 import type { GeneratedWebsite } from "@/lib/websites/types";
 import type { QualityControl } from "@/lib/qc/types";
 
@@ -111,12 +115,16 @@ export function ProjectDetail({
   latestQualification,
   websites,
   latestQc,
+  designPlans,
+  completeness,
 }: {
   project: Project;
   lead: { id: string; businessName: string; leadScore: number; leadStatus: string; industry: string; city: string } | null;
   latestQualification: { status: string; interestLevel: string; projectType: string | null; timeline: string | null; missingInformation: string[] } | null;
   websites: GeneratedWebsite[];
   latestQc: QualityControl | null;
+  designPlans: DesignPlanRecord[];
+  completeness: CompletenessEvaluation;
 }) {
   const [form, setForm] = useState<RequirementsFormState>(toFormState(project.requirements));
   const [indications, setIndications] = useState<PriceIndication[]>([]);
@@ -500,6 +508,18 @@ export function ProjectDetail({
           </p>
         )}
       </Card>
+
+      {/* ===== FASE I.1: REQUIREMENTS-COMPLEETHEID + DESIGN PLAN (intern) ===== */}
+      <RequirementsCompletenessSection
+        projectId={project.id}
+        requirementsComplete={project.requirementsComplete}
+        evaluation={completeness}
+      />
+      <DesignPlanSection
+        projectId={project.id}
+        projectStatus={project.status}
+        plans={designPlans}
+      />
 
       {/* ===== WEBSITE GENERATION ===== */}
       <WebsiteGenerationSection

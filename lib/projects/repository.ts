@@ -54,6 +54,7 @@ function buildProject(input: ProjectCreateInput, id: string, now: string): Proje
     currency: input.currency,
     timeline: input.timeline,
     notes: input.notes,
+    requirementsComplete: false,
     createdAt: now,
     updatedAt: now,
   };
@@ -109,6 +110,7 @@ interface ProjectRow {
   currency: string;
   timeline: string | null;
   notes: string;
+  requirements_complete: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -127,6 +129,7 @@ function rowToProject(row: ProjectRow): Project {
     currency: row.currency,
     timeline: row.timeline,
     notes: row.notes,
+    requirementsComplete: row.requirements_complete ?? false,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

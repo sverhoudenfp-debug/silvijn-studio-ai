@@ -68,6 +68,8 @@ export interface Project {
   currency: string;
   timeline: string | null;
   notes: string;
+  /** Fase I.1: alléén zetbaar via de owner-RPC set_project_requirements_complete. */
+  requirementsComplete: boolean;
   createdAt: string;
   updatedAt: string;
 }

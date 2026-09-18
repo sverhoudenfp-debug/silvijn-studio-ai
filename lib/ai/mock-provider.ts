@@ -306,6 +306,138 @@ function buildMockQuestionnaire(prompt: string): string {
   return JSON.stringify(output);
 }
 
+function buildMockDesignPlan(prompt: string): string {
+  // Deterministische, veilige mock-designplanning: uitsluitend echte data
+  // uit de prompt; alle onbekende velden zijn null en worden expliciet als
+  // missingInformation genoemd — nooit fabricatie.
+  const businessName = prompt.match(/Bedrijf: ([^\n]+)/)?.[1]?.trim() ?? "Testbedrijf (TESTDATA)";
+  const industry = prompt.match(/Branche: ([^\n]+)/)?.[1]?.trim() ?? "Dienstverlening (TESTDATA)";
+  const city = prompt.match(/Plaats: ([^\n(]+)/)?.[1]?.trim() ?? "Teststad (TESTDATA)";
+  const pagesMatch = prompt.match(/AANTAL PAGINA'S \(bindend voor de paginastructuur\): (\d+)/);
+  const pageCount = pagesMatch ? Number.parseInt(pagesMatch[1], 10) : 1;
+  const ecommerce = /E-COMMERCE: ja/.test(prompt);
+
+  const missing: string[] = [];
+  const pages: Array<Record<string, unknown>> = [];
+  const navigation: Array<Record<string, unknown>> = [];
+  for (let i = 1; i <= pageCount; i += 1) {
+    const key = i === 1 ? "home" : `page-${i}`;
+    pages.push({
+      key,
+      title: i === 1 ? `Home | ${businessName}` : `Pagina ${i}`,
+      purpose: i === 1 ? `Kernpagina met aanbod en conversie voor ${businessName}.` : `Aanvullende pagina binnen de afgesproken scope.`,
+      sections: i === 1 ? ["hero", "diensten", "over", "contact"] : ["intro", "content", "contact"],
+    });
+    navigation.push({ label: i === 1 ? "Home" : `Pagina ${i}`, pageKey: key });
+  }
+
+  if (!/SPECIALE WENSEN:/.test(prompt)) missing.push("Speciale wensen zijn niet gedocumenteerd");
+  if (/QUESTIONNAIRE-ANTWOORDEN: geen/.test(prompt)) missing.push("Questionnaire-antwoorden ontbreken");
+  if (!/E-COMMERCE: (ja|nee)/.test(prompt)) missing.push("E-commerce-wens is onbekend");
+
+  const plan = {
+    goals: {
+      primaryGoal: `Professionele online presentatie waarmee ${businessName} aanvragen genereert.`,
+      secondaryGoals: [],
+      conversionGoal: null,
+    },
+    audience: {
+      primaryAudience: null,
+      secondaryAudiences: [],
+      toneOfVoice: null,
+    },
+    navigation: {
+      items: navigation,
+      structure: "Eén hoofdnavigatie met mobiel menu.",
+    },
+    pageStructure: pages,
+    visualHierarchy: {
+      strategy: "Duidelijke hiërarchie: hero met primaire boodschap, daarna ondersteunende secties.",
+      aboveTheFold: ["Hero met primaire CTA"],
+    },
+    branding: {
+      styleDirection: null,
+      mood: [],
+      existingBrandAssets: null,
+      preferredColors: [],
+      dislikedColors: [],
+      restrictions: [],
+    },
+    typography: {
+      pairing: null,
+      scale: null,
+      weights: [],
+      rationale: null,
+    },
+    colors: {
+      primary: null,
+      secondary: null,
+      accent: null,
+      neutrals: [],
+      usageGuidance: null,
+    },
+    spacing: {
+      scale: null,
+      density: null,
+    },
+    components: [
+      { key: "header", purpose: "Bedrijfsnaam en navigatie", notes: null },
+      { key: "hero", purpose: "Primaire boodschap met CTA", notes: null },
+      { key: "services", purpose: "Aanbod van het bedrijf", notes: null },
+      { key: "contact", purpose: "Contactmogelijkheden", notes: null },
+      { key: "footer", purpose: "Bedrijfsgegevens en sluiting", notes: null },
+    ],
+    ctaStrategy: {
+      primary: null,
+      secondary: null,
+      placement: [],
+      leadCapture: null,
+    },
+    imagery: {
+      style: null,
+      requirements: [`Heldere beeldbehoeften voor ${industry} in ${city}`],
+      placeholderStrategy: null,
+    },
+    responsive: {
+      mobile: "Mobile-first layout met volledige navigatie via menu.",
+      tablet: null,
+      desktop: null,
+      breakpoints: [],
+    },
+    animation: {
+      strategy: null,
+      allowed: [],
+      restrictions: [],
+    },
+    functionality: {
+      features: ecommerce
+        ? [{ key: "webshop", description: "E-commerce volgens de requirements", source: "requirements" }]
+        : [],
+      integrations: [],
+    },
+    accessibility: {
+      contrast: null,
+      focusAndKeyboard: null,
+      semantics: "Semantische HTML met logische kopstructuur.",
+      formsAndLabels: null,
+      guidelines: [],
+    },
+    seoPerformance: {
+      titleStrategy: null,
+      metaStrategy: null,
+      localSeo: `Lokale vindbaarheid voor ${city}.`,
+      performanceBudget: null,
+      imageOptimization: null,
+    },
+    basis: {
+      sources: ["lead", "requirements"],
+    },
+    missingInformation: missing,
+  };
+
+  return JSON.stringify(plan);
+}
+
 function buildMockQuestionnaireCompletion(prompt: string): string {
   const round2 = /RONDE 2/.test(prompt);
   const output = round2
@@ -355,6 +487,8 @@ async generateText(request: AIProviderRequest): Promise<AIProviderResult> {
               ? buildMockRequirementsAnalysis(request.prompt)
               : request.task === "website_planning"
                 ? buildMockWebsiteSpecification(request.prompt)
+              : request.task === "design_planning"
+                ? buildMockDesignPlan(request.prompt)
               : request.task === "website_quality_analysis"
                 ? buildMockQualityAnalysis(request.prompt)
                 : request.task === "questionnaire_generation"

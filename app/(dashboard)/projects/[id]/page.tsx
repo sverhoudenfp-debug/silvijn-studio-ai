@@ -11,6 +11,8 @@ import { QualityControlService } from "@/lib/qc/service";
 import { getGeneratedWebsiteRepository } from "@/lib/websites/repository";
 import { findQuestionnairesByLead } from "@/lib/questionnaire/service";
 import { QuestionnaireSection } from "@/components/leads/questionnaire-section";
+import { DesignPlanService } from "@/lib/websites/design-plan-service";
+import { evaluateRequirementsCompleteness } from "@/lib/projects/completeness";
 
 export async function generateMetadata(props: PageProps<"/projects/[id]">) {
   await requireStudioOwner();
@@ -30,12 +32,17 @@ export default async function ProjectDetailPage(props: PageProps<"/projects/[id]
   const project = await getProjectRepository().getById(id);
   if (!project) notFound();
 
-  const [lead, interactions, websites, questionnaires] = await Promise.all([
+  const [lead, interactions, websites, questionnaires, designPlans] = await Promise.all([
     getLeadRepository().get(project.leadId),
     getSalesInteractionRepository().listByLead(project.leadId),
     getGeneratedWebsiteRepository().listByProject(project.id),
     findQuestionnairesByLead(project.leadId),
+    new DesignPlanService().listByProject(project.id),
   ]);
+  const completeness = evaluateRequirementsCompleteness(project.requirements, questionnaires.map((q) => ({
+    status: q.status,
+    completionStatus: q.completionStatus,
+  })));
   const latestWebsite = websites.find((w) => w.status !== "archived") ?? websites[0] ?? null;
   const latestQc = latestWebsite
     ? await new QualityControlService().getLatestQcForWebsite(latestWebsite.id)
@@ -63,6 +70,8 @@ export default async function ProjectDetailPage(props: PageProps<"/projects/[id]
       }
       websites={websites}
       latestQc={latestQc}
+      designPlans={designPlans}
+      completeness={completeness}
       latestQualification={
         latestQualification
           ? {

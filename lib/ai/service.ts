@@ -540,7 +540,15 @@ export class AIService {
           leadId: leadId ?? null,
           system: DESIGN_PLANNING_SYSTEM,
           prompt: buildDesignPlanPrompt(input),
-          maxTokens: 4000,
+          // Live-les 2026-09-19 (Velora Interieur, design plan v2, ai_run
+          // 23:49 UTC): claude-sonnet-5 denkt EERST en thinking-tokens tellen
+          // mee voor max_tokens. Bij rijke questionnaire-input sloot het oude
+          // 4000-budget de volledige output af (stop_reason=max_tokens, 3×
+          // achtereen in productie). Een volledig Design Plan is een GROOT
+          // JSON-object (~19 top-level velden) op boven van de denklengte:
+          // 12000 geeft ruim voldoende headroom (v1 mat ~4900 total tokens;
+          // v2 met rijkere input zit structureel hoger). Verlaag dit budget niet terug naar 4000.
+          maxTokens: 12000,
           temperature: 0.4,
         },
         designPlanSchema

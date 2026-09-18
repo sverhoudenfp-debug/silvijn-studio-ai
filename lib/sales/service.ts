@@ -13,6 +13,8 @@ import type {
   SalesInteractionStatus,
 } from "./types";
 
+export type { SalesAnalysisResult } from "./types";
+
 /**
  * SalesService (Fase 7) — de AI Sales Agent als EERSTE sales-assistent.
  *

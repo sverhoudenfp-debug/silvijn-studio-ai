@@ -18,6 +18,9 @@ export interface InboundMessageCreateInput {
   body: string;
   receivedAt?: string;
   source: string;
+  /** Alleen true wanneer de afzender een échte prospect-reactie is (ingest of bevestigd). */
+  replyConfirmed?: boolean;
+  conversationId?: string | null;
 }
 
 export interface InboundMessageRepository {
@@ -38,6 +41,8 @@ function buildInbound(input: InboundMessageCreateInput, id: string, now: string)
     body: input.body,
     receivedAt: input.receivedAt ?? now,
     source: input.source,
+    replyConfirmed: input.replyConfirmed ?? false,
+    conversationId: input.conversationId ?? null,
     createdAt: now,
     updatedAt: now,
   };

@@ -188,7 +188,14 @@ test("migrations and RLS follow the studio security pattern (owner read, service
   assert.match(migration, /create table if not exists public\.discovery_runs/);
   assert.match(migration, /alter table public\.discovery_runs enable row level security/);
   assert.match(migration, /create policy discovery_runs_owner_read[\s\S]*?using \(public\.is_studio_owner\(\)\)/);
-  assert.match(migration, /revoke insert, update, delete on public\.discovery_runs from authenticated, anon/);
+  // Canonieke vorm: schrijfrechten weg bij anon én authenticated. De live
+  // toegepaste 0017 gebruikt de equivalente 'revoke all'-vorm + expliciete
+  // SELECT-grant; beide patronen voldoen aan de security-intent.
+  assert.match(
+    migration,
+    /revoke (all|insert, update, delete) on public\.discovery_runs from anon[\s\S]*?revoke (all|insert, update, delete) on public\.discovery_runs from authenticated/
+  );
+  assert.match(migration, /grant select on public\.discovery_runs to authenticated/);
   assert.match(migration, /check \(source in \('mock','google','directory'\)\)/);
   assert.match(migration, /check \(status in \('running','completed','failed'\)\)/);
   // Command-record vereist altijd een owner: geen anonieme of AI-gegenereerde opdracht.

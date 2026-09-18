@@ -1,6 +1,9 @@
 
 import { requireStudioOwner } from "@/lib/auth/server";
 import { OutreachView } from "@/components/outreach/outreach-view";
+import { OutreachCommandPanel } from "@/components/outreach/outreach-command-panel";
+import { getOutreachCommandRepository } from "@/lib/outreach/command-repository";
+import { findDueFollowups } from "@/lib/outreach/followups";
 import { getDemoRepository } from "@/lib/repositories/demo-repository";
 import { getLeadRepository } from "@/lib/repositories/lead-repository";
 import { OutreachService } from "@/lib/outreach/service";
@@ -14,11 +17,13 @@ import { gmailIngestStatus } from "@/lib/gmail/ingest";
 export default async function OutreachPage() {
   await requireStudioOwner();
   const service = new OutreachService();
-  const [drafts, leads, demos, gmail] = await Promise.all([
+  const [drafts, leads, demos, gmail, commands, dueFollowups] = await Promise.all([
     service.listAll(),
     getLeadRepository().list(),
     getDemoRepository().list(),
     gmailIngestStatus(),
+    getOutreachCommandRepository().list(10),
+    findDueFollowups(),
   ]);
 
   const leadNames: Record<string, { name: string; hasDemo: boolean; demoUrl: string | null }> = {};
@@ -31,5 +36,17 @@ export default async function OutreachPage() {
     };
   }
 
-  return <OutreachView initialDrafts={drafts} leadNames={leadNames} gmailReady={gmail.configured && gmail.connected} />;
+  return (
+    <div className="space-y-6">
+      <OutreachCommandPanel
+        commands={commands}
+        dueFollowups={dueFollowups.map((d) => ({
+          leadId: d.leadId,
+          businessName: d.businessName,
+          sentFollowups: d.sentFollowups,
+        }))}
+      />
+      <OutreachView initialDrafts={drafts} leadNames={leadNames} gmailReady={gmail.configured && gmail.connected} />
+    </div>
+  );
 }

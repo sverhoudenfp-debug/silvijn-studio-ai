@@ -35,7 +35,7 @@ export interface OutreachRepository {
   getById(id: string): Promise<OutreachDraft | null>;
   list(): Promise<OutreachDraft[]>;
   listByLead(leadId: string): Promise<OutreachDraft[]>;
-  update(id: string, data: Partial<Pick<OutreachDraft, "status" | "subject" | "body" | "qualityIssues">>): Promise<OutreachDraft | null>;
+  update(id: string, data: Partial<Pick<OutreachDraft, "status" | "subject" | "body" | "qualityIssues" | "sentAt" | "providerMessageId" | "providerAccountKey">>): Promise<OutreachDraft | null>;
   cancel(id: string): Promise<OutreachDraft | null>;
 }
 
@@ -85,7 +85,7 @@ class MemoryOutreachRepository implements OutreachRepository {
   async listByLead(leadId: string): Promise<OutreachDraft[]> {
     return this.drafts.filter((d) => d.leadId === leadId);
   }
-  async update(id: string, data: Partial<Pick<OutreachDraft, "status" | "subject" | "body" | "qualityIssues">>): Promise<OutreachDraft | null> {
+  async update(id: string, data: Partial<Pick<OutreachDraft, "status" | "subject" | "body" | "qualityIssues" | "sentAt" | "providerMessageId" | "providerAccountKey">>): Promise<OutreachDraft | null> {
     const draft = this.drafts.find((d) => d.id === id);
     if (!draft) return null;
     Object.assign(draft, data, { updatedAt: new Date().toISOString() });
@@ -207,7 +207,7 @@ class SupabaseOutreachRepository implements OutreachRepository {
     if (error) throw new Error(`OutreachRepository: concepten per lead ophalen mislukt: ${error.message}`);
     return (data as OutreachRow[]).map(rowToDraft);
   }
-  async update(id: string, data: Partial<Pick<OutreachDraft, "status" | "subject" | "body" | "qualityIssues">>): Promise<OutreachDraft | null> {
+  async update(id: string, data: Partial<Pick<OutreachDraft, "status" | "subject" | "body" | "qualityIssues" | "sentAt" | "providerMessageId" | "providerAccountKey">>): Promise<OutreachDraft | null> {
     const { data: updated, error } = await getSupabaseServerClient()
       .from("outreach_drafts")
       .update({
@@ -215,6 +215,9 @@ class SupabaseOutreachRepository implements OutreachRepository {
         ...(data.subject !== undefined ? { subject: data.subject } : {}),
         ...(data.body !== undefined ? { body: data.body } : {}),
         ...(data.qualityIssues !== undefined ? { quality_issues: data.qualityIssues } : {}),
+        ...(data.sentAt !== undefined ? { sent_at: data.sentAt } : {}),
+        ...(data.providerMessageId !== undefined ? { provider_message_id: data.providerMessageId } : {}),
+        ...(data.providerAccountKey !== undefined ? { provider_account_key: data.providerAccountKey } : {}),
       })
       .eq("id", id)
       .select("*")

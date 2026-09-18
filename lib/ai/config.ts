@@ -38,6 +38,14 @@ function readModel(tier: AIModelTier, fallback: string): string {
   return process.env[`AI_MODEL_${tier.toUpperCase()}`]?.trim() || fallback;
 }
 
+/**
+ * HARDE absolute bovengrens: geen enkele flow (ook geen expliciete owner-
+ * commando's) kan per service-instantie meer AI-verzoeken afvuren dan dit.
+ * Beschermt tegen runaway-loops en onbedoelde kosten, onafhankelijk van
+ * omgevingsvariabelen of meegegeven overrides.
+ */
+export const MAX_AI_REQUESTS_PER_RUN_CAP = 25;
+
 export function getAIConfig(): AIConfig {
   const modeEnv = process.env.AI_MODE?.trim().toLowerCase();
   // FAIL LOUD (Fase 12 §B): in productie mag een ontbrekende AI_MODE NIET stilletjs
@@ -65,7 +73,7 @@ export function getAIConfig(): AIConfig {
       balanced: readModel("balanced", "claude-sonnet-5"),
       powerful: readModel("powerful", "claude-opus-5"),
     },
-    maxRequestsPerRun: Number.isFinite(maxRequests) && maxRequests > 0 ? maxRequests : 5,
+    maxRequestsPerRun: Number.isFinite(maxRequests) && maxRequests > 0 ? Math.min(maxRequests, MAX_AI_REQUESTS_PER_RUN_CAP) : 5,
     requestTimeoutMs: 30_000,
     maxRetries: 2,
   };

@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import { getAIConfig, getModelForTier } from "./config";
+import { MAX_AI_REQUESTS_PER_RUN_CAP, getAIConfig, getModelForTier } from "./config";
 import { AI_AGENTS } from "./agents";
 import {
   AISafetyLimitError,
@@ -87,6 +87,13 @@ export class AIService {
   private get activityRepository(): AIActivityRepository { return getAIActivityRepository(); }
   private requestsThisRun = 0;
   private readonly config = getAIConfig();
+
+  /**
+   * Alleen expliciete owner-commando's (Fase E) verhogen hun safety-limiet
+   * naar de eigen commandogrens; alle andere flows houden de default (5).
+   * De absolute bovengrens (MAX_AI_REQUESTS_PER_RUN_CAP) blijft altijd staan.
+   */
+  constructor(private readonly overrides?: { maxRequestsPerRun?: number }) {}
 
   /** Expliciete, gecontroleerde AI-aanroep. Telt tegen de safety-limiet. */
   async generateText(call: AIServiceCall): Promise<AIServiceResult<string>> {
@@ -552,9 +559,13 @@ export class AIService {
 
   private guardSafetyLimit(): void {
     this.requestsThisRun += 1;
-    if (this.requestsThisRun > this.config.maxRequestsPerRun) {
+    const maxRequestsPerRun = Math.min(
+      this.overrides?.maxRequestsPerRun ?? this.config.maxRequestsPerRun,
+      MAX_AI_REQUESTS_PER_RUN_CAP
+    );
+    if (this.requestsThisRun > maxRequestsPerRun) {
       throw new AISafetyLimitError(
-        `AI-safety-limiet bereikt (${this.config.maxRequestsPerRun} verzoeken per run)`
+        `AI-safety-limiet bereikt (${maxRequestsPerRun} verzoeken per run)`
       );
     }
   }
@@ -1038,8 +1049,16 @@ function buildOutreachPrompt(input: OutreachMessageInput): string {
   const config = getAgencyConfiguration();
   const rules = getOutreachRules();
 
+  const kind = input.messageKind ?? "initial";
+  const opening =
+    kind === "followup"
+      ? "Schrijf een KORTE, natuurlijke follow-up (80-150 woorden) naar aanleiding van het eerder verzonden bericht waarop nog geen reactie is gekomen. Verwijs beleefd naar het eerdere bericht, voeg ÉÉN nieuw relevant voordeel of voorbeeld toe en houd de toon ontspannen — geen druk, geen schuldvraag."
+      : kind === "demo_offer"
+        ? "Schrijf een gepersonaliseerd demo-aanbod (e-mail) voor het volgende bedrijf: bied concreet een gratis voorbeeldwebsite/demo aan en beschrijf wat ze ervan mogen verwachten."
+        : "Schrijf een gepersonaliseerd outreach-concept (e-mail) voor het volgende bedrijf.";
+
   const lines: string[] = [
-    "Schrijf een gepersonaliseerd outreach-concept (e-mail) voor het volgende bedrijf.",
+    opening,
     "",
     "BESCHIKBARE LEADDATA (uitsluitend hieruit putten, niets verzinnen):",
     `Bedrijf: ${input.businessName}`,

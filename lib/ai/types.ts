@@ -93,6 +93,8 @@ export interface BusinessAnalysis {
 
 /** Input voor de outreach-berichtgeneratie — uitsluitend échte leaddata, nooit verzinnen. */
 export interface OutreachMessageInput {
+  /** Soort bericht: eerste contact, natuurlijke follow-up, of demo-aanbod. */
+  messageKind?: "initial" | "followup" | "demo_offer";
   businessName: string;
   industry: string;
   city: string;

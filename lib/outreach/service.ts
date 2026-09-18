@@ -2,6 +2,7 @@ import { isOutreachSuppressed } from "@/lib/leads/lifecycle";
 import { getDemoRepository } from "@/lib/repositories/demo-repository";
 import { getLeadRepository } from "@/lib/repositories/lead-repository";
 import { scoreLead } from "@/lib/agents/lead-scoring";
+import { MAX_AI_REQUESTS_PER_RUN_CAP } from "@/lib/ai/config";
 import { AIService } from "@/lib/ai/service";
 import { getOutreachRepository } from "./repository";
 import { checkOutreachQuality } from "./quality-check";
@@ -42,16 +43,40 @@ export class OutreachNotFoundError extends Error {
 }
 
 export class OutreachService {
-  private aiService = new AIService();
   private generationsThisRun = 0;
+  private readonly maxGenerationsPerRun: number;
+
+  /**
+   * Expliciete owner-commando's (Fase E) mogen het generatielimiet verhogen
+   * tot hun eigen commando-limiet; de menselijke flow houdt de default (5).
+   */
+  private readonly aiService: AIService;
+
+  /**
+   * Expliciete owner-commando's (Fase E) verhogen úitsluitend voor die
+   * commando-instantie het AI-safety-limiet naar hun eigen begrensde
+   * commandolimiet; alle andere flows behouden de default (5 per run).
+   * MAX_AI_REQUESTS_PER_RUN_CAP blijft de absolute hard cap.
+   */
+  constructor(options?: { maxGenerationsPerRun?: number }) {
+    this.maxGenerationsPerRun = options?.maxGenerationsPerRun ?? getMaxOutreachGenerationsPerRun();
+    this.aiService = new AIService(
+      options?.maxGenerationsPerRun
+        ? { maxRequestsPerRun: Math.min(options.maxGenerationsPerRun, MAX_AI_REQUESTS_PER_RUN_CAP) }
+        : undefined
+    );
+  }
 
   /**
    * Genereert één outreach-concept voor een lead. Expliciete, gecontroleerde
    * actie — de enige entree is de "Generate Outreach Draft"-server action.
    */
-  async generateDraftForLead(leadId: string): Promise<OutreachGenerationResult> {
+  async generateDraftForLead(
+    leadId: string,
+    options?: { purpose?: "initial" | "followup" | "demo_offer" }
+  ): Promise<OutreachGenerationResult> {
     this.generationsThisRun += 1;
-    const max = getMaxOutreachGenerationsPerRun();
+    const max = this.maxGenerationsPerRun;
     if (this.generationsThisRun > max) {
       throw new OutreachGenerationLimitError(max);
     }
@@ -81,6 +106,7 @@ export class OutreachService {
     // 4) AI-generatie via de centrale AIService (logging + cost tracking daar)
     const result = await this.aiService.generateOutreachMessage(
       {
+        messageKind: options?.purpose ?? "initial",
         businessName: lead.businessName,
         industry: lead.industry,
         city: lead.city,
@@ -113,6 +139,7 @@ export class OutreachService {
     const draft = await repository.create({
       leadId,
       channel: "email",
+      purpose: options?.purpose ?? "initial",
       status: quality.passed ? "ready_for_review" : "draft",
       subject: result.data.subject,
       body: result.data.body,

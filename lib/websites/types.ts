@@ -12,6 +12,21 @@
  * certificaten, garanties of contactgegevens.
  */
 
+/** Gecontroleerde section-keys (canonieke bron voor schema, build-validatie én AI-contract). */
+export const WEBSITE_SECTION_TYPES = [
+  "header",
+  "hero",
+  "services",
+  "about",
+  "benefits",
+  "faq",
+  "cta",
+  "contact",
+  "footer",
+] as const;
+
+export type WebsiteSectionType = (typeof WEBSITE_SECTION_TYPES)[number];
+
 /** Templates — uitbreidbaar via de WebsiteTemplateRegistry. */
 export type WebsiteTemplateType =
   | "local_service"

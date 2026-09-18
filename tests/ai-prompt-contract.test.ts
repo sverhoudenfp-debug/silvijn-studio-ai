@@ -63,6 +63,8 @@ test("websiteplanning-prompt bevat het volledige geneste veldcontract", () => {
     "leadCapture: boolean",
     "metaDescription: string (VERPLICHT",
     "missingInformation",
+    // Live-les (tweede live-run): sections zijn gecontroleerde keys, geen vrije tekst.
+    "sections: array met uitsluitend deze exacte lowercase keys: header, hero, services, about, benefits, faq, cta, contact, footer",
   ]) {
     assert.ok(websitePrompt.includes(field), `prompt mist veldcontract: ${field}`);
   }

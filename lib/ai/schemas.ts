@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { WEBSITE_SECTION_TYPES } from "@/lib/websites/types";
 
 /** Zod-schema's voor gestructureerde AI-output. AI-output wordt NOOIT blind vertrouwd. */
 
@@ -105,7 +106,7 @@ export const WebsiteSpecificationSchema = z.object({
   structure: z.object({
     pages: z.array(z.object({ key: z.string().min(1), title: z.string().nullable() })).max(10),
     navigation: z.array(z.string().min(1)).max(8),
-    sections: z.array(z.string().min(1)).max(12),
+    sections: z.array(z.enum(WEBSITE_SECTION_TYPES)).max(12),
   }),
   content: z.object({
     headline: z.string().min(5),

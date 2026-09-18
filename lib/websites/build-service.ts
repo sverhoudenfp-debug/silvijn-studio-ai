@@ -1,6 +1,6 @@
 import { getWebsiteTemplateConfig, isWebsiteTemplateType } from "./templates";
 import { checkWebsiteSpecificationSafety, type WebsiteSafetyContext } from "./safety-check";
-import type { GeneratedWebsiteContent, WebsiteSpecification } from "./types";
+import { WEBSITE_SECTION_TYPES, type GeneratedWebsiteContent, type WebsiteSpecification } from "./types";
 
 /**
  * WebsiteBuildService (Fase 9) — deterministische build/validatie, zonder
@@ -15,17 +15,7 @@ export interface WebsiteBuildResult {
   errors: string[];
 }
 
-const VALID_SECTION_TYPES = new Set([
-  "header",
-  "hero",
-  "services",
-  "about",
-  "benefits",
-  "faq",
-  "cta",
-  "contact",
-  "footer",
-]);
+const VALID_SECTION_TYPES = new Set<string>(WEBSITE_SECTION_TYPES);
 
 export class WebsiteBuildService {
   /** Volledige build: specification → veiligheid → gegenereerde content. */

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { disconnectGmail, startGmailConnect, syncGmailInbox } from "@/app/actions/gmail";
 import { Badge } from "@/components/ui/badge";
@@ -25,23 +25,25 @@ export function GmailSettingsCard({
   gmail: { configured: boolean; connected: boolean; accountKey: string | null; lastIngestAt: string | null };
   flash: FlashState;
 }) {
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const router = useRouter();
 
-  function run(action: () => Promise<unknown>) {
-    startTransition(async () => {
-      try {
-        const result = await action();
-        if (result && typeof result === "object" && "ingested" in result) {
-          const r = result as { scanned: number; ingested: number; unmatched: number };
-          setMessage(`Synchronisatie klaar: ${r.ingested} nieuwe reactie(s) opgeslagen van ${r.scanned} gescand (${r.unmatched} geen match).`);
-        }
-        router.refresh();
-      } catch (error) {
-        setMessage(error instanceof Error ? error.message : "Actie mislukt");
+  async function run(action: () => Promise<unknown>) {
+    setMessage(null);
+    setPending(true);
+    try {
+      const result = await action();
+      if (result && typeof result === "object" && "ingested" in result) {
+        const r = result as { scanned: number; ingested: number; unmatched: number };
+        setMessage(`Synchronisatie klaar: ${r.ingested} nieuwe reactie(s) opgeslagen van ${r.scanned} gescand (${r.unmatched} geen match).`);
       }
-    });
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Actie mislukt");
+    } finally {
+      setPending(false);
+    }
   }
 
   return (

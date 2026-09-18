@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   approveOutreachDraft,
   cancelOutreachDraft,
@@ -39,7 +39,7 @@ export function OutreachSection({
   const [drafts, setDrafts] = useState<OutreachDraft[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
 
   const refresh = useCallback(async () => {
     const result = await listOutreachDrafts(leadId);
@@ -67,27 +67,30 @@ export function OutreachSection({
     };
   }, [leadId]);
 
-  function generate() {
+  async function generate() {
     setError(null);
-    startTransition(async () => {
-      try {
-        await generateOutreachDraft(leadId);
-        await refresh();
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Generatie mislukt");
-      }
-    });
+    setPending(true);
+    try {
+      await generateOutreachDraft(leadId);
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Generatie mislukt");
+    } finally {
+      setPending(false);
+    }
   }
 
-  function updateStatus(draftId: string, action: "approve" | "cancel") {
-    startTransition(async () => {
-      try {
-        await (action === "approve" ? approveOutreachDraft(draftId) : cancelOutreachDraft(draftId));
-        await refresh();
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Bijwerken mislukt");
-      }
-    });
+  async function updateStatus(draftId: string, action: "approve" | "cancel") {
+    setError(null);
+    setPending(true);
+    try {
+      await (action === "approve" ? approveOutreachDraft(draftId) : cancelOutreachDraft(draftId));
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Bijwerken mislukt");
+    } finally {
+      setPending(false);
+    }
   }
 
   const latest = drafts[0];

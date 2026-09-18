@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { generateWebsiteAction, runQualityControlAction } from "@/app/actions/websites";
 import type { QualityControl } from "@/lib/qc/types";
 import { Badge } from "@/components/ui/badge";
@@ -44,32 +44,34 @@ export function WebsiteGenerationSection({
   latestQc: QualityControl | null;
 }) {
   const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
 
   const latest = websites.find((w) => w.status !== "archived") ?? null;
   const canGenerate = projectStatus !== "cancelled" && projectStatus !== "completed";
   const canRunQc = latest ? ["ready_for_qc", "needs_revision"].includes(latest.status) : false;
 
-  function runQc() {
+  async function runQc() {
     setError(null);
-    startTransition(async () => {
-      try {
-        if (latest) await runQualityControlAction(latest.id);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Kwaliteitscontrole mislukt");
-      }
-    });
+    setPending(true);
+    try {
+      if (latest) await runQualityControlAction(latest.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Kwaliteitscontrole mislukt");
+    } finally {
+      setPending(false);
+    }
   }
 
-  function generate() {
+  async function generate() {
     setError(null);
-    startTransition(async () => {
-      try {
-        await generateWebsiteAction(projectId);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Generatie mislukt");
-      }
-    });
+    setPending(true);
+    try {
+      await generateWebsiteAction(projectId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Generatie mislukt");
+    } finally {
+      setPending(false);
+    }
   }
 
   return (

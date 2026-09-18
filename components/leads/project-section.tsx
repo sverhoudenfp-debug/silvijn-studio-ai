@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { canCreateProjectForLead } from "@/lib/leads/lifecycle";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { createProjectAction } from "@/app/actions/projects";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -47,20 +47,21 @@ export function ProjectSection({
   project: Project | null;
 }) {
   const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
 
   const canCreate =
     !project && canCreateProjectForLead(leadStatus);
 
-  function createProject() {
+  async function createProject() {
     setError(null);
-    startTransition(async () => {
-      try {
-        await createProjectAction(leadId);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Project aanmaken mislukt");
-      }
-    });
+    setPending(true);
+    try {
+      await createProjectAction(leadId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Project aanmaken mislukt");
+    } finally {
+      setPending(false);
+    }
   }
 
   return (

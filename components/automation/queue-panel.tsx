@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { drainAutomationQueueAction } from "@/app/actions/automations";
 import { Badge } from "@/components/ui/badge";
 import type { DrainResult } from "@/lib/automation/runtime";
@@ -24,23 +24,24 @@ const queueVariant: Record<string, "success" | "warning" | "danger" | "info" | "
 };
 
 export function QueuePanel({ items }: { items: AutomationQueueItem[] }) {
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<DrainResult | null>(null);
 
   const queued = items.filter((item) => item.status === "queued" || item.status === "processing");
 
-  function drain() {
+  async function drain() {
     setError(null);
     setResult(null);
-    startTransition(async () => {
-      try {
-        const drained = await drainAutomationQueueAction();
-        setResult(drained);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Drain mislukt");
-      }
-    });
+    setPending(true);
+    try {
+      const drained = await drainAutomationQueueAction();
+      setResult(drained);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Drain mislukt");
+    } finally {
+      setPending(false);
+    }
   }
 
   return (

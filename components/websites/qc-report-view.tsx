@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import {
   approveWebsiteAction,
   archiveWebsiteAction,
@@ -44,7 +44,7 @@ function checkIcon(result: string): string {
 }
 
 export function QcReportView({ website, qc }: { website: GeneratedWebsite; qc: QualityControl | null }) {
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingApprove, setConfirmingApprove] = useState(false);
   const [showRevisionForm, setShowRevisionForm] = useState(false);
@@ -60,15 +60,16 @@ export function QcReportView({ website, qc }: { website: GeneratedWebsite; qc: Q
   const canRequestRevision = ["ready_for_silvijn", "needs_revision"].includes(website.status);
   const canArchive = website.status !== "archived";
 
-  function withAction(action: () => Promise<unknown>) {
+  async function withAction(action: () => Promise<unknown>) {
     setError(null);
-    startTransition(async () => {
-      try {
-        await action();
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Actie mislukt");
-      }
-    });
+    setPending(true);
+    try {
+      await action();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Actie mislukt");
+    } finally {
+      setPending(false);
+    }
   }
 
   return (

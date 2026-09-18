@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import {
   cancelAutomationAction,
   pauseAutomationAction,
@@ -14,6 +14,11 @@ import {
  * GEEN approve-knop — websitegoedkeuring is een aparte menselijke actie
  * in het QC-rapport (Fase 10) en wordt bewust NIET gecombineerd met
  * automation-hervatting.
+ *
+ * Server actions worden bewust NIET binnen startTransition aangeroepen:
+ * React 19 levert een rejection van een async transition-callback af aan de
+ * error boundary i.p.v. de lokale catch. Vandaar gewone async handlers met
+ * eigen pending-state, zodat actiefouten als inline melding verschijnen.
  */
 
 export function AutomationControls({
@@ -25,18 +30,19 @@ export function AutomationControls({
   status: string;
   enabled: boolean;
 }) {
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function withAction(action: () => Promise<unknown>) {
+  async function withAction(action: () => Promise<unknown>) {
     setError(null);
-    startTransition(async () => {
-      try {
-        await action();
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Actie mislukt");
-      }
-    });
+    setPending(true);
+    try {
+      await action();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Actie mislukt");
+    } finally {
+      setPending(false);
+    }
   }
 
   const active = status === "active" && enabled;
@@ -89,25 +95,28 @@ export function AutomationControls({
 }
 
 export function RunResumeControl({ runId, status }: { runId: string; status: string }) {
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (status !== "paused") return null;
+
+  async function resume() {
+    setError(null);
+    setPending(true);
+    try {
+      await resumeAutomationRunAction(runId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Hervatten mislukt");
+    } finally {
+      setPending(false);
+    }
+  }
 
   return (
     <div className="space-y-1">
       <button
         type="button"
-        onClick={() =>
-          startTransition(async () => {
-            setError(null);
-            try {
-              await resumeAutomationRunAction(runId);
-            } catch (e) {
-              setError(e instanceof Error ? e.message : "Hervatten mislukt");
-            }
-          })
-        }
+        onClick={resume}
         disabled={pending}
         className="h-9 rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-4 text-xs font-semibold text-indigo-300 transition-colors hover:bg-indigo-500/20 disabled:opacity-60"
       >

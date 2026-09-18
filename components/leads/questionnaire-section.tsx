@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { createQuestionnaireAction } from "@/app/actions/questionnaires";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -38,17 +38,18 @@ export function QuestionnaireSection({
   questionnaires: Questionnaire[];
 }) {
   const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
 
-  function create() {
+  async function create() {
     setError(null);
-    startTransition(async () => {
-      try {
-        await createQuestionnaireAction(leadId, projectId);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Questionnaire aanmaken mislukt");
-      }
-    });
+    setPending(true);
+    try {
+      await createQuestionnaireAction(leadId, projectId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Questionnaire aanmaken mislukt");
+    } finally {
+      setPending(false);
+    }
   }
 
   return (

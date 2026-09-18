@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   closeQuestionnaireAction,
@@ -22,18 +22,19 @@ export function QuestionnaireStatusControl({
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
 
-  function run(action: () => Promise<unknown>) {
+  async function run(action: () => Promise<unknown>) {
     setError(null);
-    startTransition(async () => {
-      try {
-        await action();
-        router.refresh();
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Actie mislukt");
-      }
-    });
+    setPending(true);
+    try {
+      await action();
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Actie mislukt");
+    } finally {
+      setPending(false);
+    }
   }
 
   return (

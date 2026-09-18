@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   approvePriceAction,
   calculatePriceAction,
@@ -122,7 +122,7 @@ export function ProjectDetail({
   const [indications, setIndications] = useState<PriceIndication[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [aiInfo, setAiInfo] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
 
   const refreshIndications = useCallback(async (projectId: string) => {
     setIndications(await listIndicationsAction(projectId));
@@ -144,15 +144,16 @@ export function ProjectDetail({
 
   const latest = indications[0] ?? null;
 
-  function run(fn: () => Promise<unknown>) {
+  async function run(fn: () => Promise<unknown>) {
     setError(null);
-    startTransition(async () => {
-      try {
-        await fn();
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Actie mislukt");
-      }
-    });
+    setPending(true);
+    try {
+      await fn();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Actie mislukt");
+    } finally {
+      setPending(false);
+    }
   }
 
   const saveRequirements = () =>

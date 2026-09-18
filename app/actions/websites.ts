@@ -8,6 +8,9 @@ import { QualityControlService } from "@/lib/qc/service";
 import type { QualityControl } from "@/lib/qc/types";
 import { WebsiteGenerationService } from "@/lib/websites/service";
 import type { GeneratedWebsite } from "@/lib/websites/types";
+import { ProductionGateError } from "@/lib/payments/service";
+import { AIError } from "@/lib/ai/errors";
+import { WebsiteGenerationError, WebsiteLimitError } from "@/lib/websites/service";
 
 /**
  * Server actions voor websitegeneratie (Fase 9) + quality control en
@@ -18,12 +21,45 @@ import type { GeneratedWebsite } from "@/lib/websites/types";
  * actie via approveWebsiteAction (met guards). Er is geen override.
  */
 
-export async function generateWebsiteAction(projectId: string): Promise<GeneratedWebsite> {
+/**
+ * Resultaatcontract voor de generate-actie. Een EXPECTED falende generatie
+ * (productie-poort dicht: prijs/betaling ontbreken; lead-/projectguard;
+ * generatielimiet; AI-/validatiefout met al gepersisteerde failed-status)
+ * throwt níet, maar komt terug als { ok: false, error } — in productie
+ * maskeert React een geserverde throw tot "Minified React error #441"
+ * en ziet de eigenaar geen oorzaak (zelfde productieles als de
+ * Design Plan-fix, commit 6390ad5). Onverwachte fouten (infrastructuur)
+ * blijven throwen zodat Vercel ze logt.
+ */
+export type GenerateWebsiteResult =
+  | { ok: true; website: GeneratedWebsite }
+  | { ok: false; error: string };
+
+export async function generateWebsiteAction(projectId: string): Promise<GenerateWebsiteResult> {
   await requireStudioOwner();
-  const website = await new WebsiteGenerationService().generateWebsite(projectId);
-  revalidatePath(`/projects/${projectId}`);
-  revalidatePath("/generated-websites");
-  return website;
+  try {
+    const website = await new WebsiteGenerationService().generateWebsite(projectId);
+    revalidatePath(`/projects/${projectId}`);
+    revalidatePath("/generated-websites");
+    return { ok: true, website };
+  } catch (error) {
+    // Óók op het faalpad: de service persisteert een failed
+    // website-record vóór de rethrow — de pagina moet dat zien. (Bij een
+    // poortweigering bestaat er nog géén record; revalidate is dan gratis.)
+    revalidatePath(`/projects/${projectId}`);
+    revalidatePath("/generated-websites");
+    if (
+      error instanceof ProductionGateError ||
+      error instanceof WebsiteGenerationError ||
+      error instanceof WebsiteLimitError ||
+      error instanceof AIError
+    ) {
+      // Onze eigen foutklassen zijn per ontwerp veilig om te tonen: geen
+      // keys, geen stack traces, geen providerpayloads.
+      return { ok: false, error: error.message };
+    }
+    throw error;
+  }
 }
 
 // ============ QUALITY CONTROL + HUMAN APPROVAL (Fase 10) ============

@@ -10,9 +10,28 @@ export async function getProductionGate(projectId: string): Promise<ProductionGa
   if (error) throw new Error(`Production gate unavailable: ${error.message}`);
   return z.object({ allowed: z.boolean(), paid: z.number(), approved: z.number().nullable(), required: z.number().nullable(), requirementsComplete: z.boolean(), fullyPaid: z.boolean() }).parse(data);
 }
+/**
+ * Getypeerde productie-poortweigering. De poort zelf is een harde,
+ * menselijke grens (prijs-/betaalgoedkeuring) en wordt NOOIT verzwakt;
+ * deze klasse bestaat uitsluitend zodat aanroepers (server actions) de
+ * verwachte weigering kunnen onderscheiden van onverwachte fouten en de
+ * ÉCHTE reden aan de eigenaar kunnen tonen i.p.v. een gemaskeerde
+ * productiefout ("Minified React error #441").
+ */
+export class ProductionGateError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ProductionGateError";
+  }
+}
+
 export async function assertProductionAuthorized(projectId: string) {
   const gate = await getProductionGate(projectId);
-  if (!gate.allowed) throw new Error("PRODUCTION_BLOCKED: goedgekeurde scope/prijs, betaalplan, bevestigde betaling en complete requirements zijn verplicht.");
+  if (!gate.allowed) {
+    throw new ProductionGateError(
+      "PRODUCTION_BLOCKED: productie vereist een goedgekeurde scope/prijs, een betaalplan, een bevestigde betaling én complete requirements (Prijsgoedkeuring en betalingen op de projectpagina)."
+    );
+  }
   return gate;
 }
 export async function setPaymentPlan(projectId: string, plan: "full" | "split") {

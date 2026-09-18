@@ -66,7 +66,13 @@ export function WebsiteGenerationSection({
     setError(null);
     setPending(true);
     try {
-      await generateWebsiteAction(projectId);
+      // Verwachte productiefouten (o.a. de productie-poort: prijs/betaling
+      // ontbreekt; generatieguard; AI-/validatiefout) komen als
+      // { ok: false, error } terug — in productie maskeert React een
+      // geserverde throw tot "Minified React error #441" en is de echte
+      // oorzaak weg (zelfde les als de Design Plan-fix, commit 6390ad5).
+      const result = await generateWebsiteAction(projectId);
+      if (!result.ok) setError(result.error);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Generatie mislukt");
     } finally {

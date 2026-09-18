@@ -1,4 +1,4 @@
-# Lead Discovery Engine — Silvijn Studio AI (Fase 5)
+# Lead Discovery & Orchestration — Silvijn Studio AI (Fase 5 + Fase D)
 
 ## Overzicht
 
@@ -67,3 +67,34 @@ Discovery functioneert volledig ZONDER Anthropic. AI-assisted enrichment (branch
 ## Status oude abstractie
 
 `lib/services/lead-source.ts` (Fase 2) is superseded door deze engine en blijft alleen als historische referentie bestaan.
+
+
+## Discovery-orchestratie (Fase D, 2026-09-18)
+
+De bestaande engine is ongewijzigd hergebruikt; Fase D voegt een gecontroleerde orchestratie-schil toe:
+
+```
+UI /lead-discovery (form + run-geschiedenis)
+  → server action runDiscovery() — requireStudioOwner, geen automatische trigger
+    → DiscoveryOrchestrator (lib/discovery/orchestrator.ts)
+        1. opdrachtvalidatie (minimaal branche ÓF plaats/regio; limiet 1-200 afgetopt
+           tot MAX_DISCOVERY_RESULTS)
+        2. command-record: discovery_runs-rij (status running) vóór de run
+        3. hergebruik LeadDiscoveryService.discover() — search → enrich →
+           duplicate check (bestaand + batch) → website-status → lead-creatie
+           met bestaande rule-based scoring
+        4. run-afsluiting: tellingen, scores/prioriteiten per nieuwe lead,
+           duplicaatredenen, fouten; één audit_events-rij per run
+```
+
+### discovery_runs (migratie 0017)
+
+Command-record per expliciete owner-opdracht: scope (branche/plaats/regio/zoekterm/bron/limiet), status (running/completed/failed), tellingen, created_lead_ids, jsonb-samenvatting en fouten. RLS aan; anon heeft geen enkele permissie; authenticated uitsluitend SELECT via de `discovery_runs_owner_read`-policy (`is_studio_owner()`); schrijven gebeurt alleen server-side (service-role).
+
+### Samenvatting in het dashboard
+
+Na elke run: opdracht + status, chips (gevonden/nieuw/duplicaten/ongeldig/fouten/duur), nieuwe leads met score en prioriteitsband (≥70 hoog, ≥40 middel, anders laag), kandidatentabel met oversla-redenen, en de recente opdrachtgeschiedenis. Run-status is `failed` zodra de run fouten bevat (incl. providerfouten — de google/directory-stubs melden MISSING CONFIGURATION en verzinnen nooit data).
+
+### Grenzen (onveranderd)
+
+Discovery start uitsluitend via de expliciete owner-trigger, verstuurt nooit outreach, muteert nooit bestaande leads (duplicaten en bestaande leads worden veilig overgeslagen) en gebruikt uitsluitend broninformatie van providers; mock-data wordt nooit als echte externe data gepresenteerd.

@@ -243,6 +243,13 @@ export class WebsiteGenerationService {
       //      De productie-poort geldt al (stap 0); het ZIP is intern en wordt
       //      pas na volledige validatie privé opgeslagen. Validatie-falen
       //      maakt de website FAILED met de ZIP-fouten — nooit een kap theme.
+      // Live-les Fase I.2 smoke-test: de ThemeZipService her-leest de website
+      // uit de database en eist een afgeronde content-generatie. De build is
+      // op dit punt geslaagd, dus ronden we de generatie hier af (status
+      // "building" blijft de build-fase aangeven); step 9 zet ready_for_qc.
+      await getGeneratedWebsiteRepository().update(website.id, {
+        generationStatus: "completed",
+      });
       if (framework === "shopify") {
         const zipArtifact = await new ThemeZipService({ productionGate: assertProductionAuthorized }).generateForWebsite(website.id);
         if (zipArtifact.status !== "passed") {

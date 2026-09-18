@@ -527,6 +527,68 @@ test("theme-zip: nextjs-website en onafgeronde generatie worden geweigerd", asyn
   await repo.update(websiteId, { generationStatus: "completed" });
 });
 
+// Live-les Fase I.2 smoke-test (derde live-run): de productieflow roept de
+// ZIP-stap aan TERWIJL de website nog "building" is. De flow rondt de
+// content-generatie af vóór de ZIP (generationStatus completed, status
+// building) — deze test borgt exact die tussenstand.
+test("theme-zip: in-flow tussenstand (generationStatus completed + status building) is geldig", async () => {
+  const leadRepo = getLeadRepository();
+  const lead = await leadRepo.create({
+    businessName: "Bakkerij De Gouden Korst",
+    industry: "bakkerij",
+    city: "Zwolle",
+    province: "Overijssel",
+    country: "NL",
+    phone: "+31551234567",
+    websiteStatus: "no_website",
+    source: "manual",
+  });
+  const project = await getProjectRepository().create({
+    leadId: lead.id,
+    name: "Website Bakkerij De Gouden Korst",
+    projectType: "business_website",
+    description: "Nieuwe website",
+    requirements: REQUIREMENTS,
+    currency: "EUR",
+    timeline: null,
+    notes: "",
+  });
+  await getDesignPlanRepository().create({
+    projectId: project.id,
+    leadId: lead.id,
+    version: 1,
+    status: "completed",
+    mode: "mock",
+  });
+  const records = await getDesignPlanRepository().listByProject(project.id);
+  await getDesignPlanRepository().update(records[0].id, {
+    plan: DESIGN_PLAN,
+    status: "completed",
+  });
+  const website = await getGeneratedWebsiteRepository().create({
+    projectId: project.id,
+    leadId: lead.id,
+    slug: "bakkerij-de-gouden-korst-v3",
+    businessName: lead.businessName,
+    websiteType: "local_service",
+    framework: "shopify",
+    template: "local_service",
+    specification: SPECIFICATION,
+    previewUrl: "/generated-websites/bakkerij-de-gouden-korst-v3",
+    version: 3,
+  });
+  // Exacte tussenstand uit de productieflow: build geslaagd, ZIP wordt nu pas gemaakt.
+  await getGeneratedWebsiteRepository().update(website.id, {
+    generationStatus: "completed",
+    status: "building",
+    buildStatus: "building",
+  });
+  const service = new ThemeZipService({ productionGate: async () => undefined });
+  const artifact = await service.generateForWebsite(website.id);
+  assert.equal(artifact.status, "passed", "ZIP-generatie slaagt in de in-flow tussenstand");
+  assert.equal(artifact.version, 1);
+});
+
 test("theme-zip: ontbrekend Design Plan blokkeert generatie met duidelijke melding", async () => {
   const leadRepo = getLeadRepository();
   const lead = await leadRepo.create({

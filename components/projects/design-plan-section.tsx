@@ -39,7 +39,11 @@ export function DesignPlanSection({
     setError(null);
     setPending(true);
     try {
-      await generateDesignPlanAction(projectId);
+      // Verwachte productiefouten (AI-timeout, rate limit, consistentierejectie)
+      // komen als { ok: false, error } terug — in productie maskeert React een
+      // geserverde throw tot "Minified React error #441" en is de oorzaak weg.
+      const result = await generateDesignPlanAction(projectId);
+      if (!result.ok) setError(result.error);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Designplanning mislukt");
     } finally {

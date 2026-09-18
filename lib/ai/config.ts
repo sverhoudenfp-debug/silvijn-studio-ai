@@ -64,6 +64,10 @@ export function getAIConfig(): AIConfig {
   const mode: AIMode = modeEnv === "live" ? "live" : "mock";
   const apiKey = process.env.ANTHROPIC_API_KEY?.trim() || null;
   const maxRequests = Number.parseInt(process.env.AI_MAX_REQUESTS_PER_RUN ?? "", 10);
+  // Request-timeout per AI-aanroep. Live designplanning is gemeten op ~34s
+  // (claude-sonnet-5, 4000 maxTokens); zware planningcalls mogen de oude
+  // 30s-grens dus overschrijden. Configureerbaar via AI_REQUEST_TIMEOUT_MS.
+  const timeoutEnv = Number.parseInt(process.env.AI_REQUEST_TIMEOUT_MS ?? "", 10);
 
   return {
     mode,
@@ -74,7 +78,10 @@ export function getAIConfig(): AIConfig {
       powerful: readModel("powerful", "claude-opus-5"),
     },
     maxRequestsPerRun: Number.isFinite(maxRequests) && maxRequests > 0 ? Math.min(maxRequests, MAX_AI_REQUESTS_PER_RUN_CAP) : 5,
-    requestTimeoutMs: 30_000,
+    requestTimeoutMs:
+      Number.isFinite(timeoutEnv) && timeoutEnv >= 1_000 && timeoutEnv <= 300_000
+        ? timeoutEnv
+        : 60_000,
     maxRetries: 2,
   };
 }

@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getAIConfig, modelSupportsTemperature, requireLiveAPIKey } from "./config";
 import {
   AIAuthError,
-  AIConfigurationError,
+  AIError,
   AIProviderError,
   AITimeoutError,
 } from "./errors";
@@ -18,7 +18,24 @@ import type {
  * environment variables en verlaat deze module nooit.
  */
 
-function mapAnthropicError(error: unknown): Error {
+function mapAnthropicError(error: unknown, timeoutMsLabel: string): Error {
+  // Volgorde is bewust: APIUserAbortError en APIConnectionError erven VAN
+  // Anthropic.APIError (status undefined → 0) — de generieke APIError-tak mag
+  // ze dus nooit eerst vangen, anders verdwijnt de echte oorzaak (timeout/
+  // netwerk) in "Anthropic-APIfout (status 0)".
+  if (error instanceof Anthropic.APIUserAbortError) {
+    return new AITimeoutError(`Anthropic-aanvraag afgebroken: limiet van ${timeoutMsLabel} bereikt`);
+  }
+  if (error instanceof Anthropic.APIConnectionError) {
+    // Een afgebroken request (AbortSignal/timeout) komt hier als connectiefout
+    // binnen — de echte limiet is dan bereikt en dat is een timeout, geen
+    // netwerk-/providerfout. De specifieke boodschap mag nooit verloren gaan.
+    const causeName = (error.cause as { name?: string } | undefined)?.name;
+    if (causeName === "TimeoutError" || causeName === "AbortError") {
+      return new AITimeoutError(`Anthropic-aanvraag afgebroken: limiet van ${timeoutMsLabel} bereikt`);
+    }
+    return new AIProviderError("Kon Anthropic niet bereiken (netwerkfout)");
+  }
   if (error instanceof Anthropic.APIError) {
     const status = error.status ?? 0;
     // Fase 12 §O: log het veilige Anthropic error.type (never de payload —
@@ -30,9 +47,6 @@ function mapAnthropicError(error: unknown): Error {
     if (status === 429) return new AIProviderError(`Anthropic rate limit bereikt${typeSuffix}`);
     if (status >= 500) return new AIProviderError(`Anthropic-serverfout (status ${status}${typeSuffix})`);
     return new AIProviderError(`Anthropic-APIfout (status ${status}${typeSuffix})`);
-  }
-  if (error instanceof Anthropic.APIConnectionError) {
-    return new AIProviderError("Kon Anthropic niet bereiken (netwerkfout)");
   }
   return new AIProviderError("Onbekende Anthropic-fout");
 }
@@ -54,7 +68,6 @@ export class AnthropicProvider implements AIProvider {
   }
 
   async generateText(request: AIProviderRequest): Promise<AIProviderResult> {
-    const started = Date.now();
     try {
       const body: Anthropic.MessageCreateParamsNonStreaming = {
         model: request.model,
@@ -66,11 +79,11 @@ export class AnthropicProvider implements AIProvider {
       if (request.temperature !== undefined && modelSupportsTemperature(request.model)) {
         body.temperature = request.temperature;
       }
-      const response = await this.client.messages.create(body);
-
-      if (Date.now() - started > this.timeoutMs) {
-        throw new AITimeoutError("Anthropic-aanvraag duurde te lang");
-      }
+      // Echte abort: het request stopt bij de limiet in plaats van af te
+      // wachten en het antwoord nú achteraf weg te gooien (betaalde tokens).
+      const response = await this.client.messages.create(body, {
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
 
       const text =
         response.content
@@ -88,8 +101,12 @@ export class AnthropicProvider implements AIProvider {
         },
       };
     } catch (error) {
-      if (error instanceof AIConfigurationError || error instanceof AIAuthError) throw error;
-      throw mapAnthropicError(error);
+      // Eigen foutklassen (AIError: timeout, rate limit, provider, invalid
+      // response, ...) gaan ONVERANDERD door — een hermapping verscheenpte
+      // eerder de specifieke reden (bijv. timeout) naar "Onbekende
+      // Anthropic-fout", waardoor de UI en de logging geen oorzaak meer hadden.
+      if (error instanceof AIError) throw error;
+      throw mapAnthropicError(error, `${Math.round(this.timeoutMs / 1000)}s`);
     }
   }
 }

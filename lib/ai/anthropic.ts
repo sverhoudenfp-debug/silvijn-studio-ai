@@ -3,6 +3,7 @@ import { getAIConfig, modelSupportsTemperature, requireLiveAPIKey } from "./conf
 import {
   AIAuthError,
   AIError,
+  AIInvalidResponseError,
   AIProviderError,
   AITimeoutError,
 } from "./errors";
@@ -90,6 +91,18 @@ export class AnthropicProvider implements AIProvider {
           .filter((block): block is Anthropic.TextBlock => block.type === "text")
           .map((block) => block.text)
           .join("\n") ?? "";
+
+      // Live-les 2026-09-19 (questionnaire completion, ai_run de6eecb1): een
+      // thinking-model kan de VOLLEDIGE max_tokens aan redeneren besteden,
+      // waardoor de tekst leeg of afgekapt terugkomt. Dat is een onvolledig
+      // antwoord — eerlijk en specifiek melden i.p.v. het generieke
+      // "geen geldige JSON" dat de echte oorzaak (te krap tokenbudget)
+      // onzichtbaar maakte. Retryable: de denklengte varieert per poging.
+      if (response.stop_reason === "max_tokens") {
+        throw new AIInvalidResponseError(
+          `AI-antwoord onvolledig: tokenlimiet (max_tokens ${request.maxTokens}) bereikt vóór volledige output — verhoog het tokenbudget (thinking verbruikt output-tokens)`
+        );
+      }
 
       return {
         text,

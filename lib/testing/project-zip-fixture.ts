@@ -53,7 +53,14 @@ export const ZIP_FLOW_FIXTURE_REQUIREMENTS: ProjectRequirements = {
   designLevel: "standard",
   responsive: true,
   ecommerce: false,
-  copywriting: true,
+  // copywriting: false — BEWUST: de pricing-engine prijst "Tekstschrijving"
+  // als add-on, en die is (terecht) niet geconfigureerd in de masterconfig.
+  // copywriting: true levert daardoor ALTIJD een missing_information-
+  // prijsindicatie (PRICE_NOT_READY), waardoor de fixture de
+  // financieringspoort (prijs/betaling) nóóit kan doorlopen en de
+  // Project→ZIP-flow doodloopt. copywriting: false is nog steeds
+  // completeness-geldig (copywriting_known) en verzint geen prijs.
+  copywriting: false,
   seo: false,
 };
 

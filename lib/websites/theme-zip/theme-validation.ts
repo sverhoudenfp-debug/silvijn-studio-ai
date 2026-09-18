@@ -5,6 +5,7 @@ import {
   THEME_LIQUID_ALLOWED_TAGS,
   THEME_LIQUID_BLOCK_TAGS,
   THEME_REQUIRED_FILES,
+  THEME_REQUIRED_SETTING_IDS,
   THEME_TEXT_EXTENSIONS,
   THEME_ZIP_MAX_FILE_BYTES,
   THEME_ZIP_MAX_FILES,
@@ -398,6 +399,83 @@ export function validateThemeFiles(files: ThemeFile[]): ThemeValidationResult {
     }
     if (!layout.content.includes("content_for_layout")) {
       errors.push('layout/theme.liquid mist {{ content_for_layout }}.');
+    }
+  }
+
+  // ---- 5b. Completeness-referenties (Fase I.2): password-status, klantaccounts,
+  //          cadeaubon, share-image en bedrijfsgegevens-settings zijn aaneengesloten
+  //          verplichtingen — een thema dat hier iets mist is niet leverklaar.
+  const passwordLayout = files.find((f) => f.path === "layout/password.liquid");
+  if (passwordLayout) {
+    if (!passwordLayout.content.includes("content_for_header")) {
+      errors.push('layout/password.liquid mist {{ content_for_header }}.');
+    }
+    if (!passwordLayout.content.includes("content_for_layout")) {
+      errors.push('layout/password.liquid mist {{ content_for_layout }}.');
+    }
+  }
+  const passwordTemplate = files.find((f) => f.path === "templates/password.liquid");
+  if (passwordTemplate && !passwordTemplate.content.includes("storefront_password")) {
+    errors.push('templates/password.liquid mist het storefront_password-formulier.');
+  }
+  const giftCard = files.find((f) => f.path === "templates/gift_card.liquid");
+  if (giftCard) {
+    if (!giftCard.content.includes("{% layout none %}") && !giftCard.content.includes("{%- layout none %}")) {
+      errors.push('templates/gift_card.liquid moet als standalone pagina met "{% layout none %}" beginnen.');
+    }
+    if (!giftCard.content.includes("gift_card.")) {
+      errors.push('templates/gift_card.liquid moet data uit het gift_card-object tonen.');
+    }
+  }
+  for (const file of files) {
+    if (!file.path.startsWith("templates/customers/") || !file.path.endsWith(".liquid")) continue;
+    if (!/customer/i.test(file.content) || file.content.trim().length < 100) {
+      errors.push(
+        `Klantaccounttemplate "${file.path}" is leeg of bevat geen customer-referenties (functionele accountpagina vereist).`
+      );
+    }
+    if (file.path.endsWith("/login.liquid") && !file.content.includes("customer_login")) {
+      errors.push('templates/customers/login.liquid mist het customer_login-formulier.');
+    }
+    if (file.path.endsWith("/register.liquid") && !file.content.includes("create_customer")) {
+      errors.push('templates/customers/register.liquid mist het create_customer-formulier.');
+    }
+  }
+
+  // ---- 5c. Settings-referenties: bedrijfsgegevens/SEO-settings moeten gedefinieerd
+  //          zijn (bron van og:image, JSON-LD en de meta-description-fallback).
+  const schemaForSettings = parsed.get("config/settings_schema.json");
+  if (Array.isArray(schemaForSettings)) {
+    const definedIds = new Set<string>();
+    for (const group of schemaForSettings) {
+      const settings = (group as Record<string, unknown>)?.settings;
+      if (!Array.isArray(settings)) continue;
+      for (const setting of settings) {
+        const id = (setting as Record<string, unknown>)?.id;
+        if (typeof id === "string") definedIds.add(id);
+      }
+    }
+    for (const requiredId of THEME_REQUIRED_SETTING_IDS) {
+      if (!definedIds.has(requiredId)) {
+        errors.push(`Setting "${requiredId}" ontbreekt in config/settings_schema.json (vereist voor meta-tags/SEO).`);
+      }
+    }
+  }
+  const metaTags = files.find((f) => f.path === "snippets/meta-tags.liquid");
+  if (metaTags) {
+    if (!metaTags.content.includes("settings.share_image") || !metaTags.content.includes("og:image")) {
+      errors.push("snippets/meta-tags.liquid mist og:image-support via settings.share_image.");
+    }
+    if (!metaTags.content.includes("application/ld+json")) {
+      errors.push("snippets/meta-tags.liquid mist JSON-LD structured data.");
+    }
+  }
+  if (layout) {
+    if (!layout.content.includes("page_title")) {
+      errors.push('layout/theme.liquid mist de page_title-fallback in de <title>.');
+    }
+    if (!layout.content.includes("settings.seo_description")) {
+      errors.push('layout/theme.liquid mist de settings.seo_description-fallback voor de meta-description.');
     }
   }
 

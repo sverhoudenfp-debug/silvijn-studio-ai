@@ -146,7 +146,11 @@ function slugifyKey(key: string): string {
 // Config
 // ---------------------------------------------------------------------------
 
-function buildSettingsSchema(businessName: string): ThemeFile {
+function buildSettingsSchema(
+  businessName: string,
+  contact: WebsiteContactContext,
+  seoDescription: string
+): ThemeFile {
   const schema = [
     {
       name: "theme_info",
@@ -217,11 +221,62 @@ function buildSettingsSchema(businessName: string): ThemeFile {
         },
       ],
     },
+    {
+      // Bedrijfsgegevens — defaults komen uitsluitend uit de geverifieerde
+      // lead-/specificatiedata; lege waarden blijven leeg (nooit fabriceren).
+      // Deze settings voeden de meta-tags (og:image, JSON-LD) en de
+      // meta-description-fallback en blijven door de merchant bewerkbaar.
+      name: "Bedrijfsgegevens",
+      settings: [
+        {
+          type: "text",
+          id: "brand_name",
+          label: "Bedrijfsnaam",
+          default: businessName,
+        },
+        {
+          type: "text",
+          id: "contact_email",
+          label: "E-mailadres (voor social sharing en structured data)",
+          default: contact.email ?? "",
+        },
+        {
+          type: "text",
+          id: "contact_phone",
+          label: "Telefoonnummer",
+          default: contact.phone ?? "",
+        },
+        {
+          type: "text",
+          id: "contact_city",
+          label: "Plaats (voor lokale vindbaarheid)",
+          default: contact.city,
+        },
+        {
+          type: "textarea",
+          id: "seo_description",
+          label: "Standaard omschrijving voor Google",
+          default: seoDescription,
+          info: "Wordt gebruikt op pagina's zonder eigen omschrijving.",
+        },
+        {
+          type: "image_picker",
+          id: "share_image",
+          label: "Deelafbeelding (social media)",
+          info: "1200 x 630 pixels; getoond bij delen op WhatsApp, Facebook en LinkedIn.",
+        },
+      ],
+    },
   ];
   return { path: "config/settings_schema.json", content: `${JSON.stringify(schema, null, 2)}\n` };
 }
 
-function buildSettingsData(tokens: ThemeDesignTokens): ThemeFile {
+function buildSettingsData(
+  tokens: ThemeDesignTokens,
+  businessName: string,
+  contact: WebsiteContactContext,
+  seoDescription: string
+): ThemeFile {
   const data = {
     current: {
       color_primary: tokens.primary,
@@ -232,6 +287,13 @@ function buildSettingsData(tokens: ThemeDesignTokens): ThemeFile {
       heading_scale: 100,
       page_width: Number.parseInt(tokens.containerWidth, 10),
       section_spacing: tokens.sectionSpacing,
+      // Alleen geverifieerde lead-/specificatiedata; nooit ingevulde waarden
+      // verzinnen (lege string = bewust leeg gelaten).
+      brand_name: businessName,
+      contact_email: contact.email ?? "",
+      contact_phone: contact.phone ?? "",
+      contact_city: contact.city,
+      seo_description: seoDescription,
     },
   };
   return { path: "config/settings_data.json", content: `${JSON.stringify(data, null, 2)}\n` };
@@ -253,11 +315,13 @@ function buildThemeLayout(spec: WebsiteSpecification, tokens: ThemeDesignTokens)
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>
-      {{ page.title }}
-      {%- if page.title != blank and shop.name != blank %} &middot; {% endif -%}
-      {{ shop.name }}
+      {{ page_title | default: shop.name }}
+      {%- if page_title != blank and page_title != shop.name and shop.name != blank %} &middot; {{ shop.name }}{% endif -%}
     </title>
-    {% if page.description %}<meta name="description" content="{{ page.description | escape }}">{% endif %}
+    {% assign fallback_description = page_description | default: settings.seo_description %}
+    {% if fallback_description != blank %}
+      <meta name="description" content="{{ fallback_description | strip_html | strip_newlines | escape }}">
+    {% endif %}
     <link rel="canonical" href="{{ canonical_url }}">
     {%- if settings.favicon != blank -%}
       <link rel="icon" type="image/png" href="{{ settings.favicon | image_url: width: 48 }}">
@@ -298,15 +362,49 @@ function buildThemeLayout(spec: WebsiteSpecification, tokens: ThemeDesignTokens)
 
 function buildMetaTagsSnippet(): ThemeFile {
   const liquid = `{%- liquid
-  assign og_title = page.title | default: shop.name
-  assign og_description = page.description | default: shop.description
+  assign og_title = page_title | default: shop.name
+  assign og_description = page_description | default: settings.seo_description | default: shop.description
 -%}
 <meta property="og:site_name" content="{{ shop.name | escape }}">
 <meta property="og:title" content="{{ og_title | escape }}">
 <meta property="og:description" content="{{ og_description | escape }}">
 <meta property="og:url" content="{{ canonical_url }}">
 <meta property="og:type" content="website">
-<meta name="twitter:card" content="summary">
+{%- if settings.share_image != blank -%}
+  <meta property="og:image" content="http:{{ settings.share_image | image_url: width: 1200 }}">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+{%- else -%}
+  <meta name="twitter:card" content="summary">
+{%- endif -%}
+{%- comment -%}
+  Structured data — uitsluitend geverifieerde bedrijfsgegevens uit de
+  theme-settings (defaults uit de echte lead-context). Lege velden worden
+  weggelaten; er wordt nooit informatie verzonnen of een ander branche-/  type-claim toegevoegd.
+{%- endcomment -%}
+{%- if settings.brand_name != blank -%}
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "LocalBusiness",
+      "name": {{ settings.brand_name | json }},
+      "url": {{ shop.url | json }}
+      {%- if settings.contact_email != blank -%}
+        ,
+        "email": {{ settings.contact_email | json }}
+      {%- endif -%}
+      {%- if settings.contact_phone != blank -%}
+        ,
+        "telephone": {{ settings.contact_phone | json }}
+      {%- endif -%}
+      {%- if settings.contact_city != blank -%}
+        ,
+        "address": { "@type": "PostalAddress", "addressLocality": {{ settings.contact_city | json }} }
+      {%- endif -%}
+    }
+  </script>
+{%- endif -%}
 `;
   return { path: "snippets/meta-tags.liquid", content: liquid };
 }
@@ -330,7 +428,7 @@ function buildButtonSnippet(): ThemeFile {
 
 function buildThemeCss(tokens: ThemeDesignTokens): ThemeFile {
   const spacing = tokens.sectionSpacing === "compact" ? "48px" : tokens.sectionSpacing === "spacious" ? "112px" : "72px";
-  const css = `/* Gegenereerd door Silvijn Studio — deterministische structurele stijlen.
+  let css = `/* Gegenereerd door Silvijn Studio — deterministische structurele stijlen.
    Design-tokens komen uit de settings ( zie layout/theme.liquid). */
 :root {
   --section-spacing: ${spacing};
@@ -456,6 +554,24 @@ img { max-width: 100%; height: auto; display: block; }
   .btn { transition: none; }
 }
 `;
+  // Klantaccountpagina's (Fase I.2 completeness) — neutraal, gebruikt de
+  // bestaande design-tokens; geen referentie-ontwerp gekopieerd.
+  css += `
+/* --- Klantaccountpagina's (alleen zichtbaar bij actieve klantaccounts) --- */
+.account { width: 100%; max-width: var(--page-width); margin-inline: auto; padding: 32px 20px; }
+.account__grid { display: grid; gap: 16px; grid-template-columns: 1fr; }
+.account h1 { margin: 0 0 8px; }
+.account h2 { margin: 24px 0 8px; font-size: 1.15rem; }
+.account__actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 16px 0; }
+.account__card { border: 1px solid var(--color-border); border-radius: var(--radius); padding: 16px; background: var(--color-surface); }
+.account__meta { margin: 0 0 4px; }
+.account__empty { opacity: .7; }
+.account table { width: 100%; border-collapse: collapse; }
+.account th, .account td { padding: 8px 6px; border-bottom: 1px solid var(--color-border); text-align: left; }
+.account__status { display: inline-block; padding: 2px 8px; border-radius: 999px; background: var(--color-surface); font-size: .85rem; }
+.visually-hidden { position: absolute !important; overflow: hidden; width: 1px; height: 1px; clip-path: inset(50%); white-space: nowrap; }
+@media (min-width: 900px) { .account__grid { grid-template-columns: 1fr 1fr; } }
+`;
   return { path: "assets/theme.css", content: css };
 }
 
@@ -554,8 +670,597 @@ function buildLocaleFile(): ThemeFile {
       title: "Pagina niet gevonden",
       subtext: "De pagina die je zoekt bestaat niet (meer).",
     },
+    password_page: {
+      login_form_password: "Wachtwoord",
+      login_form_button: "Naar de site",
+      admin_link_html: "Eigenaar van deze winkel? <a href=\"/admin\">Log in</a> in de beheeromgeving.",
+    },
+    customers: {
+      login_page: {
+        title: "Inloggen",
+        login: "Inloggen",
+        email: "E-mailadres",
+        password: "Wachtwoord",
+        forgot_password: "Wachtwoord vergeten?",
+        new_customer: "Nieuwe klant?",
+        no_account_yet: "Maak een account om sneller te bestellen en je bestellingen te volgen.",
+        create_account: "Account aanmaken",
+        guest_title: "Doorgaan zonder account",
+      },
+      register_page: {
+        title: "Account aanmaken",
+        first_name: "Voornaam",
+        last_name: "Achternaam",
+        email: "E-mailadres",
+        password: "Wachtwoord",
+        submit: "Account aanmaken",
+        back_to_login: "Terug naar inloggen",
+      },
+      account: {
+        title: "Mijn account",
+        details: "Gegevens",
+        view_addresses: "Adressen bekijken",
+        orders_title: "Bestellingen",
+        no_orders: "Je hebt nog geen bestellingen geplaatst.",
+        logout: "Uitloggen",
+      },
+      order: {
+        title: "Bestelling",
+        order: "Bestelnummer",
+        date: "Datum",
+        total: "Totaal",
+        product: "Product",
+        quantity: "Aantal",
+        subtotal: "Subtotaal",
+        billing_address: "Factuuradres",
+        shipping_address: "Bezorgadres",
+      },
+      addresses: {
+        title: "Mijn adressen",
+        no_addresses: "Je hebt nog geen adressen opgeslagen.",
+        default: "Standaardadres",
+        first_name: "Voornaam",
+        last_name: "Achternaam",
+        company: "Bedrijf",
+        address1: "Adres",
+        address2: "Adres toevoeging",
+        city: "Plaats",
+        zip: "Postcode",
+        phone: "Telefoonnummer",
+        update: "Bijwerken",
+        set_default: "Als standaard instellen",
+        delete: "Verwijderen",
+        add_new: "Nieuw adres toevoegen",
+        add_address: "Adres opslaan",
+      },
+      activate_account_page: {
+        title: "Account activeren",
+        password: "Kies een wachtwoord",
+        password_confirm: "Bevestig je wachtwoord",
+        submit: "Account activeren",
+      },
+      reset_password_page: {
+        title: "Wachtwoord herstellen",
+        email: "E-mailadres",
+        submit: "Herstellink sturen",
+      },
+    },
+    gift_cards: {
+      issued: {
+        title: "Je cadeaubon",
+        remaining_html: "Resterend tegoed",
+        disabled: "Deze cadeaubon is niet meer geldig.",
+        expired: "Deze cadeaubon is verlopen.",
+        expires_on: "Geldig t/m",
+        shop_link: "Naar de winkel",
+        print: "Afdrukken",
+      },
+    },
   };
   return { path: "locales/nl.default.json", content: `${JSON.stringify(locale, null, 2)}\n` };
+}
+
+// ---------------------------------------------------------------------------
+// Password-status (branded "coming soon" tijdens de launch)
+// ---------------------------------------------------------------------------
+
+/**
+ * layout/password.liquid — eigen, gebrandde wachtwoordpagina. Volgt de
+ * technische conventie uit de referentie-thema's (v18): een standalone
+ * layout zonder header/footer-groups, mét content_for_header en
+ * content_for_layout. Geen visuele elementen uit de referenties gekopieerd.
+ */
+function buildPasswordLayout(): ThemeFile {
+  const liquid = `{comment}
+  Gegenereerd door Silvijn Studio — deterministische password-layout voor de
+  launch-fase van deze klant (Shopify password-protected storefront).
+{/comment}
+<!doctype html>
+<html lang="nl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ shop.name }}</title>
+    {% if settings.seo_description != blank %}
+      <meta name="description" content="{{ settings.seo_description | escape }}">
+    {% endif %}
+    <link rel="canonical" href="{{ canonical_url }}">
+    {%- if settings.favicon != blank -%}
+      <link rel="icon" type="image/png" href="{{ settings.favicon | image_url: width: 48 }}">
+    {%- endif -%}
+    {% style %}
+      :root {
+        --color-primary: {{ settings.color_primary }};
+        --color-accent: {{ settings.color_accent }};
+        --color-background: {{ settings.color_background }};
+        --color-text: {{ settings.color_text }};
+        --radius: 10px;
+      }
+      *, *::before, *::after { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: var(--color-background);
+        color: var(--color-text);
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.6;
+      }
+      .gate { width: 100%; max-width: 460px; text-align: center; }
+      .gate__brand { font-weight: 700; letter-spacing: .02em; }
+      .gate__title { margin: 12px 0 8px; font-size: 1.6rem; line-height: 1.3; }
+      .gate__message { margin: 0 0 24px; color: var(--color-text); opacity: .8; }
+      .gate__form { display: flex; flex-direction: column; gap: 12px; }
+      .gate__form input {
+        width: 100%;
+        padding: 12px 14px;
+        border: 1px solid var(--color-text);
+        border-radius: var(--radius);
+        font: inherit;
+        background: transparent;
+        color: inherit;
+      }
+      .gate__form input:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 0; }
+      .gate__submit {
+        padding: 12px 20px;
+        border: 0;
+        border-radius: var(--radius);
+        background: var(--color-primary);
+        color: #fff;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .gate__submit:hover, .gate__submit:focus-visible { background: var(--color-accent); }
+      .gate__errors { color: var(--color-accent); font-weight: 600; margin: 0; }
+      .gate__hint { margin-top: 16px; font-size: .9rem; opacity: .7; }
+    {% endstyle %}
+    {{ content_for_header }}
+  </head>
+  <body>
+    {{ content_for_layout }}
+  </body>
+</html>
+`;
+  return { path: "layout/password.liquid", content: liquid };
+}
+
+/**
+ * templates/password.liquid — de inhoud van de password-pagina: merknaam,
+ * de wachtwoordboodschap die de merchant zelf in Shopify instelt (met een
+ * neutrale Nederlandse fallback), en het storefront_password-formulier.
+ * Geen verzonnen bedrijfsinformatie.
+ */
+function buildPasswordTemplate(): ThemeFile {
+  const liquid = `{%- comment -%}
+  De boodschap op de wachtwoordpagina komt uit shop.password_message
+  (ingesteld door de merchant in de Shopify-admin).
+{%- endcomment -%}
+<div class="gate">
+  <p class="gate__brand">{{ settings.brand_name | default: shop.name }}</p>
+  <h1 class="gate__title">{{ shop.password_message | default: "Binnenkort online" }}</h1>
+  {% form 'storefront_password' %}
+    {{ form.errors | default_errors }}
+    <div class="gate__form">
+      <label class="visually-hidden" for="Password">{{ 'general.password_page.login_form_password' | t }}</label>
+      <input type="password" name="password" id="Password" autocomplete="current-password" placeholder="Wachtwoord">
+      <button type="submit" class="gate__submit">{{ 'general.password_page.login_form_button' | t }}</button>
+    </div>
+  {% endform %}
+  <p class="gate__hint">{{ 'general.password_page.admin_link_html' | t }}</p>
+</div>
+`;
+  return { path: "templates/password.liquid", content: liquid };
+}
+
+// ---------------------------------------------------------------------------
+// Klantaccounts (webshop-functionaliteit; inerte systeempagina's die pas
+// renderen zodra de merchant klantaccounts activeert) + cadeaubon
+// ---------------------------------------------------------------------------
+
+/** Gemeenschappelijke pagina-opening voor klantaccountpagina's. */
+function customersPageOpen(title: string): string {
+  return `{%- comment -%}
+  Klantaccountpagina — rendert uitsluitend zodra de merchant klantaccounts
+  heeft geactiveerd. Neutraal, gebrand door de thema-tokens.
+{%- endcomment -%}
+<section class="account">
+  <div class="container">
+    <header class="account__header">
+      <h1>${title}</h1>
+    </header>
+`;
+}
+
+function buildCustomersLoginPage(): ThemeFile {
+  const liquid = `{%- comment -%} Klantlogin; gasten kunnen direct verder afrekenen. {%- endcomment -%}
+<section class="account">
+  <div class="container">
+    <header class="account__header">
+      <h1>{{ 'customers.login_page.title' | t }}</h1>
+    </header>
+    <div class="account__grid">
+      <div class="account__card">
+        <h2>{{ 'customers.login_page.login' | t }}</h2>
+        {% form 'customer_login' %}
+          {{ form.errors | default_errors }}
+          <div class="field">
+            <label for="CustomerEmail">{{ 'customers.login_page.email' | t }}</label>
+            <input type="email" name="customer[email]" id="CustomerEmail" autocomplete="email" required>
+          </div>
+          <div class="field">
+            <label for="CustomerPassword">{{ 'customers.login_page.password' | t }}</label>
+            <input type="password" name="customer[password]" id="CustomerPassword" autocomplete="current-password" required>
+          </div>
+          <button type="submit" class="btn btn--primary">{{ 'customers.login_page.login' | t }}</button>
+        {% endform %}
+        <p><a href="{{ routes.account_recover_url }}">{{ 'customers.login_page.forgot_password' | t }}</a></p>
+      </div>
+      <div class="account__card">
+        <h2>{{ 'customers.login_page.new_customer' | t }}</h2>
+        <p class="account__empty">{{ 'customers.login_page.no_account_yet' | t }}</p>
+        <a class="btn btn--secondary" href="{{ routes.account_register_url }}">{{ 'customers.login_page.create_account' | t }}</a>
+      </div>
+    </div>
+    {% form 'guest_login' %}
+      <div class="account__actions">
+        <button type="submit" class="btn btn--secondary">{{ 'customers.login_page.guest_title' | t }}</button>
+      </div>
+    {% endform %}
+  </div>
+</section>
+`;
+  return { path: "templates/customers/login.liquid", content: liquid };
+}
+
+function buildCustomersRegisterPage(): ThemeFile {
+  const liquid = `{%- comment -%} Nieuw klantaccount aanmaken. {%- endcomment -%}
+<section class="account">
+  <div class="container">
+    <header class="account__header">
+      <h1>{{ 'customers.register_page.title' | t }}</h1>
+    </header>
+    <div class="account__card" style="max-width: 520px;">
+      {% form 'create_customer' %}
+        {{ form.errors | default_errors }}
+        <div class="field">
+          <label for="RegisterFirstName">{{ 'customers.register_page.first_name' | t }}</label>
+          <input type="text" name="customer[first_name]" id="RegisterFirstName" autocomplete="given-name">
+        </div>
+        <div class="field">
+          <label for="RegisterLastName">{{ 'customers.register_page.last_name' | t }}</label>
+          <input type="text" name="customer[last_name]" id="RegisterLastName" autocomplete="family-name">
+        </div>
+        <div class="field">
+          <label for="RegisterEmail">{{ 'customers.register_page.email' | t }}</label>
+          <input type="email" name="customer[email]" id="RegisterEmail" autocomplete="email" required>
+        </div>
+        <div class="field">
+          <label for="RegisterPassword">{{ 'customers.register_page.password' | t }}</label>
+          <input type="password" name="customer[password]" id="RegisterPassword" autocomplete="new-password" required>
+        </div>
+        <button type="submit" class="btn btn--primary">{{ 'customers.register_page.submit' | t }}</button>
+      {% endform %}
+      <p><a href="{{ routes.account_login_url }}">{{ 'customers.register_page.back_to_login' | t }}</a></p>
+    </div>
+  </div>
+</section>
+`;
+  return { path: "templates/customers/register.liquid", content: liquid };
+}
+
+function buildCustomersAccountPage(): ThemeFile {
+  const liquid = `${customersPageOpen("{{ 'customers.account.title' | t }}")}
+    <div class="account__grid">
+      <div class="account__card">
+        <h2>{{ 'customers.account.details' | t }}</h2>
+        <p class="account__meta">{{ customer.name }}</p>
+        <p class="account__meta">{{ customer.email }}</p>
+        <a class="btn btn--secondary" href="{{ routes.account_addresses_url }}">{{ 'customers.account.view_addresses' | t }} ({{ customer.addresses_count }})</a>
+      </div>
+      <div class="account__card">
+        <h2>{{ 'customers.account.orders_title' | t }}</h2>
+        {% if customer.orders_count == 0 %}
+          <p class="account__empty">{{ 'customers.account.no_orders' | t }}</p>
+        {% else %}
+          <table>
+            <thead>
+              <tr><th>{{ 'customers.order.order' | t }}</th><th>{{ 'customers.order.date' | t }}</th><th>{{ 'customers.order.total' | t }}</th></tr>
+            </thead>
+            <tbody>
+              {% for order in customer.orders %}
+                <tr>
+                  <td><a href="{{ order.customer_url }}">{{ order.name }}</a></td>
+                  <td>{{ order.created_at | date: "%d-%m-%Y" }}</td>
+                  <td>{{ order.total_price | money }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% endif %}
+      </div>
+    </div>
+    <div class="account__actions">
+      <a class="btn btn--secondary" href="{{ routes.account_logout_url }}">{{ 'customers.account.logout' | t }}</a>
+    </div>
+  </div>
+</section>
+`;
+  return { path: "templates/customers/account.liquid", content: liquid };
+}
+
+function buildCustomersOrderPage(): ThemeFile {
+  const liquid = `${customersPageOpen("{{ 'customers.order.title' | t }} {{ order.name }}")}
+    <p class="account__meta">{{ 'customers.order.date' | t }}: {{ order.created_at | date: "%d-%m-%Y" }}</p>
+    <p class="account__meta">
+      <span class="account__status">{{ order.financial_status_label }}</span>
+      <span class="account__status">{{ order.fulfillment_status_label }}</span>
+    </p>
+    <table>
+      <thead>
+        <tr><th>{{ 'customers.order.product' | t }}</th><th>{{ 'customers.order.quantity' | t }}</th><th>{{ 'customers.order.total' | t }}</th></tr>
+      </thead>
+      <tbody>
+        {% for line_item in order.line_items %}
+          <tr>
+            <td>{{ line_item.title }}</td>
+            <td>{{ line_item.quantity }}</td>
+            <td>{{ line_item.final_line_price | money }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr><td colspan="2">{{ 'customers.order.subtotal' | t }}</td><td>{{ order.line_items_subtotal_price | money }}</td></tr>
+        {% for shipping_method in order.shipping_methods %}
+          <tr><td colspan="2">{{ shipping_method.title }}</td><td>{{ shipping_method.price | money }}</td></tr>
+        {% endfor %}
+        {% for tax_line in order.tax_lines %}
+          <tr><td colspan="2">{{ tax_line.title }} ({{ tax_line.rate | times: 100 }}%)</td><td>{{ tax_line.price | money }}</td></tr>
+        {% endfor %}
+        <tr><td colspan="2"><strong>{{ 'customers.order.total' | t }}</strong></td><td><strong>{{ order.total_price | money }}</strong></td></tr>
+      </tfoot>
+    </table>
+    <h2>{{ 'customers.order.billing_address' | t }}</h2>
+    <p class="account__meta">{{ order.billing_address | format_address }}</p>
+    <h2>{{ 'customers.order.shipping_address' | t }}</h2>
+    <p class="account__meta">{{ order.shipping_address | format_address }}</p>
+  </div>
+</section>
+`;
+  return { path: "templates/customers/order.liquid", content: liquid };
+}
+
+function buildCustomersAddressesPage(): ThemeFile {
+  const liquid = `${customersPageOpen("{{ 'customers.addresses.title' | t }}")}
+    {% if customer.addresses.size == 0 %}
+      <p class="account__empty">{{ 'customers.addresses.no_addresses' | t }}</p>
+    {% endif %}
+    {% for address in customer.addresses %}
+      <div class="account__card">
+        <p class="account__meta">{{ address | format_address }}</p>
+        {% if address == customer.default_address %}
+          <p class="account__meta"><span class="account__status">{{ 'customers.addresses.default' | t }}</span></p>
+        {% endif %}
+        {% form 'customer_address', address %}
+          <div class="field">
+            <label for="AddressFirstName_{{ forloop.index }}">{{ 'customers.addresses.first_name' | t }}</label>
+            <input type="text" name="address[first_name]" id="AddressFirstName_{{ forloop.index }}" value="{{ address.first_name }}" autocomplete="given-name">
+          </div>
+          <div class="field">
+            <label for="AddressLastName_{{ forloop.index }}">{{ 'customers.addresses.last_name' | t }}</label>
+            <input type="text" name="address[last_name]" id="AddressLastName_{{ forloop.index }}" value="{{ address.last_name }}" autocomplete="family-name">
+          </div>
+          <div class="field">
+            <label for="AddressCompany_{{ forloop.index }}">{{ 'customers.addresses.company' | t }}</label>
+            <input type="text" name="address[company]" id="AddressCompany_{{ forloop.index }}" value="{{ address.company }}" autocomplete="organization">
+          </div>
+          <div class="field">
+            <label for="AddressAddress1_{{ forloop.index }}">{{ 'customers.addresses.address1' | t }}</label>
+            <input type="text" name="address[address1]" id="AddressAddress1_{{ forloop.index }}" value="{{ address.address1 }}" autocomplete="address-line1">
+          </div>
+          <div class="field">
+            <label for="AddressAddress2_{{ forloop.index }}">{{ 'customers.addresses.address2' | t }}</label>
+            <input type="text" name="address[address2]" id="AddressAddress2_{{ forloop.index }}" value="{{ address.address2 }}" autocomplete="address-line2">
+          </div>
+          <div class="field">
+            <label for="AddressCity_{{ forloop.index }}">{{ 'customers.addresses.city' | t }}</label>
+            <input type="text" name="address[city]" id="AddressCity_{{ forloop.index }}" value="{{ address.city }}" autocomplete="address-level2">
+          </div>
+          <div class="field">
+            <label for="AddressZip_{{ forloop.index }}">{{ 'customers.addresses.zip' | t }}</label>
+            <input type="text" name="address[zip]" id="AddressZip_{{ forloop.index }}" value="{{ address.zip }}" autocomplete="postal-code">
+          </div>
+          <div class="field">
+            <label for="AddressPhone_{{ forloop.index }}">{{ 'customers.addresses.phone' | t }}</label>
+            <input type="tel" name="address[phone]" id="AddressPhone_{{ forloop.index }}" value="{{ address.phone }}" autocomplete="tel">
+          </div>
+          {{ form.errors | default_errors }}
+          <div class="account__actions">
+            <button type="submit" class="btn btn--secondary">{{ 'customers.addresses.update' | t }}</button>
+          </div>
+        {% endform %}
+        {% form 'customer_address', address %}
+          <input type="hidden" name="address[default]" value="true">
+          <div class="account__actions">
+            <button type="submit" class="btn btn--secondary">{{ 'customers.addresses.set_default' | t }}</button>
+          </div>
+        {% endform %}
+        {% form 'customer_address', address %}
+          <input type="hidden" name="_method" value="delete">
+          <div class="account__actions">
+            <button type="submit" class="btn btn--secondary">{{ 'customers.addresses.delete' | t }}</button>
+          </div>
+        {% endform %}
+      </div>
+    {% endfor %}
+    <h2>{{ 'customers.addresses.add_new' | t }}</h2>
+    <div class="account__card">
+      {% form 'customer_address', customer.new_address %}
+        <div class="field">
+          <label for="NewAddressFirstName">{{ 'customers.addresses.first_name' | t }}</label>
+          <input type="text" name="address[first_name]" id="NewAddressFirstName" autocomplete="given-name">
+        </div>
+        <div class="field">
+          <label for="NewAddressLastName">{{ 'customers.addresses.last_name' | t }}</label>
+          <input type="text" name="address[last_name]" id="NewAddressLastName" autocomplete="family-name">
+        </div>
+        <div class="field">
+          <label for="NewAddressAddress1">{{ 'customers.addresses.address1' | t }}</label>
+          <input type="text" name="address[address1]" id="NewAddressAddress1" autocomplete="address-line1">
+        </div>
+        <div class="field">
+          <label for="NewAddressCity">{{ 'customers.addresses.city' | t }}</label>
+          <input type="text" name="address[city]" id="NewAddressCity" autocomplete="address-level2">
+        </div>
+        <div class="field">
+          <label for="NewAddressZip">{{ 'customers.addresses.zip' | t }}</label>
+          <input type="text" name="address[zip]" id="NewAddressZip" autocomplete="postal-code">
+        </div>
+        <div class="field">
+          <label for="NewAddressPhone">{{ 'customers.addresses.phone' | t }}</label>
+          <input type="tel" name="address[phone]" id="NewAddressPhone" autocomplete="tel">
+        </div>
+        {{ form.errors | default_errors }}
+        <button type="submit" class="btn btn--primary">{{ 'customers.addresses.add_address' | t }}</button>
+      {% endform %}
+    </div>
+  </div>
+</section>
+`;
+  return { path: "templates/customers/addresses.liquid", content: liquid };
+}
+
+function buildCustomersActivateAccountPage(): ThemeFile {
+  const liquid = `${customersPageOpen("{{ 'customers.activate_account_page.title' | t }}")}
+    <div class="account__card" style="max-width: 520px;">
+      {% form 'activate_customer_password' %}
+        {{ form.errors | default_errors }}
+        <div class="field">
+          <label for="ActivatePassword">{{ 'customers.activate_account_page.password' | t }}</label>
+          <input type="password" name="customer[password]" id="ActivatePassword" autocomplete="new-password" required>
+        </div>
+        <div class="field">
+          <label for="ActivatePasswordConfirm">{{ 'customers.activate_account_page.password_confirm' | t }}</label>
+          <input type="password" name="customer[password_confirmation]" id="ActivatePasswordConfirm" autocomplete="new-password" required>
+        </div>
+        <div class="account__actions">
+          <button type="submit" class="btn btn--primary">{{ 'customers.activate_account_page.submit' | t }}</button>
+        </div>
+      {% endform %}
+    </div>
+  </div>
+</section>
+`;
+  return { path: "templates/customers/activate_account.liquid", content: liquid };
+}
+
+function buildCustomersResetPasswordPage(): ThemeFile {
+  const liquid = `${customersPageOpen("{{ 'customers.reset_password_page.title' | t }}")}
+    <div class="account__card" style="max-width: 520px;">
+      {% form 'recover_customer_password' %}
+        {{ form.errors | default_errors }}
+        <div class="field">
+          <label for="RecoverEmail">{{ 'customers.reset_password_page.email' | t }}</label>
+          <input type="email" name="email" id="RecoverEmail" autocomplete="email" required>
+        </div>
+        <div class="account__actions">
+          <button type="submit" class="btn btn--primary">{{ 'customers.reset_password_page.submit' | t }}</button>
+        </div>
+      {% endform %}
+    </div>
+  </div>
+</section>
+`;
+  return { path: "templates/customers/reset_password.liquid", content: liquid };
+}
+
+/**
+ * templates/gift_card.liquid — cadeaubonpagina. Volgt de technische
+ * conventie (standalone print-pagina via {% layout none %}); toont uitsluitend
+ * echte gift_card-objectdata, geen verzonnen waarden.
+ */
+function buildGiftCardTemplate(): ThemeFile {
+  const liquid = `{%- comment -%}
+  Cadeaubonpagina — standalone (geen thema-layout) zodat de bon printvriendelijk
+  is. Alle waarden komen uit het gift_card-object van Shopify.
+{%- endcomment -%}
+{% layout none %}
+<!doctype html>
+<html lang="{{ request.locale.iso_code }}">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ gift_card.initial_value | money }} — {{ shop.name }}</title>
+    {%- if gift_card.enabled == false or gift_card.expired -%}
+      <meta name="robots" content="noindex, nofollow">
+    {%- endif -%}
+    {% style %}
+      *, *::before, *::after { box-sizing: border-box; }
+      body { margin: 0; padding: 24px; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1f2328; }
+      .giftcard { max-width: 560px; margin-inline: auto; text-align: center; }
+      .giftcard__brand { font-weight: 700; }
+      .giftcard__code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 1.6rem; letter-spacing: .25em;
+        border: 2px dashed currentColor; border-radius: 12px;
+        padding: 16px 12px; margin: 16px 0;
+      }
+      .giftcard__value { font-size: 1.3rem; margin: 8px 0; }
+      .giftcard__meta { opacity: .75; margin: 4px 0; }
+      .giftcard__status { font-weight: 600; }
+      .giftcard__actions { margin-top: 20px; }
+      @media print { .giftcard__actions { display: none; } }
+    {% endstyle %}
+  </head>
+  <body>
+    <div class="giftcard">
+      <p class="giftcard__brand">{{ shop.name }}</p>
+      <h1>{{ 'gift_cards.issued.title' | t }}</h1>
+      <p class="giftcard__code">{{ gift_card.code | format_code }}</p>
+      <p class="giftcard__value">{{ gift_card.initial_value | money }}</p>
+      {%- if gift_card.balance != gift_card.initial_value -%}
+        <p class="giftcard__meta">{{ 'gift_cards.issued.remaining_html' | t }}: {{ gift_card.balance | money }}</p>
+      {%- endif -%}
+      {%- if gift_card.enabled == false -%}
+        <p class="giftcard__status">{{ 'gift_cards.issued.disabled' | t }}</p>
+      {%- endif -%}
+      {%- if gift_card.expired -%}
+        <p class="giftcard__status">{{ 'gift_cards.issued.expired' | t }}</p>
+      {%- elsif gift_card.expires_on != blank -%}
+        <p class="giftcard__meta">{{ 'gift_cards.issued.expires_on' | t }}: {{ gift_card.expires_on | date: "%d-%m-%Y" }}</p>
+      {%- endif -%}
+      <div class="giftcard__actions">
+        <a class="giftcard__link" href="{{ shop.url }}">{{ 'gift_cards.issued.shop_link' | t }}</a>
+        <button type="button" onclick="window.print()">{{ 'gift_cards.issued.print' | t }}</button>
+      </div>
+    </div>
+  </body>
+</html>
+`;
+  return { path: "templates/gift_card.liquid", content: liquid };
 }
 
 // ---------------------------------------------------------------------------
@@ -1442,8 +2147,12 @@ export function buildShopifyTheme(input: BuildThemeInput): BuiltTheme {
   const notes: string[] = [];
 
   // --- Config + layout + assets + locales
-  files.push(buildSettingsSchema(spec.business.businessName));
-  files.push(buildSettingsData(tokens));
+  files.push(
+    buildSettingsSchema(spec.business.businessName, contact, spec.seo.metaDescription)
+  );
+  files.push(
+    buildSettingsData(tokens, spec.business.businessName, contact, spec.seo.metaDescription)
+  );
   files.push(buildThemeLayout(spec, tokens));
   files.push(buildMetaTagsSnippet());
   files.push(buildButtonSnippet());
@@ -1451,6 +2160,21 @@ export function buildShopifyTheme(input: BuildThemeInput): BuiltTheme {
   files.push(buildThemeJs());
   files.push(buildPlaceholderSvg(tokens));
   files.push(buildLocaleFile());
+
+  // --- Password-status (branded "coming soon" tijdens de launch)
+  files.push(buildPasswordLayout());
+  files.push(buildPasswordTemplate());
+
+  // --- Klantaccounts (inerte systeempagina's; pas actief bij door de
+  //     merchant geactiveerde klantaccounts) + cadeaubon
+  files.push(buildCustomersLoginPage());
+  files.push(buildCustomersRegisterPage());
+  files.push(buildCustomersAccountPage());
+  files.push(buildCustomersOrderPage());
+  files.push(buildCustomersAddressesPage());
+  files.push(buildCustomersActivateAccountPage());
+  files.push(buildCustomersResetPasswordPage());
+  files.push(buildGiftCardTemplate());
 
   // --- Sections
   files.push(buildHeaderSection());

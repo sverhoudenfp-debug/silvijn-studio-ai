@@ -83,6 +83,37 @@ export const THEME_REQUIRED_FILES: readonly string[] = [
   "templates/product.json",
   "templates/collection.json",
   "templates/search.json",
+  // Completeness-pass (Fase I.2): de password-status (launch-fase van de
+  // klant), klantaccounts en cadeaubonnen zijn onderdeel van de Shopify-
+  // storefrontbasis. Klantaccount- en giftcardpagina's zijn inerte
+  // systeempagina's: ze renderen pas zodra de merchant accounts cq.
+  // cadeaubonnen activeert, dus ze voegen géén zichtbare webshop-UI toe aan
+  // niet-webshop sites — dezelfde redenatie als product/cart/collection/search.
+  "layout/password.liquid",
+  "templates/password.liquid",
+  "templates/gift_card.liquid",
+  "templates/customers/login.liquid",
+  "templates/customers/register.liquid",
+  "templates/customers/account.liquid",
+  "templates/customers/order.liquid",
+  "templates/customers/addresses.liquid",
+  "templates/customers/activate_account.liquid",
+  "templates/customers/reset_password.liquid",
+];
+
+/**
+ * Setting-id's die het thema MOET definiëren (Fase I.2 completeness): branding,
+ * contact- en SEO-gegevens die door de meta-tags (og:image, JSON-LD,
+ * meta-description) en de title-fallbackketen worden gelezen. Defaults komen
+ * uitsluitend uit geverifieerde lead-/specificatiedata.
+ */
+export const THEME_REQUIRED_SETTING_IDS: readonly string[] = [
+  "brand_name",
+  "contact_email",
+  "contact_phone",
+  "contact_city",
+  "seo_description",
+  "share_image",
 ];
 
 /**
@@ -136,6 +167,7 @@ export const THEME_LIQUID_ALLOWED_TAGS: ReadonlySet<string> = new Set([
   "tablerow",
   "endtablerow",
   "liquid",
+  "layout",
   "render",
   "section",
   "sections",

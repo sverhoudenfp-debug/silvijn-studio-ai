@@ -256,6 +256,131 @@ test("theme-zip: contactgegevens in de footer zijn de échte context (geen fabri
   assert.equal(settings.address, CONTACT.address);
 });
 
+// ---------------------------------------------------------------------------
+// Completeness-pass (Fase I.2): password, klantaccounts, gift card, share-image
+// ---------------------------------------------------------------------------
+
+test("theme-zip: password-layout + -template zijn gebrand en compleet", () => {
+  const files = builtTheme();
+  const byPath = new Map(files.map((f) => [f.path, f.content]));
+  const layout = byPath.get("layout/password.liquid")!;
+  const template = byPath.get("templates/password.liquid")!;
+  assert.ok(layout.includes("content_for_header"), "password-layout mist content_for_header");
+  assert.ok(layout.includes("content_for_layout"), "password-layout mist content_for_layout");
+  assert.ok(!layout.includes("sections 'header-group'"), "password-layout hoort geen header-group te tonen");
+  assert.ok(template.includes("storefront_password"), "password-template mist het formulier");
+  assert.ok(template.includes("shop.password_message"), "password-template leest de merchant-boodschap");
+  assert.ok(template.includes("{{ settings.brand_name"), "password-template toont de branding via settings");
+});
+
+test("theme-zip: klantaccount-templates zijn functioneel en alleen systeemniveau", () => {
+  const files = builtTheme();
+  const byPath = new Map(files.map((f) => [f.path, f.content]));
+  const expected = [
+    "templates/customers/login.liquid",
+    "templates/customers/register.liquid",
+    "templates/customers/account.liquid",
+    "templates/customers/order.liquid",
+    "templates/customers/addresses.liquid",
+    "templates/customers/activate_account.liquid",
+    "templates/customers/reset_password.liquid",
+  ];
+  for (const path of expected) {
+    assert.ok(byPath.has(path), `ontbreekt: ${path}`);
+    assert.ok(byPath.get(path)!.length > 100, `${path} is verdacht leeg`);
+  }
+  assert.ok(byPath.get("templates/customers/login.liquid")!.includes("customer_login"));
+  assert.ok(byPath.get("templates/customers/login.liquid")!.includes("guest_login"));
+  assert.ok(byPath.get("templates/customers/register.liquid")!.includes("create_customer"));
+  assert.ok(byPath.get("templates/customers/account.liquid")!.includes("customer.orders"));
+  assert.ok(byPath.get("templates/customers/addresses.liquid")!.includes("customer_address"));
+  // Geen klantaccountpagina's in de navigatie: geen webshop-UI op niet-webshop sites.
+  const headerGroup = byPath.get("sections/header-group.json")!;
+  assert.ok(!headerGroup.includes("/account"), "navigatie mag niet naar accountpagina's verwijzen");
+  const index = byPath.get("templates/index.json")!;
+  assert.ok(!index.includes("customers/"), "homepage bevat geen accountblokken");
+});
+
+test("theme-zip: gift_card is een standalone printpagina met echte objectdata", () => {
+  const files = builtTheme();
+  const giftCard = files.find((f) => f.path === "templates/gift_card.liquid")!;
+  assert.ok(giftCard.content.includes("{% layout none %}"));
+  assert.ok(giftCard.content.includes("{{ gift_card.code"));
+  assert.ok(giftCard.content.includes("{{ gift_card.initial_value"));
+  assert.ok(giftCard.content.includes("{{ gift_card.balance"));
+});
+
+test("theme-zip: share_image/og:image en JSON-LD zijn settings-gedreven", () => {
+  const files = builtTheme();
+  const byPath = new Map(files.map((f) => [f.path, f.content]));
+  const schema = JSON.parse(byPath.get("config/settings_schema.json")!);
+  const settingIds = new Set<string>();
+  for (const group of schema) {
+    for (const setting of group.settings ?? []) settingIds.add(setting.id);
+  }
+  for (const id of ["brand_name", "contact_email", "contact_phone", "contact_city", "seo_description", "share_image"]) {
+    assert.ok(settingIds.has(id), `setting ontbreekt: ${id}`);
+  }
+  const metaTags = byPath.get("snippets/meta-tags.liquid")!;
+  assert.ok(metaTags.includes("settings.share_image"));
+  assert.ok(metaTags.includes("og:image"));
+  assert.ok(metaTags.includes("application/ld+json"));
+  // JSON-LD leest uitsluitend settings/shop-object (geen hardcoded bedrijfsdata).
+  assert.ok(metaTags.includes("settings.brand_name | json"));
+  assert.ok(metaTags.includes("shop.url | json"));
+  // Geverifieerde defaults in settings_data; lege waarden blijven leeg.
+  const data = JSON.parse(byPath.get("config/settings_data.json")!).current;
+  assert.equal(data.brand_name, SPECIFICATION.business.businessName);
+  assert.equal(data.contact_email, CONTACT.email);
+  assert.equal(data.contact_phone, CONTACT.phone);
+  assert.equal(data.contact_city, CONTACT.city);
+  assert.equal(data.seo_description, SPECIFICATION.seo.metaDescription);
+});
+
+test("theme-zip: title en meta-description hebben betrouwbare fallbackketen", () => {
+  const layout = builtTheme().find((f) => f.path === "layout/theme.liquid")!;
+  assert.ok(layout.content.includes("{{ page_title | default: shop.name }}"), "title-fallback via page_title");
+  assert.ok(layout.content.includes("page_description | default: settings.seo_description"), "meta-description-fallback");
+});
+
+test("theme-zip: validator vangt incompleteness (password/gift card/settings)", () => {
+  // 1. Password-layout weg → vereist-bestand + referentiefout
+  const missingPassword = builtTheme().filter((f) => f.path !== "layout/password.liquid");
+  let result = validateThemeFiles(missingPassword);
+  assert.ok(result.errors.some((e) => e.includes("layout/password.liquid")));
+
+  // 2. Gift card zonder standalone layout → fout
+  const badGiftCard = builtTheme().map((f) =>
+    f.path === "templates/gift_card.liquid"
+      ? { ...f, content: f.content.replace("{% layout none %}", "") }
+      : f
+  );
+  result = validateThemeFiles(badGiftCard);
+  assert.ok(result.errors.some((e) => e.includes("gift_card") && e.includes("layout none")));
+
+  // 3. Schema zonder share_image-setting → setting-referentiefout
+  const badSchema = builtTheme().map((f) => {
+    if (f.path !== "config/settings_schema.json") return f;
+    const schema = JSON.parse(f.content);
+    for (const group of schema) {
+      group.settings = (group.settings ?? []).filter((setting: { id: string }) => setting.id !== "share_image");
+    }
+    return { ...f, content: JSON.stringify(schema, null, 2) + "\n" };
+  });
+  result = validateThemeFiles(badSchema);
+  assert.ok(result.errors.some((e) => e.includes("share_image")));
+
+  // 4. Lege klantaccountpagina → fout
+  const emptyCustomer = builtTheme().map((f) =>
+    f.path === "templates/customers/register.liquid" ? { ...f, content: "<p>x</p>" } : f
+  );
+  result = validateThemeFiles(emptyCustomer);
+  assert.ok(
+    result.errors.some((e) => e.includes("templates/customers/register.liquid")),
+    "lege accountpagina moet worden afgewezen"
+  );
+});
+
 test("theme-zip: ZIP-creatie is deterministisch (byte-identiek) en leesbaar terug", async () => {
   const zip1 = await createThemeZip(builtTheme());
   const zip2 = await createThemeZip(builtTheme());

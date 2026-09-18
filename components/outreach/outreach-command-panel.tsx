@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import {
   startOutreachCampaignAction,
   processDueFollowupsAction,
@@ -16,6 +16,12 @@ import type { OutreachCommandRecord } from "@/lib/outreach/command-types";
  *
  *   review-modus: AI maakt concepten; menselijke review blijft bestaan.
  *   auto-modus:    AI selecteert, genereert en verzendt binnen de opdracht.
+ *
+ * Server actions worden bewust NIET binnen startTransition aangeroepen:
+ * React 19 levert een rejection van een async transition-callback af aan de
+ * dichtstbijzijnde error boundary (de lokale catch bereikt die nooit). Vandaar
+ * gewone async handlers met eigen pending-state, zodat actiefouten als
+ * nette inline melding verschijnen i.p.v. het paneel te laten crashen.
  */
 
 type Mode = "review" | "auto";
@@ -37,55 +43,69 @@ export function OutreachCommandPanel({
   const [limit, setLimit] = useState(10);
   const [result, setResult] = useState<RunResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
 
-  function runCampaign() {
-    startTransition(async () => {
-      setError(null);
-      try {
-        const r = await startOutreachCampaignAction({ mode, limit });
-        setResult({
-          ok: true,
-          detail: `${r.sent} verzonden, ${r.draftsCreated} concepten klaar voor review`,
-          errors: r.errors,
-        });
-        window.location.reload();
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Opdracht mislukt");
-      }
-    });
+  function sanitizeLimit(value: number): number | null {
+    const n = Math.floor(Number(value));
+    if (!Number.isFinite(n) || n < 1 || n > 25) return null;
+    return n;
   }
 
-  function runFollowups(followupMode: Mode) {
-    startTransition(async () => {
-      setError(null);
-      try {
-        const r = await processDueFollowupsAction({ mode: followupMode });
-        setResult({
-          ok: true,
-          detail:
-            followupMode === "auto"
-              ? `${r.sentFollowups} follow-up(s) verzonden van ${r.dueCount} due`
-              : `${r.dueCount} follow-upconcepten klaar voor review`,
-          errors: r.errors,
-        });
-        window.location.reload();
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Follow-upronde mislukt");
-      }
-    });
+  async function runCampaign() {
+    setError(null);
+    const safeLimit = sanitizeLimit(limit);
+    if (safeLimit === null) {
+      setError("Limiet moet een geheel getal tussen 1 en 25 zijn");
+      return;
+    }
+    setPending(true);
+    try {
+      const r = await startOutreachCampaignAction({ mode, limit: safeLimit });
+      setResult({
+        ok: true,
+        detail: `${r.sent} verzonden, ${r.draftsCreated} concepten klaar voor review`,
+        errors: r.errors,
+      });
+      window.location.reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Opdracht mislukt");
+    } finally {
+      setPending(false);
+    }
   }
 
-  function refreshDue() {
-    startTransition(async () => {
-      setError(null);
-      try {
-        const due = await getDueFollowupsAction();
-        setResult({ ok: true, detail: `${due.length} lead(s) due voor een follow-up (max 2 per lead)`, errors: [] });
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Status ophalen mislukt");
-      }
-    });
+  async function runFollowups(followupMode: Mode) {
+    setError(null);
+    setPending(true);
+    try {
+      const r = await processDueFollowupsAction({ mode: followupMode });
+      setResult({
+        ok: true,
+        detail:
+          followupMode === "auto"
+            ? `${r.sentFollowups} follow-up(s) verzonden van ${r.dueCount} due`
+            : `${r.dueCount} follow-upconcepten klaar voor review`,
+        errors: r.errors,
+      });
+      window.location.reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Follow-upronde mislukt");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function refreshDue() {
+    setError(null);
+    setPending(true);
+    try {
+      const due = await getDueFollowupsAction();
+      setResult({ ok: true, detail: `${due.length} lead(s) due voor een follow-up (max 2 per lead)`, errors: [] });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Status ophalen mislukt");
+    } finally {
+      setPending(false);
+    }
   }
 
   return (

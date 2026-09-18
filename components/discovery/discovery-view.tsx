@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { runDiscovery, type DiscoveryFormInput } from "@/app/(dashboard)/lead-discovery/actions";
 import { DISCOVERY_SOURCES } from "@/lib/discovery/providers";
 import type { DiscoveryCommandResult } from "@/lib/discovery/orchestrator";
@@ -96,12 +96,19 @@ export function DiscoveryView({ recentRuns }: { recentRuns: DiscoveryRunRecord[]
     limit: 20,
   });
   const [result, setResult] = useState<DiscoveryCommandResult | null>(null);
-  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
 
-  function submit() {
-    startTransition(async () => {
+  async function submit() {
+    setError(null);
+    setPending(true);
+    try {
       setResult(await runDiscovery(form));
-    });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Discovery-opdracht mislukt");
+    } finally {
+      setPending(false);
+    }
   }
 
   const set = (key: keyof DiscoveryFormInput) => (value: string | number) =>
@@ -205,6 +212,7 @@ export function DiscoveryView({ recentRuns }: { recentRuns: DiscoveryRunRecord[]
             </button>
           </div>
         </div>
+        {error && <p className="mt-3 text-xs text-red-400">{error}</p>}
         <p className="mt-3 text-xs text-zinc-500">
           Minimaal een branche, plaats of regio vereist. Max. 50 kandidaten per run (configureerbaar). Discovery start nooit outreach. Mock-bron bevat uitsluitend fictieve testbedrijven — geen echte externe data.
         </p>

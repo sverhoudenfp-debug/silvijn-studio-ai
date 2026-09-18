@@ -1,0 +1,12 @@
+-- 0019: service_role INSERT-grant op audit_events.
+--
+-- De orchestrators (discovery 0017, outreach 0018, reply-pipeline) schrijven hun
+-- audit-events server-side met de service-role client. Deze tabel had alleen een
+-- SELECT-grant voor service_role, waardoor ELKE audit-insert in productie
+-- stilletjes faalde (42501 permission denied) en werd weggevangen door de
+-- console.warn-catch. Gevolg: voltooide outreach- en discovery-opdrachten
+-- lieten geen spoor achter in de audit trail.
+--
+-- Fix: expliciete INSERT-grant. UPDATE/DELETE blijven bewust NIET verleend:
+-- audit_events is append-only (0011 human-decision-immutability).
+GRANT INSERT ON public.audit_events TO service_role;

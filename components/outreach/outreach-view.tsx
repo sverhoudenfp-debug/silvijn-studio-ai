@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { approveOutreachDraft, cancelOutreachDraft } from "@/app/actions/outreach";
 import { sendApprovedOutreachDraft } from "@/app/actions/gmail";
 import { Badge } from "@/components/ui/badge";
@@ -43,35 +43,36 @@ export function OutreachView({
   const [drafts, setDrafts] = useState(initialDrafts);
   const [error, setError] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
 
-  function sendDraft(draftId: string) {
-    startTransition(async () => {
-      setPendingId(draftId);
-      try {
-        await sendApprovedOutreachDraft(draftId);
-        setError(null);
-        // Ververs via router: sent-status + provider-bewijs komen uit de server.
-        window.location.reload();
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Verzenden mislukt");
-      } finally {
-        setPendingId(null);
-      }
-    });
+  async function sendDraft(draftId: string) {
+    setPendingId(draftId);
+    setPending(true);
+    try {
+      await sendApprovedOutreachDraft(draftId);
+      setError(null);
+      // Ververs via router: sent-status + provider-bewijs komen uit de server.
+      window.location.reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Verzenden mislukt");
+    } finally {
+      setPendingId(null);
+      setPending(false);
+    }
   }
 
-  function updateStatus(draftId: string, action: "approve" | "cancel") {
-    startTransition(async () => {
-      try {
-        const updated =
-          action === "approve" ? await approveOutreachDraft(draftId) : await cancelOutreachDraft(draftId);
-        setDrafts((prev) => prev.map((d) => (d.id === draftId ? updated : d)));
-        setError(null);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Bijwerken mislukt");
-      }
-    });
+  async function updateStatus(draftId: string, action: "approve" | "cancel") {
+    setPending(true);
+    try {
+      const updated =
+        action === "approve" ? await approveOutreachDraft(draftId) : await cancelOutreachDraft(draftId);
+      setDrafts((prev) => prev.map((d) => (d.id === draftId ? updated : d)));
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Bijwerken mislukt");
+    } finally {
+      setPending(false);
+    }
   }
 
   const count = (status: string) => drafts.filter((d) => d.status === status).length;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { processPendingRepliesAction } from "@/app/actions/sales";
 import { Badge } from "@/components/ui/badge";
 
@@ -20,23 +20,24 @@ export function ReplyPipelinePanel({ pendingCount }: { pendingCount: number }) {
   const [detail, setDetail] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
 
-  function run() {
-    startTransition(async () => {
-      setError(null);
-      try {
-        const r = await processPendingRepliesAction({ mode });
-        const parts: string[] = [`${r.processedCount} reactie(s) verwerkt`];
-        if (r.sentCount) parts.push(`${r.sentCount} beantwoord`);
-        if (r.escalatedCount) parts.push(`${r.escalatedCount} geëscaleerd naar Silvijn`);
-        setDetail(parts.join(" · "));
-        setErrors(r.errors);
-        window.location.reload();
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Pipeline mislukt");
-      }
-    });
+  async function run() {
+    setError(null);
+    setPending(true);
+    try {
+      const r = await processPendingRepliesAction({ mode });
+      const parts: string[] = [`${r.processedCount} reactie(s) verwerkt`];
+      if (r.sentCount) parts.push(`${r.sentCount} beantwoord`);
+      if (r.escalatedCount) parts.push(`${r.escalatedCount} geëscaleerd naar Silvijn`);
+      setDetail(parts.join(" · "));
+      setErrors(r.errors);
+      window.location.reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Pipeline mislukt");
+    } finally {
+      setPending(false);
+    }
   }
 
   return (

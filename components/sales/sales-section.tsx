@@ -4,7 +4,7 @@ import Link from "next/link";
 import { listOutreachDrafts } from "@/app/actions/outreach";
 import type { OutreachDraft } from "@/lib/outreach/types";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   analyzeInboundMessageAction,
   createInboundMessageAction,
@@ -65,7 +65,19 @@ export function SalesSection({ leadId, leadBusinessName }: { leadId: string; lea
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({ sender: "", subject: "", body: "" });
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
+
+  // Gewone async runner — geen startTransition: React 19 levert een rejection
+  // van een async transition-callback af aan de error boundary in plaats van de
+  // lokale catch. Zo blijven actiefouten een nette inline melding.
+  async function runPending<T>(fn: () => Promise<T>): Promise<void> {
+    setPending(true);
+    try {
+      await fn();
+    } finally {
+      setPending(false);
+    }
+  }
 
   const refresh = useCallback(async () => {
     const [inboundList, interactionList] = await Promise.all([
@@ -106,7 +118,7 @@ export function SalesSection({ leadId, leadBusinessName }: { leadId: string; lea
       return;
     }
     setError(null);
-    startTransition(async () => {
+    runPending(async () => {
       try {
         await createInboundMessageAction({ leadId, ...form, confirmedReply:true, receivedAt:new Date(receivedAt).toISOString(), requestId, outreachId:outreachId||null });
         setRequestId(crypto.randomUUID()); setConfirmed(false); setReceivedAt(""); setOutreachId(""); router.refresh();
@@ -120,7 +132,7 @@ export function SalesSection({ leadId, leadBusinessName }: { leadId: string; lea
 
   function analyze(inboundMessageId: string) {
     setError(null);
-    startTransition(async () => {
+    runPending(async () => {
       try {
         await analyzeInboundMessageAction(leadId, inboundMessageId);
         await refresh();
@@ -131,7 +143,7 @@ export function SalesSection({ leadId, leadBusinessName }: { leadId: string; lea
   }
 
   function updateStatus(interactionId: string, action: "ready" | "handled") {
-    startTransition(async () => {
+    runPending(async () => {
       try {
         await (action === "ready" ? markReadyForSilvijnAction(interactionId) : markHandledAction(interactionId));
         await refresh();

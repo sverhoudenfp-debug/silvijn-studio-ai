@@ -14,7 +14,8 @@ import {
 } from "@/app/actions/projects";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
-import type { Project, ProjectRequirements, ProjectStatus } from "@/lib/projects/types";
+import type { Project, ProjectStatus } from "@/lib/projects/types";
+import { fromFormState, toFormState, type RequirementsFormState } from "@/lib/projects/requirements-form";
 import type { PriceIndication } from "@/lib/pricing/types";
 import { WebsiteGenerationSection } from "@/components/projects/website-generation-section";
 import { DesignPlanSection } from "@/components/projects/design-plan-section";
@@ -59,54 +60,6 @@ const inputClass =
 
 function euro(amount: number): string {
   return `€ ${amount.toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-interface RequirementsFormState {
-  websiteType: string;
-  numberOfPages: string;
-  designLevel: string;
-  ecommerce: string; // "true" | "false" | "unknown"
-  seo: string;
-  copywriting: string;
-  hosting: string;
-  maintenance: string;
-  cms: string;
-  deadline: string;
-  customFunctionality: string;
-}
-
-function toFormState(requirements: ProjectRequirements): RequirementsFormState {
-  return {
-    websiteType: requirements.websiteType ?? "",
-    numberOfPages: requirements.numberOfPages != null ? String(requirements.numberOfPages) : "",
-    designLevel: requirements.designLevel ?? "",
-    ecommerce: requirements.ecommerce == null ? "unknown" : String(requirements.ecommerce),
-    seo: requirements.seo == null ? "unknown" : String(requirements.seo),
-    copywriting: requirements.copywriting == null ? "unknown" : String(requirements.copywriting),
-    hosting: requirements.hosting == null ? "unknown" : String(requirements.hosting),
-    maintenance: requirements.maintenance == null ? "unknown" : String(requirements.maintenance),
-    cms: requirements.cms == null ? "unknown" : String(requirements.cms),
-    deadline: requirements.deadline ?? "",
-    customFunctionality: requirements.customFunctionality ?? "",
-  };
-}
-
-function fromFormState(form: RequirementsFormState): ProjectRequirements {
-  const tristate = (value: string): boolean | null => (value === "unknown" ? null : value === "true");
-  const pages = Number.parseInt(form.numberOfPages, 10);
-  return {
-    websiteType: form.websiteType.trim() || null,
-    numberOfPages: Number.isFinite(pages) && pages > 0 ? pages : null,
-    designLevel: form.designLevel.trim() || null,
-    ecommerce: tristate(form.ecommerce),
-    seo: tristate(form.seo),
-    copywriting: tristate(form.copywriting),
-    hosting: tristate(form.hosting),
-    maintenance: tristate(form.maintenance),
-    cms: tristate(form.cms),
-    deadline: form.deadline.trim() || null,
-    customFunctionality: form.customFunctionality.trim() || null,
-  };
 }
 
 export function ProjectDetail({
@@ -166,7 +119,10 @@ export function ProjectDetail({
 
   const saveRequirements = () =>
     run(async () => {
-      const next = fromFormState(form);
+      // Merge op de huidige requirements: velden zonder formulier-UI
+      // (o.a. responsive, integrations) blijven exact behouden en een
+      // save zonder inhoudelijke wijziging wijzigt de JSONB niet.
+      const next = fromFormState(form, project.requirements);
       await updateRequirementsAction(project.id, next);
     });
 
@@ -275,6 +231,14 @@ export function ProjectDetail({
           <label className="space-y-1 text-xs text-zinc-500">
             Designniveau
             <input value={form.designLevel} onChange={(e) => setForm((f) => ({ ...f, designLevel: e.target.value }))} placeholder="basic / standard / premium" className={inputClass} />
+          </label>
+          <label className="space-y-1 text-xs text-zinc-500">
+            Responsive
+            <select value={form.responsive} onChange={(e) => setForm((f) => ({ ...f, responsive: e.target.value }))} className={selectClass}>
+              <option value="unknown">Onbekend</option>
+              <option value="true">Ja</option>
+              <option value="false">Nee</option>
+            </select>
           </label>
           <label className="space-y-1 text-xs text-zinc-500">
             E-commerce

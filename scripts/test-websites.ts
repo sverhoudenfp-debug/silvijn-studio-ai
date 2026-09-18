@@ -6,7 +6,7 @@ import { WebsiteSpecificationSchema } from "../lib/ai/schemas";
 import { getAIRunRepository, MemoryAIRunRepository } from "../lib/repositories/ai-run-repository";
 import { getLeadRepository } from "../lib/repositories/lead-repository";
 import { ProjectService } from "../lib/projects/service";
-import { NextJsWebsiteGenerator, ShopifyWebsiteGenerator, WebsiteGenerationNotSupportedError, getWebsiteGeneratorProvider } from "../lib/websites/generator";
+import { NextJsWebsiteGenerator, ShopifyWebsiteGenerator, getWebsiteGeneratorProvider } from "../lib/websites/generator";
 import { WebsiteBuildService } from "../lib/websites/build-service";
 import { checkWebsiteSpecificationSafety } from "../lib/websites/safety-check";
 import { getGeneratedWebsiteRepository } from "../lib/websites/repository";
@@ -141,11 +141,11 @@ async function main() {
 
   // ============ SHOPIFY ABSTRACTION ============
   console.info("--- Provider abstraction ---");
-  let shopifyError = "";
-  try { new ShopifyWebsiteGenerator().generate(); } catch (e) { shopifyError = e instanceof Error ? e.name : ""; }
-  check("Shopify-stub gooit NotSupported (geen scope creep)", shopifyError === WebsiteGenerationNotSupportedError.name, shopifyError);
+  const shopifyContact = { phone: "+31612345678", email: "info@testdakwerken.nl", address: "Straat 1", city: "Utrecht", province: "Utrecht" };
+  const shopifyResult = new ShopifyWebsiteGenerator().generate(baseSpecification(), shopifyContact);
+  check("Shopify-provider levert shopify-framework content", shopifyResult.framework === "shopify" && shopifyResult.content.sections.length > 0);
   check("provider-fabriek kiest nextjs", getWebsiteGeneratorProvider("nextjs") instanceof NextJsWebsiteGenerator);
-  check("provider-fabriek kiest shopify-stub", getWebsiteGeneratorProvider("shopify") instanceof ShopifyWebsiteGenerator);
+  check("provider-fabriek kiest shopify", getWebsiteGeneratorProvider("shopify") instanceof ShopifyWebsiteGenerator);
 
   // ============ SLUG + DUPLICATES ============
   console.info("--- Slug-generatie ---");

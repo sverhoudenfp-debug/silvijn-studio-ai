@@ -8,6 +8,7 @@ import { selectTemplateForIndustry } from "./templates";
 import { getWebsiteGeneratorProvider, type WebsiteContactContext } from "./generator";
 import { WebsiteBuildService } from "./build-service";
 import { getGeneratedWebsiteRepository } from "./repository";
+import { ThemeZipService } from "./theme-zip/service";
 import type { GeneratedWebsite, WebsiteSpecification } from "./types";
 
 /**
@@ -238,7 +239,35 @@ export class WebsiteGenerationService {
         return failed ?? this.get(website.id);
       }
 
-      // ---- 8. READY FOR QUALITY CONTROL (eindpunt van Fase 9)
+      // ---- 8. SHOPIFY THEME-ZIP (Fase I.2): het echte productie-artefact.
+      //      De productie-poort geldt al (stap 0); het ZIP is intern en wordt
+      //      pas na volledige validatie privé opgeslagen. Validatie-falen
+      //      maakt de website FAILED met de ZIP-fouten — nooit een kap theme.
+      if (framework === "shopify") {
+        const zipArtifact = await new ThemeZipService({ productionGate: assertProductionAuthorized }).generateForWebsite(website.id);
+        if (zipArtifact.status !== "passed") {
+          const zipErrors = zipArtifact.validationErrors.length > 0
+            ? zipArtifact.validationErrors
+            : ["Theme-ZIP-validatie faalde zonder foutdetails."];
+          const failedZip = await getGeneratedWebsiteRepository().update(website.id, {
+            status: "failed",
+            generationStatus: "failed",
+            buildStatus: "failed",
+            buildErrors: zipErrors,
+            generationNotes: `Generatie mislukt bij theme-ZIP-validatie (v${version}): ${zipErrors[0]}`,
+          });
+          await getAIActivityRepository().log({
+            leadId: lead.id,
+            type: "website_generation",
+            status: "failed",
+            message: `Websitegeneratie voor "${lead.businessName}" faalde bij theme-ZIP-validatie (v${version}): ${zipErrors[0]}`,
+            metadata: { projectId, version, zipErrors: zipErrors.slice(0, 5) },
+          });
+          return failedZip ?? this.get(website.id);
+        }
+      }
+
+      // ---- 9. READY FOR QUALITY CONTROL (eindpunt van Fase 9)
       const ready = await getGeneratedWebsiteRepository().update(website.id, {
         status: "ready_for_qc",
         generationStatus: "completed",

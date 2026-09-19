@@ -75,6 +75,8 @@ export interface ComposedTemplate {
   path: string;
   /** Parsed JSON-data (niet geserialiseerd; jsonFile() doet dat). */
   data: unknown;
+  /** Sectieritme: aantal secties dat deterministisch een contrastvlak kreeg. */
+  rhythmAdjustments: number;
 }
 
 export interface BlueprintCompositionResult {
@@ -442,8 +444,25 @@ function composePage(page: BlueprintPage, ctx: CompositionContext): ComposedTemp
   const order: string[] = [];
   const typeCounters = new Map<string, number>();
 
+  // Sectieritme (Rendering-stap 1, 2026-09-19) — een RENdERING-besluit,
+  // geen herplanning: wanneer twee aangrenzende secties allebei op de
+  // neutrale "default"-achtergrond staan (het blueprint plant zelf geen
+  // contrast), krijgt de tweede deterministisch het contrastvlak
+  // "surface". De sectievolgorde, sectiekeuze en expliciete AI-keuzes
+  // (surface/accent_band/image) blijven exact gehandhaafd.
+  let rhythmAdjustments = 0;
+  let previousBackground: string | null = null;
+
   for (const instance of page.sectionInstances) {
     const entry = instanceToSectionEntry(instance, ctx);
+    const background = typeof entry.settings.background === "string" ? entry.settings.background : "default";
+    if (background === "default" && previousBackground === "default") {
+      entry.settings.background = "surface";
+      rhythmAdjustments += 1;
+    }
+    previousBackground =
+      typeof entry.settings.background === "string" ? entry.settings.background : "default";
+
     const n = (typeCounters.get(entry.type) ?? 0) + 1;
     typeCounters.set(entry.type, n);
     const key = n === 1 ? entry.type : `${entry.type}_${n}`;
@@ -454,6 +473,7 @@ function composePage(page: BlueprintPage, ctx: CompositionContext): ComposedTemp
   return {
     path: isHome ? "templates/index.json" : `templates/page.${slug}.json`,
     data: { sections, order },
+    rhythmAdjustments,
   };
 }
 
@@ -518,6 +538,12 @@ export function composeBlueprintTemplates(input: {
   const trust = blueprint.trustElements;
   if (trust.usps.length === 0 && trust.stats.length === 0 && trust.badges.length === 0) {
     notes.push("Geen trust-elements in het blueprint (geen echte USP's/cijfers bekend) — trust-secties ontbreken daardoor, niets verzonnen.");
+  }
+  const rhythmTotal = templates.reduce((sum, t) => sum + t.rhythmAdjustments, 0);
+  if (rhythmTotal > 0) {
+    notes.push(
+      `Sectieritme: ${rhythmTotal} sectie(s) kreeg deterministisch het contrastvlak "surface" waar het blueprint aangrenzende "default"-secties plande (sectievolgorde en expliciete keuzes ongewijzigd).`
+    );
   }
 
   return { templates, notes };

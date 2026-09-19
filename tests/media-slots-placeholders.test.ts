@@ -204,6 +204,7 @@ test("slotAlt: expliciete setting wint, anders de geplande beschrijving, anders 
 // ---------------------------------------------------------------------
 
 const TOKENS: ThemeDesignTokens = {
+  styleProfile: "neutral",
   primary: "#1f3a2e",
   secondary: "#2d4439",
   accent: "#b08d57",

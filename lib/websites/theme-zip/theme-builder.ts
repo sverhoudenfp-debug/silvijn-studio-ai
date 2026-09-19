@@ -54,11 +54,18 @@ export interface ThemeDesignTokens {
   bodyWeight: number;
   /** Gecontroleerde hero-variant uit imagery/aboveTheFold/mood — bepaalt de CSS-opbouw. */
   heroLayout: "focused" | "centered" | "split";
+  /**
+   * Stijlprofiel (Rendering-stap 1, 2026-09-19): deterministische vertaling
+   * van plan.branding.styleDirection/mood naar typografische hiërarchie
+   * (letterspatiëring, sectiekopuitlijning, accentdetails). Nooit AI-CSS:
+   * één van vier vooraf gebouwde profielen.
+   */
+  styleProfile: "sharp" | "soft" | "premium" | "neutral";
 }
 
 const FALLBACK_TOKENS: Omit<
   ThemeDesignTokens,
-  "primary" | "secondary" | "accent" | "headingScale" | "headingWeight" | "bodyWeight" | "heroLayout"
+  "primary" | "secondary" | "accent" | "headingScale" | "headingWeight" | "bodyWeight" | "heroLayout" | "styleProfile"
 > = {
   background: "#ffffff",
   surface: "#f7f7f8",
@@ -178,6 +185,20 @@ const FONT_STACKS: Record<string, { heading: string; body: string }> = {
   },
 };
 
+/**
+ * Stijlprofiel uit plan.branding (styleDirection + mood) — keyword-mapping,
+ * deterministisch, nooit random. sharp = strak/minimalistisch; soft = warm/
+ * organisch; premium = luxe/elegant; anders neutraal. Het profiel stuurt
+ * letterspatiëring, sectiekopuitlijning en accentdetails in theme.css.
+ */
+export function styleProfileFor(styleDirection: string | null, mood: ReadonlyArray<string>): ThemeDesignTokens["styleProfile"] {
+  const signals = [styleDirection ?? "", mood.join(" ")].join(" ").toLowerCase();
+  if (/(luxe|premium|elegant|exclusief|verfijnd|klassiek)/.test(signals)) return "premium";
+  if (/(zacht|warm|organisch|speels|rond|vriendelijk)/.test(signals)) return "soft";
+  if (/(strak|minimal|hoekig|technisch|industr|architect|modern|zakelijk)/.test(signals)) return "sharp";
+  return "neutral";
+}
+
 function fontKeyFor(pairing: string | null): "sans" | "serif" | "mono" {
   const p = (pairing ?? "").toLowerCase();
   if (/(serif|roman|klassiek|elegant|grafisch)/.test(p)) return "serif";
@@ -218,6 +239,7 @@ export function buildThemeDesignTokens(plan: DesignPlan): ThemeDesignTokens {
     headingWeight: weights.heading,
     bodyWeight: weights.body,
     heroLayout: heroLayoutFor(plan),
+    styleProfile: styleProfileFor(plan.branding.styleDirection, plan.branding.mood),
   };
 }
 
@@ -278,6 +300,22 @@ function blueprintVariantSettings(type: BlueprintSectionType, backgroundDefault:
         { "value": "fade_up", "label": "Vloeiend invliegen" },
         { "value": "stagger", "label": "Gestaggerd invliegen" }
       ]
+    },
+    {
+      "type": "image_picker",
+      "id": "background_image",
+      "label": "Achtergrondafbeelding (bij achtergrondkeuze Beeldtint)"
+    },
+    {
+      "type": "range",
+      "id": "background_overlay",
+      "label": "Bedekking voor leesbaarheid",
+      "min": 0,
+      "max": 90,
+      "step": 5,
+      "unit": "%",
+      "default": 45,
+      "info": "Hoger = rustigere leesbaarheid over de achtergrondafbeelding; zonder afbeelding geldt de abstracte placeholder."
     }`;
 }
 
@@ -381,7 +419,7 @@ function buildSettingsSchema(
           type: "select",
           id: "section_spacing",
           label: "Sectiedichtheid",
-          default: "normal",
+          default: tokens.sectionSpacing,
           options: [
             { value: "compact", label: "Compact" },
             { value: "normal", label: "Normaal" },
@@ -407,6 +445,19 @@ function buildSettingsSchema(
             { value: "focused", label: "Gefocust (smal tekstblok)" },
             { value: "centered", label: "Gecentreerd" },
             { value: "split", label: "Split (tekst + beeld)" },
+          ],
+        },
+        {
+          type: "select",
+          id: "style_profile",
+          label: "Stijlprofiel",
+          default: tokens.styleProfile,
+          info: "Beïnvloedt letterspatiëring en sectiekoppen (komt uit het interne Design Plan).",
+          options: [
+            { value: "sharp", label: "Strak" },
+            { value: "soft", label: "Zacht" },
+            { value: "premium", label: "Premium" },
+            { value: "neutral", label: "Neutraal" },
           ],
         },
       ],
@@ -485,6 +536,7 @@ function buildSettingsData(
       section_spacing: tokens.sectionSpacing,
       corner_radius: Number.parseInt(tokens.radius, 10),
       hero_layout: tokens.heroLayout,
+      style_profile: tokens.styleProfile,
       // Alleen geverifieerde lead-/specificatiedata; nooit ingevulde waarden
       // verzinnen (lege string = bewust leeg gelaten).
       brand_name: businessName,
@@ -543,12 +595,13 @@ function buildThemeLayout(spec: WebsiteSpecification, tokens: ThemeDesignTokens)
         --heading-scale: {{ settings.heading_scale | divided_by: 100.0 }};
         --page-width: {{ settings.page_width }}px;
         --radius: {{ settings.corner_radius }}px;
+        --section-spacing: {% case settings.section_spacing %}{% when 'compact' %}48px{% when 'spacious' %}112px{% else %}72px{% endcase %};
       }
     {% endstyle %}
     {{ 'theme.css' | asset_url | stylesheet_tag }}
     <script src="{{ 'theme.js' | asset_url }}" defer></script>
   </head>
-  <body class="template-{{ template.name | default: 'index' }}">
+  <body class="template-{{ template.name | default: 'index' }} style-{{ settings.style_profile | default: 'neutral' }}">
     <a class="skip-link" href="#main-content">{{ 'accessibility.skip_to_content' | t }}</a>
     {% sections 'header-group' %}
     <main id="main-content" role="main">
@@ -627,13 +680,12 @@ function buildButtonSnippet(): ThemeFile {
   return { path: "snippets/button.liquid", content: liquid };
 }
 
-function buildThemeCss(tokens: ThemeDesignTokens): ThemeFile {
-  const spacing = tokens.sectionSpacing === "compact" ? "48px" : tokens.sectionSpacing === "spacious" ? "112px" : "72px";
+function buildThemeCss(): ThemeFile {
+  // --section-spacing komt uit de theme-settings (layout/theme.liquid
+  // {% style %}-blok): de merchant kan de dichtheid aanpassen en het
+  // Design Plan bepaalde de default (settings_data.json).
   let css = `/* Gegenereerd door Silvijn Studio — deterministische structurele stijlen.
    Design-tokens komen uit de settings ( zie layout/theme.liquid). */
-:root {
-  --section-spacing: ${spacing};
-}
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body {
@@ -806,24 +858,49 @@ img { max-width: 100%; height: auto; display: block; }
 /* --- Fase C: blueprint-compositie --- */
 /* Achtergrondvarianten (bg-default is de natuurlijke achtergrond) */
 .section--bg-accent_band { background: var(--color-surface); border-block: 3px solid var(--color-accent); }
-.section--bg-image { background: linear-gradient(180deg, var(--color-surface), var(--color-background)); }
-/* Motion (met prefers-reduced-motion-respect) */
+/* Contrastvlak krijgt subtiel compactere sectieruimte (sectieritme). */
+.section--bg-surface { padding-block: calc(var(--section-spacing) * .92); }
+/* Beeld-achtergrond: ÉCHTE media-laag (afbeelding of abstracte placeholder)
+   via de section-background-snippet + contrast-overlay — nooit een gradient-fallback. */
+.section--bg-image { position: relative; background: var(--color-surface); }
+.section--bg-image > .container { position: relative; z-index: 1; }
+.section__background { position: absolute; inset: 0; overflow: hidden; }
+.section__background .theme-media { height: 100%; aspect-ratio: auto; border-radius: 0; }
+.section__background-overlay { position: absolute; inset: 0; background: var(--color-background); }
+/* Motion: fade_up animeert de sectie als geheel; stagger animeert de
+   BETEKENISvolle binnenblokken (kaarten, stappen, stats, koppen) in
+   plaats van de container — en respecteert prefers-reduced-motion volledig. */
 .motion--fade_up { animation: bp-fade-up .5s ease both; }
-.motion--stagger > * { animation: bp-fade-up .5s ease both; }
-.motion--stagger > *:nth-child(2) { animation-delay: .08s; }
-.motion--stagger > *:nth-child(3) { animation-delay: .16s; }
-.motion--stagger > *:nth-child(4) { animation-delay: .24s; }
-.motion--stagger > *:nth-child(5) { animation-delay: .32s; }
-.motion--stagger > *:nth-child(6) { animation-delay: .4s; }
+.motion--stagger .section__header { animation: bp-fade-up .5s ease both; }
+.motion--stagger .hero__inner > * { animation: bp-fade-up .5s ease both; }
+.motion--stagger .rte > * { animation: bp-fade-up .5s ease both; }
+.motion--stagger :where(.card-grid, .process-list, .stats-row, .usp-row, .team-grid, .testimonial-grid, .faq-list, .gallery-grid, .projects-grid, .contact-grid, .about__grid) > * { animation: bp-fade-up .5s ease both; }
+.motion--stagger :where(.card-grid, .process-list, .stats-row, .usp-row, .team-grid, .testimonial-grid, .faq-list, .gallery-grid, .projects-grid, .contact-grid, .about__grid) > *:nth-child(2) { animation-delay: .07s; }
+.motion--stagger :where(.card-grid, .process-list, .stats-row, .usp-row, .team-grid, .testimonial-grid, .faq-list, .gallery-grid, .projects-grid, .contact-grid, .about__grid) > *:nth-child(3) { animation-delay: .14s; }
+.motion--stagger :where(.card-grid, .process-list, .stats-row, .usp-row, .team-grid, .testimonial-grid, .faq-list, .gallery-grid, .projects-grid, .contact-grid, .about__grid) > *:nth-child(4) { animation-delay: .21s; }
+.motion--stagger :where(.card-grid, .process-list, .stats-row, .usp-row, .team-grid, .testimonial-grid, .faq-list, .gallery-grid, .projects-grid, .contact-grid, .about__grid) > *:nth-child(5) { animation-delay: .28s; }
+.motion--stagger :where(.card-grid, .process-list, .stats-row, .usp-row, .team-grid, .testimonial-grid, .faq-list, .gallery-grid, .projects-grid, .contact-grid, .about__grid) > *:nth-child(6) { animation-delay: .35s; }
+.motion--stagger :where(.card-grid, .process-list, .stats-row, .usp-row, .team-grid, .testimonial-grid, .faq-list, .gallery-grid, .projects-grid, .contact-grid, .about__grid) > *:nth-child(7) { animation-delay: .42s; }
+.motion--stagger :where(.card-grid, .process-list, .stats-row, .usp-row, .team-grid, .testimonial-grid, .faq-list, .gallery-grid, .projects-grid, .contact-grid, .about__grid) > *:nth-child(8) { animation-delay: .49s; }
 @keyframes bp-fade-up { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
-/* Hero-varianten (split/centered bestaan al) */
+@media (prefers-reduced-motion: reduce) {
+  .motion--fade_up, .motion--fade_up *, .motion--stagger, .motion--stagger * { animation: none !important; }
+}
+/* Hero-varianten (split/centered bestaan al) — elk met een eigen
+   compositie: focused = smal + veel witruimte, band = lage gecentreerde
+   band met kleinere kop, minimal = sobere kernzin. */
 .hero--focused .hero__inner { max-width: 640px; }
+.hero--focused { padding-block: calc(var(--section-spacing) * 1.3); }
 .hero--band { padding-block: calc(var(--section-spacing) * .55); }
 .hero--band .hero__band { display: none; }
+.hero--band .hero__inner { max-width: 860px; margin-inline: auto; text-align: center; }
+.hero--band .hero__actions { justify-content: center; }
+.hero--band h1 { font-size: calc(1.9rem * var(--heading-scale)); }
 .hero--minimal { padding-block: calc(var(--section-spacing) * .8); }
 .hero--minimal .hero__band { display: none; }
 .hero--minimal .hero__eyebrow { display: none; }
 .hero--minimal .hero__inner { max-width: 560px; }
+.hero--minimal h1 { font-size: calc(1.7rem * var(--heading-scale)); }
 /* Services-varianten */
 .services--grid .card-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
 .services--cards .card-grid { grid-template-columns: repeat(2, 1fr); }
@@ -860,15 +937,36 @@ img { max-width: 100%; height: auto; display: block; }
 .faq--list .faq-list { gap: 0; max-width: none; }
 .faq--list .faq-item { border: none; border-bottom: 1px solid var(--color-border); border-radius: 0; }
 .faq--list .faq-item summary::after { content: ""; }
-.cta--band .section__header { text-align: center; margin-inline: auto; }
-.cta--split .section__header { text-align: left; margin-inline: 0; max-width: none; }
-.cta--split .section__header p { max-width: 720px; }
+.cta__copy h2 { margin-bottom: .3em; }
+.cta__copy p { color: var(--color-muted); max-width: 640px; margin: 0; }
+.cta__action { margin-top: 20px; }
+/* band: brede gecentreerde uitnodiging met grote knop */
+.cta--band .cta__inner { max-width: 760px; margin-inline: auto; text-align: center; }
+.cta--band .cta__copy h2 { font-size: calc(2rem * var(--heading-scale)); }
+.cta--band .cta__copy p { margin-inline: auto; }
+.cta--band .cta__action { margin-top: 24px; }
+.cta--band .cta__button { padding: 16px 32px; font-size: 1.05rem; }
+/* split: boodschap links, actie rechts (tweekoloms) */
+.cta--split .cta__inner { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, .65fr); align-items: center; gap: 24px; }
+.cta--split .cta__action { margin-top: 0; text-align: right; }
+/* closing: compacte afsluiting onderaan de pagina */
 .cta--closing { padding-block: calc(var(--section-spacing) * .6); border-top: 1px solid var(--color-border); }
+.cta--closing .cta__inner { max-width: 560px; margin-inline: auto; text-align: center; }
+.cta--closing .cta__action { margin-top: 16px; }
+@media (max-width: 760px) {
+  .cta--split .cta__inner { grid-template-columns: 1fr; }
+  .cta--split .cta__action { text-align: left; }
+}
 /* Contact-varianten (inline-grid vervangen door klasse) */
 .contact-grid { display: grid; gap: 32px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 .contact--split .contact-grid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 32px; }
-.contact--full .contact-grid { grid-template-columns: 1fr; max-width: 640px; }
-.contact--minimal .contact-grid { grid-template-columns: 1fr; }
+/* full: verticale, volledige sectie met ruime formulierkolom */
+.contact--full .contact-grid { grid-template-columns: 1fr; max-width: 760px; }
+.contact--full .contact__details { border-bottom: 1px solid var(--color-border); padding-bottom: 24px; }
+/* minimal: alleen de kerngegevens, compact (geen formulier) */
+.contact--minimal .contact-grid { grid-template-columns: 1fr; gap: 0; }
+.contact--minimal { padding-block: calc(var(--section-spacing) * .6); }
+.contact--minimal .contact__details p { margin: 0 0 .35em; }
 .rich-text--article .rte { max-width: 760px; }
 .rich-text--columns .rte { max-width: 960px; columns: 2; column-gap: 40px; }
 @media (max-width: 760px) { .rich-text--columns .rte { columns: 1; } }
@@ -925,6 +1023,17 @@ img { max-width: 100%; height: auto; display: block; }
 .booking--split .booking__action { text-align: right; }
 .booking__copy h2 { margin-bottom: .2em; }
 .booking__copy p { color: var(--color-muted); margin: 0; }
+/* --- Stijlprofielen (Rendering-stap 1): deterministische vertaling van
+   Design Plan mood/styleDirection naar typografische hiërarchie. De
+   body-klasse komt uit de theme-settings (style_profile). --- */
+.style-sharp h1, .style-sharp h2, .style-sharp h3 { letter-spacing: -0.02em; }
+.style-premium h1, .style-premium h2, .style-premium h3 { letter-spacing: .01em; }
+.style-premium .section__header { text-align: center; margin-inline: auto; }
+.style-soft .section__header h2::after, .style-premium .section__header h2::after {
+  content: ""; display: block; width: 44px; height: 3px;
+  background: var(--color-accent); margin-top: 14px; border-radius: 999px;
+}
+.style-premium .section__header h2::after { margin-inline: auto; }
 `;
 
   // Klantaccountpagina's (Fase I.2 completeness) — neutraal, gebruikt de
@@ -1723,6 +1832,9 @@ function buildHeroSection(): ThemeFile {
   assign hero_layout = section.settings.layout | default: settings.hero_layout | default: 'focused'
 -%}
 <section class="hero hero--{{ hero_layout }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
+  {%- if section.settings.background == 'image' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.image_alt, placeholder_svg: 'placeholder.svg' -%}
+  {%- endif -%}
   <div class="container">
     <div class="hero__inner">
       <div class="hero__content">
@@ -1817,8 +1929,33 @@ function buildThemeMediaSnippet(): ThemeFile {
   return { path: "snippets/theme-media.liquid", content: liquid };
 }
 
+/**
+ * Sectie-achtergrondmedia (Rendering-stap 1): de ÉCHTE media-laag voor de
+ * blueprint-achtergrondvariant "image". Altijd een daadwerkelijke
+ * media-weergave — de gekozen afbeelding (met focal point via theme-media)
+ * of, zonder afbeelding, de abstracte token-afgeleide placeholder — en
+ * nooit een gradient-fallback. De per sectie instelbare overlay garandeert
+ * tekstcontrast; aria-hidden omdat de laag puur decoratief is.
+ */
+function buildSectionBackgroundSnippet(): ThemeFile {
+  const liquid = `{% comment %}
+  Achtergrondmedia-laag voor secties met achtergrondvariant "image".
+  Parameters: image (image_picker), overlay (0-100), alt, placeholder_svg.
+  Zonder afbeelding rendert de abstracte placeholder (geen gradient).
+{% endcomment %}
+<div class="section__background" aria-hidden="true">
+  {%- render 'theme-media', image: image, aspect: 'wide', alt: alt, sizes: '100vw', loading: 'eager', placeholder_svg: placeholder_svg -%}
+  <div class="section__background-overlay" style="opacity: {{ overlay | default: 45 | divided_by: 100.0 }}"></div>
+</div>
+`;
+  return { path: "snippets/section-background.liquid", content: liquid };
+}
+
 function buildServicesSection(): ThemeFile {
   const liquid = `<section class="section services services--{{ section.settings.layout | default: 'grid' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
+  {%- if section.settings.background == 'image' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+  {%- endif -%}
   <div class="container">
     <div class="section__header">
       <h2>{{ section.settings.heading }}</h2>
@@ -1875,6 +2012,9 @@ ${blueprintVariantSettings("services", "default")},
 
 function buildAboutSection(): ThemeFile {
   const liquid = `<section class="section about about--{{ section.settings.layout | default: 'split' }} section--bg-{{ section.settings.background | default: 'surface' }} motion--{{ section.settings.motion | default: 'none' }}">
+  {%- if section.settings.background == 'image' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+  {%- endif -%}
   <div class="container">
     <div class="section__header">
       <h2>{{ section.settings.heading }}</h2>
@@ -1927,6 +2067,9 @@ ${blueprintVariantSettings("about", "surface")},
  */
 function buildGallerySection(): ThemeFile {
   const liquid = `<section class="section gallery gallery--{{ section.settings.layout | default: 'grid' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
+  {%- if section.settings.background == 'image' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+  {%- endif -%}
   <div class="container">
     <div class="section__header">
       <h2>{{ section.settings.heading }}</h2>
@@ -1986,6 +2129,9 @@ ${blueprintVariantSettings("gallery", "default")},
 function buildTestimonialsSection(): ThemeFile {
   const liquid = `{%- if section.blocks.size > 0 -%}
 <section class="section testimonials testimonials--{{ section.settings.layout | default: 'band' }} section--bg-{{ section.settings.background | default: 'surface' }} motion--{{ section.settings.motion | default: 'none' }}">
+  {%- if section.settings.background == 'image' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+  {%- endif -%}
   <div class="container">
     <div class="section__header">
       <h2>{{ section.settings.heading }}</h2>
@@ -2034,6 +2180,9 @@ ${blueprintVariantSettings("testimonials", "surface")},
 
 function buildBenefitsSection(): ThemeFile {
   const liquid = `<section class="section benefits benefits--{{ section.settings.layout | default: 'grid' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
+  {%- if section.settings.background == 'image' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+  {%- endif -%}
   <div class="container">
     <div class="section__header">
       <h2>{{ section.settings.heading }}</h2>
@@ -2075,6 +2224,9 @@ ${blueprintVariantSettings("benefits", "default")},
 
 function buildFaqSection(): ThemeFile {
   const liquid = `<section class="section faq faq--{{ section.settings.layout | default: 'accordion' }} section--bg-{{ section.settings.background | default: 'surface' }} motion--{{ section.settings.motion | default: 'none' }}">
+  {%- if section.settings.background == 'image' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+  {%- endif -%}
   <div class="container">
     <div class="section__header">
       <h2>{{ section.settings.heading }}</h2>
@@ -2117,15 +2269,20 @@ ${blueprintVariantSettings("faq", "surface")},
 
 function buildCtaSection(): ThemeFile {
   const liquid = `<section class="section cta cta--{{ section.settings.layout | default: 'band' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
+  {%- if section.settings.background == 'image' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+  {%- endif -%}
   <div class="container">
-    <div class="section__header" style="text-align:center;margin-inline:auto;">
-      <h2>{{ section.settings.heading }}</h2>
-      {%- if section.settings.subheading != blank -%}
-        <p>{{ section.settings.subheading }}</p>
-      {%- endif -%}
-      <p style="margin-top:20px;">
-        <a class="btn btn--primary" href="{{ section.settings.cta_link | default: '/pages/contact' }}">{{ section.settings.cta_label }}</a>
-      </p>
+    <div class="cta__inner">
+      <div class="cta__copy">
+        <h2>{{ section.settings.heading }}</h2>
+        {%- if section.settings.subheading != blank -%}
+          <p>{{ section.settings.subheading }}</p>
+        {%- endif -%}
+      </div>
+      <div class="cta__action">
+        <a class="btn btn--primary cta__button" href="{{ section.settings.cta_link | default: '/pages/contact' }}">{{ section.settings.cta_label }}</a>
+      </div>
     </div>
   </div>
 </section>
@@ -2150,6 +2307,9 @@ ${blueprintVariantSettings("cta", "default")},
 
 function buildContactSection(): ThemeFile {
   const liquid = `<section class="section contact contact--{{ section.settings.layout | default: 'split' }} section--bg-{{ section.settings.background | default: 'surface' }} motion--{{ section.settings.motion | default: 'none' }}" id="contact">
+  {%- if section.settings.background == 'image' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+  {%- endif -%}
   <div class="container">
     <div class="section__header">
       <h2>{{ section.settings.heading }}</h2>
@@ -2158,7 +2318,7 @@ function buildContactSection(): ThemeFile {
       {%- endif -%}
     </div>
     <div class="contact-grid">
-      <div>
+      <div class="contact__details">
         {%- if section.settings.phone != blank -%}
           <p><strong>{{ 'contact.call_us' | t }}:</strong> <a href="tel:{{ section.settings.phone | remove: ' ' }}">{{ section.settings.phone }}</a></p>
         {%- endif -%}
@@ -2225,6 +2385,9 @@ ${blueprintVariantSettings("contact", "surface")},
 
 function buildRichTextSection(): ThemeFile {
   const liquid = `<section class="section rich-text rich-text--{{ section.settings.layout | default: 'article' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
+  {%- if section.settings.background == 'image' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: '', placeholder_svg: 'placeholder.svg' -%}
+  {%- endif -%}
   <div class="container">
     <div class="rte" style="max-width:760px;">
       {{ section.settings.body }}
@@ -2259,6 +2422,9 @@ ${blueprintVariantSettings("rich_text", "default")},
 
 function buildUspBandSection(): ThemeFile {
   const liquid = `<section class="section usp-band usp-band--{{ section.settings.layout | default: 'row' }} section--bg-{{ section.settings.background | default: 'surface' }} motion--{{ section.settings.motion | default: 'none' }}">
+  {%- if section.settings.background == 'image' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+  {%- endif -%}
   <div class="container">
     <div class="usp-row">
       {%- for block in section.blocks -%}
@@ -2300,6 +2466,9 @@ ${blueprintVariantSettings("usp_band", "surface")}
 
 function buildStatsSection(): ThemeFile {
   const liquid = `<section class="section stats stats--{{ section.settings.layout | default: 'row' }} section--bg-{{ section.settings.background | default: 'surface' }} motion--{{ section.settings.motion | default: 'none' }}">
+  {%- if section.settings.background == 'image' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+  {%- endif -%}
   <div class="container">
     <div class="section__header">
       <h2>{{ section.settings.heading }}</h2>
@@ -2345,6 +2514,9 @@ ${blueprintVariantSettings("stats", "surface")},
 
 function buildProcessSection(): ThemeFile {
   const liquid = `<section class="section process process--{{ section.settings.layout | default: 'steps' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
+  {%- if section.settings.background == 'image' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+  {%- endif -%}
   <div class="container">
     <div class="section__header">
       <h2>{{ section.settings.heading }}</h2>
@@ -2395,6 +2567,9 @@ ${blueprintVariantSettings("process", "default")},
 
 function buildProjectsSection(): ThemeFile {
   const liquid = `<section class="section projects projects--{{ section.settings.layout | default: 'grid' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
+  {%- if section.settings.background == 'image' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+  {%- endif -%}
   <div class="container">
     <div class="section__header">
       <h2>{{ section.settings.heading }}</h2>
@@ -2449,6 +2624,9 @@ ${blueprintVariantSettings("projects", "default")},
 
 function buildTeamSection(): ThemeFile {
   const liquid = `<section class="section team team--{{ section.settings.layout | default: 'grid' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
+  {%- if section.settings.background == 'image' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+  {%- endif -%}
   <div class="container">
     <div class="section__header">
       <h2>{{ section.settings.heading }}</h2>
@@ -2500,6 +2678,9 @@ ${blueprintVariantSettings("team", "default")},
 
 function buildRatesSection(): ThemeFile {
   const liquid = `<section class="section rates rates--{{ section.settings.layout | default: 'table' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
+  {%- if section.settings.background == 'image' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+  {%- endif -%}
   <div class="container">
     <div class="section__header">
       <h2>{{ section.settings.heading }}</h2>
@@ -2567,6 +2748,9 @@ ${blueprintVariantSettings("rates", "default")},
 
 function buildNewsletterSection(): ThemeFile {
   const liquid = `<section class="section newsletter newsletter--{{ section.settings.layout | default: 'band' }} section--bg-{{ section.settings.background | default: 'surface' }} motion--{{ section.settings.motion | default: 'none' }}">
+  {%- if section.settings.background == 'image' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+  {%- endif -%}
   <div class="container">
     <div class="newsletter__inner">
       <div class="newsletter__copy">
@@ -2607,6 +2791,9 @@ ${blueprintVariantSettings("newsletter", "surface")},
 
 function buildBookingSection(): ThemeFile {
   const liquid = `<section class="section booking booking--{{ section.settings.layout | default: 'band' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
+  {%- if section.settings.background == 'image' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+  {%- endif -%}
   <div class="container">
     <div class="booking__inner">
       <div class="booking__copy">
@@ -3162,7 +3349,7 @@ export function buildShopifyTheme(input: BuildThemeInput): BuiltTheme {
   files.push(buildThemeLayout(spec, tokens));
   files.push(buildMetaTagsSnippet());
   files.push(buildButtonSnippet());
-  files.push(buildThemeCss(tokens));
+  files.push(buildThemeCss());
   files.push(buildThemeJs());
   // R1: media-plan (sloten + placeholder-variant) uit specification + Design
   // Plan; de generieke placeholder blijft voor product-cards/giftcard.
@@ -3170,6 +3357,7 @@ export function buildShopifyTheme(input: BuildThemeInput): BuiltTheme {
   files.push(buildGenericPlaceholderSvg(tokens));
   files.push(...buildMediaPlaceholderSvgs(mediaPlan.variant, tokens));
   files.push(buildThemeMediaSnippet());
+  files.push(buildSectionBackgroundSnippet());
   files.push(buildLocaleFile());
 
   // --- Password-status (branded "coming soon" tijdens de launch)

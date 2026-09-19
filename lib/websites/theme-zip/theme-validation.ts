@@ -293,7 +293,7 @@ function validateLiquidContent(files: ThemeFile[], assetPaths: Set<string>, snip
   }
 }
 
-function validateSecurityAndContent(files: ThemeFile[], errors: string[]): void {
+function validateSecurityAndContent(files: ThemeFile[], trustedClaims: readonly string[], errors: string[]): void {
   for (const file of files) {
     if (!THEME_TEXT_EXTENSIONS.has(extensionOf(file.path))) continue;
     const content = file.content;
@@ -304,7 +304,7 @@ function validateSecurityAndContent(files: ThemeFile[], errors: string[]): void 
       }
     }
 
-    const issues = scanTextForFabricationPatterns(content);
+    const issues = scanTextForFabricationPatterns(content, trustedClaims);
     for (const issue of issues) {
       errors.push(`Fabricatie-patroon "${issue.rule}" in "${file.path}": ${issue.reason}`);
     }
@@ -333,6 +333,9 @@ function validateMediaSlots(files: ThemeFile[], assetPaths: Set<string>, errors:
     "sections/about.liquid",
     "sections/services.liquid",
     "sections/gallery.liquid",
+    // Fase C: blueprint-secties met beeldsloten renderen óók centraal.
+    "sections/projects.liquid",
+    "sections/team.liquid",
   ] as const;
   for (const path of MEDIA_SECTION_PATHS) {
     const content = byPath.get(path);
@@ -387,7 +390,12 @@ function validateMediaSlots(files: ThemeFile[], assetPaths: Set<string>, errors:
   }
 }
 
-export function validateThemeFiles(files: ThemeFile[]): ThemeValidationResult {
+/**
+ * Fase C: trustedClaims = bewezen echte teksten (blueprint trustElements met
+ * verplichte bron) die de fabricatie-scan NIET als fabricatie mag vlaggen.
+ * Zonder trustedClaims gedraagt de scan zich exact als voorheen.
+ */
+export function validateThemeFiles(files: ThemeFile[], options?: { trustedClaims?: readonly string[] }): ThemeValidationResult {
   const errors: string[] = [];
   const seen = new Set<string>();
   let totalBytes = 0;
@@ -554,7 +562,7 @@ export function validateThemeFiles(files: ThemeFile[]): ThemeValidationResult {
   }
 
   // ---- 6. Secrets + fabricatie
-  validateSecurityAndContent(files, errors);
+  validateSecurityAndContent(files, options?.trustedClaims ?? [], errors);
 
   return { passed: errors.length === 0, errors, fileCount: files.length, totalBytes };
 }

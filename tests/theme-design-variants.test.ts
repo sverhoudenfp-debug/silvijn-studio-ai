@@ -293,8 +293,11 @@ test("variants: layout/theme.liquid gebruikt settings-tokens i.p.v. color_mix-af
 
 test("variants: hero-sectie kent de variant-klasse en conditionele split-media", () => {
   const split = builtTheme(planWith({ imagery: { style: "Sfeerbeelden" } })).files.get("sections/hero.liquid")!;
-  assert.ok(split.includes("hero--{{ settings.hero_layout | default: 'focused' }}"));
-  assert.ok(split.includes("settings.hero_layout == 'split'"));
+  // Fase C: per-instantie layout valt terug op de theme-setting (hero_layout)
+  assert.ok(split.includes("hero--{{ hero_layout }}"));
+  assert.ok(split.includes("assign hero_layout = section.settings.layout | default: settings.hero_layout | default: 'focused'"));
+  assert.ok(split.includes("hero_layout == 'split'"));
+  assert.ok(split.includes("hero_layout != 'split'"));
   // R1: hero-media loopt via het centrale theme-media-snippet met de
   // hero-specifieke placeholder (niet langer de generieke placeholder.svg).
   assert.ok(split.includes("render 'theme-media'"));

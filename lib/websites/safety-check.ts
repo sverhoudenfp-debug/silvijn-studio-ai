@@ -128,12 +128,19 @@ export function checkWebsiteSpecificationSafety(
  * documenten (bijv. het Design Plan). Puur tekstscan — geen lead-context
  * nodig; dezelfde PATTERNS als de websitecontent-controle.
  */
-export function scanTextForFabricationPatterns(text: string): WebsiteSafetyIssue[] {
+export function scanTextForFabricationPatterns(
+  text: string,
+  trustedClaims?: readonly string[]
+): WebsiteSafetyIssue[] {
   const issues: WebsiteSafetyIssue[] = [];
   for (const { rule, pattern, reason } of PATTERNS) {
-    if (pattern.test(text)) {
-      issues.push({ rule, reason });
-    }
+    const match = pattern.exec(text);
+    if (!match) continue;
+    // Fase C: een match binnen een BEWEZEN echte claim (blueprint trustElements,
+    // bron-verplicht en upstream Zod-gevalideerd) is geen fabricatie: de
+    // onderdrukking geldt uitsluitend voor de exacte, aangeleverde tekst.
+    if (trustedClaims?.some((claim) => claim.includes(match[0]))) continue;
+    issues.push({ rule, reason });
   }
   return issues;
 }

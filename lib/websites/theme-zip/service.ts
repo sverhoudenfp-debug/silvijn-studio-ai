@@ -153,7 +153,17 @@ export class ThemeZipService {
       contact,
     });
     const zipBytes = await createThemeZip(built.files);
-    const validation = validateThemeFiles(built.files);
+    // Fase C: trustElements uit het blueprint zijn bewezen echte claims
+    // (bron-verplicht, upstream Zod-gevalideerd); zij mogen de
+    // fabricatie-net-scan rechtvaardig passeren.
+    const trustedClaims = designPlan.plan.blueprint
+      ? [
+          ...designPlan.plan.blueprint.trustElements.usps.map((u) => u.label),
+          ...designPlan.plan.blueprint.trustElements.stats.map((s) => `${s.value} ${s.label}`),
+          ...designPlan.plan.blueprint.trustElements.badges.map((b) => b.label),
+        ]
+      : [];
+    const validation = validateThemeFiles(built.files, { trustedClaims });
 
     if (!validation.passed) {
       const artifact = await this.artifactRepository.create({

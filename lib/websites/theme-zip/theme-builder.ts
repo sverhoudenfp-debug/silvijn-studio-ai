@@ -9,6 +9,8 @@ import {
   slotAlt,
 } from "./media-slots";
 import { buildGenericPlaceholderSvg, buildMediaPlaceholderSvgs } from "./placeholders";
+import { composeBlueprintTemplates, slugifyPageKey } from "./blueprint-composition";
+import { BLUEPRINT_SECTION_REGISTRY, type BlueprintSectionType } from "../blueprint/section-registry";
 import type { WebsiteContactContext } from "../generator";
 import type { WebsiteSpecification } from "../types";
 import type { ThemeFile } from "./theme-structure";
@@ -232,14 +234,51 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-function slugifyKey(key: string): string {
-  const cleaned = key
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return cleaned || "pagina";
+
+
+
+/**
+ * Fase C: de layout-/achtergrond-/motion-selects voor een blueprint-sectie.
+ * Opties komen rechtstreeks uit de SECTION-REGISTRY (één bron van waarheid):
+ * schema en blueprint kunnen niet divergeren.
+ */
+function blueprintVariantSettings(type: BlueprintSectionType, backgroundDefault: string): string {
+  const def = BLUEPRINT_SECTION_REGISTRY[type];
+  const layouts = def.layouts
+    .map((l) => `{ "value": "${l.key}", "label": "${l.description.replace(/"/g, "'")}" }`)
+    .join(",\n        ");
+  return `    {
+      "type": "select",
+      "id": "layout",
+      "label": "Layoutvariant",
+      "default": "${def.defaultLayout}",
+      "options": [
+        ${layouts}
+      ]
+    },
+    {
+      "type": "select",
+      "id": "background",
+      "label": "Achtergrond",
+      "default": "${backgroundDefault}",
+      "options": [
+        { "value": "default", "label": "Standaard" },
+        { "value": "surface", "label": "Contrastvlak" },
+        { "value": "accent_band", "label": "Accentband" },
+        { "value": "image", "label": "Beeldtint" }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "motion",
+      "label": "Animatie",
+      "default": "none",
+      "options": [
+        { "value": "none", "label": "Geen" },
+        { "value": "fade_up", "label": "Vloeiend invliegen" },
+        { "value": "stagger", "label": "Gestaggerd invliegen" }
+      ]
+    }`;
 }
 
 // ---------------------------------------------------------------------------
@@ -732,8 +771,11 @@ img { max-width: 100%; height: auto; display: block; }
 .theme-media { position: relative; overflow: hidden; border-radius: var(--radius); background: var(--color-surface); }
 .theme-media--wide { aspect-ratio: 16 / 9; }
 .theme-media--landscape { aspect-ratio: 4 / 3; }
+.theme-media--landscape_4_3 { aspect-ratio: 4 / 3; }
 .theme-media--square { aspect-ratio: 1 / 1; }
 .theme-media--portrait { aspect-ratio: 3 / 4; }
+.theme-media--portrait_3_4 { aspect-ratio: 3 / 4; }
+.theme-media--tall { aspect-ratio: 2 / 3; }
 .theme-media img { width: 100%; height: 100%; object-fit: cover; object-position: var(--media-focal, 50% 50%); display: block; }
 .theme-media--placeholder img { object-position: center; }
 .hero__band { margin-top: 32px; }
@@ -758,6 +800,133 @@ img { max-width: 100%; height: auto; display: block; }
   .about__grid--media-left .about__media { order: 0; }
 }
 `;
+  // Fase C: blueprint-compositie — layoutvarianten, achtergronden, motion
+  // en de nieuwe registry-secties. Alles deterministisch; geen AI-CSS.
+  css += `
+/* --- Fase C: blueprint-compositie --- */
+/* Achtergrondvarianten (bg-default is de natuurlijke achtergrond) */
+.section--bg-accent_band { background: var(--color-surface); border-block: 3px solid var(--color-accent); }
+.section--bg-image { background: linear-gradient(180deg, var(--color-surface), var(--color-background)); }
+/* Motion (met prefers-reduced-motion-respect) */
+.motion--fade_up { animation: bp-fade-up .5s ease both; }
+.motion--stagger > * { animation: bp-fade-up .5s ease both; }
+.motion--stagger > *:nth-child(2) { animation-delay: .08s; }
+.motion--stagger > *:nth-child(3) { animation-delay: .16s; }
+.motion--stagger > *:nth-child(4) { animation-delay: .24s; }
+.motion--stagger > *:nth-child(5) { animation-delay: .32s; }
+.motion--stagger > *:nth-child(6) { animation-delay: .4s; }
+@keyframes bp-fade-up { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+/* Hero-varianten (split/centered bestaan al) */
+.hero--focused .hero__inner { max-width: 640px; }
+.hero--band { padding-block: calc(var(--section-spacing) * .55); }
+.hero--band .hero__band { display: none; }
+.hero--minimal { padding-block: calc(var(--section-spacing) * .8); }
+.hero--minimal .hero__band { display: none; }
+.hero--minimal .hero__eyebrow { display: none; }
+.hero--minimal .hero__inner { max-width: 560px; }
+/* Services-varianten */
+.services--grid .card-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.services--cards .card-grid { grid-template-columns: repeat(2, 1fr); }
+.services--list .card-grid { grid-template-columns: 1fr; max-width: 820px; gap: 12px; }
+.services--list .card--media { flex-direction: row; align-items: center; }
+.services--list .card--media .card__media { display: none; }
+.services--alternating .card-grid { grid-template-columns: 1fr; max-width: 720px; }
+.services--alternating .card--media { flex-direction: row-reverse; }
+.services--alternating .card-grid > *:nth-child(even) .card--media { flex-direction: row; }
+/* About-varianten */
+.about--split .about__grid { grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); gap: 40px; align-items: center; }
+.about--story .about__grid { grid-template-columns: 1fr; max-width: 760px; }
+.about--story .about__media { display: none; }
+.about--quote .about__body { font-family: var(--font-heading); font-size: 1.4rem; line-height: 1.45; }
+.about--quote .about__body p:first-child::before { content: "\\201C"; color: var(--color-accent); margin-right: 4px; }
+.about--timeline .about__grid { grid-template-columns: 1fr; max-width: 760px; }
+.about--timeline .about__body { border-left: 3px solid var(--color-accent); padding-left: 24px; }
+.gallery--grid .gallery-grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.gallery--full_width .gallery-grid { grid-template-columns: 1fr; gap: 0; }
+.gallery--full_width .gallery-item .theme-media { aspect-ratio: 21 / 9; border-radius: 0; }
+.testimonials--grid .testimonial-grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.testimonials--band .testimonial-grid { grid-template-columns: 1fr; max-width: 720px; }
+.testimonials--band .testimonial__quote { font-size: 1.25rem; text-align: center; }
+.testimonials--carousel .testimonial-grid { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 8px; }
+.testimonials--carousel .testimonial { min-width: min(420px, 85vw); scroll-snap-align: center; }
+.benefits--grid .card-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
+.benefits--checklist .card-grid { grid-template-columns: 1fr; max-width: 720px; gap: 0; }
+.benefits--checklist .card { border: none; padding: 10px 0; display: flex; align-items: baseline; gap: 12px; }
+.benefits--checklist .card > p:first-child { display: none; }
+.benefits--checklist .card h3::before { content: "\\2713 "; color: var(--color-primary); font-size: 1.1em; }
+.benefits--split .card-grid { grid-template-columns: 1fr; max-width: 720px; }
+.benefits--split .card { border-left: 3px solid var(--color-accent); }
+.faq--accordion .faq-list { display: grid; gap: 12px; max-width: 820px; }
+.faq--list .faq-list { gap: 0; max-width: none; }
+.faq--list .faq-item { border: none; border-bottom: 1px solid var(--color-border); border-radius: 0; }
+.faq--list .faq-item summary::after { content: ""; }
+.cta--band .section__header { text-align: center; margin-inline: auto; }
+.cta--split .section__header { text-align: left; margin-inline: 0; max-width: none; }
+.cta--split .section__header p { max-width: 720px; }
+.cta--closing { padding-block: calc(var(--section-spacing) * .6); border-top: 1px solid var(--color-border); }
+/* Contact-varianten (inline-grid vervangen door klasse) */
+.contact-grid { display: grid; gap: 32px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.contact--split .contact-grid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 32px; }
+.contact--full .contact-grid { grid-template-columns: 1fr; max-width: 640px; }
+.contact--minimal .contact-grid { grid-template-columns: 1fr; }
+.rich-text--article .rte { max-width: 760px; }
+.rich-text--columns .rte { max-width: 960px; columns: 2; column-gap: 40px; }
+@media (max-width: 760px) { .rich-text--columns .rte { columns: 1; } }
+/* Nieuwe registry-secties */
+.usp-row { display: flex; flex-wrap: wrap; gap: 12px 40px; }
+.usp-band--row .usp-row { display: flex; flex-wrap: wrap; gap: 12px 40px; }
+.usp-band--grid .usp-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; }
+.usp-item__label { font-weight: 600; margin: 0; }
+.usp-item__description { color: var(--color-muted); margin: 4px 0 0; font-size: .95rem; }
+.stats-row { display: flex; flex-wrap: wrap; gap: 32px 56px; }
+.stats--row .stats-row { display: flex; flex-wrap: wrap; gap: 32px 56px; }
+.stats--grid .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 20px; }
+.stat__value { font-family: var(--font-heading); font-size: 2.2rem; font-weight: 700; color: var(--color-primary); margin: 0; }
+.stat__label { color: var(--color-muted); margin: 4px 0 0; }
+.process-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 24px; counter-reset: none; max-width: 820px; }
+.process--steps .process-list { grid-template-columns: 1fr; gap: 24px; }
+.process--numbered_row .process-list { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 24px; }
+.process-item { display: flex; gap: 16px; align-items: flex-start; }
+.process-item__number { flex: none; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 999px; background: var(--color-primary); color: #fff; font-weight: 700; font-size: .95rem; }
+.process-item h3 { margin-bottom: .2em; font-size: 1.05rem; }
+.process-item p { color: var(--color-muted); margin: 0; }
+.projects-grid { display: grid; gap: 20px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.projects--grid .projects-grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+.projects--feature_row .projects-grid > *:first-child { grid-column: 1 / -1; }
+.project-card { background: var(--color-background); border: 1px solid var(--color-border); border-radius: var(--radius); overflow: hidden; }
+.project-card__media .theme-media { border-radius: 0; }
+.project-card__body { padding: 18px 22px; }
+.project-card__body p { color: var(--color-muted); margin: 0; }
+.team-grid { display: grid; gap: 24px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.team--grid .team-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 24px; }
+.team--row .team-grid { grid-template-columns: 1fr; gap: 12px; }
+.team--row .team-member { display: flex; align-items: center; gap: 16px; }
+.team--row .team-member__media { width: 72px; flex: none; }
+.team--row .team-member__media .theme-media { aspect-ratio: 1; }
+.team-member__media .theme-media { border-radius: var(--radius); }
+.team-member__body h3 { margin: 0 0 2px; font-size: 1.05rem; }
+.team-member__role { color: var(--color-muted); margin: 0; font-size: .95rem; }
+.rates--table .rates-table { width: 100%; border-collapse: collapse; max-width: 820px; }
+.rates--cards .card-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+.rates-table { width: 100%; border-collapse: collapse; max-width: 820px; }
+.rates-table th, .rates-table td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--color-border); }
+.rates-table__price, .rate-card__price { font-weight: 700; color: var(--color-primary); margin: 0; }
+.newsletter__inner { display: grid; gap: 24px; align-items: center; }
+.newsletter--band .newsletter__inner { grid-template-columns: 1fr; text-align: center; }
+.newsletter--band .newsletter__form { margin-inline: auto; }
+.newsletter--split .newsletter__inner { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.newsletter__copy h2 { margin-bottom: .2em; }
+.newsletter__copy p { color: var(--color-muted); margin: 0; }
+.newsletter__form { display: flex; gap: 12px; align-items: end; max-width: 560px; }
+.newsletter__form .field { flex: 1; }
+.booking__inner { display: grid; gap: 24px; align-items: center; }
+.booking--band .booking__inner { text-align: center; }
+.booking--split .booking__inner { grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); }
+.booking--split .booking__action { text-align: right; }
+.booking__copy h2 { margin-bottom: .2em; }
+.booking__copy p { color: var(--color-muted); margin: 0; }
+`;
+
   // Klantaccountpagina's (Fase I.2 completeness) — neutraal, gebruikt de
   // bestaande design-tokens; geen referentie-ontwerp gekopieerd.
   css += `
@@ -1550,7 +1719,10 @@ function buildFooterSection(): ThemeFile {
 }
 
 function buildHeroSection(): ThemeFile {
-  const liquid = `<section class="hero hero--{{ settings.hero_layout | default: 'focused' }}">
+  const liquid = `{%- liquid
+  assign hero_layout = section.settings.layout | default: settings.hero_layout | default: 'focused'
+-%}
+<section class="hero hero--{{ hero_layout }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
   <div class="container">
     <div class="hero__inner">
       <div class="hero__content">
@@ -1568,13 +1740,13 @@ function buildHeroSection(): ThemeFile {
           {%- endif -%}
         </div>
       </div>
-      {%- if settings.hero_layout == 'split' -%}
+      {%- if hero_layout == 'split' -%}
         <div class="hero__media">
           {%- render 'theme-media', image: section.settings.image, image_mobile: section.settings.image_mobile, aspect: 'wide', alt: section.settings.image_alt, sizes: '(min-width: 990px) 50vw, 100vw', loading: 'eager', fetchpriority: 'high', placeholder_svg: 'placeholder-hero.svg' -%}
         </div>
       {%- endif -%}
     </div>
-    {%- if settings.hero_layout != 'split' -%}
+    {%- if hero_layout != 'split' -%}
       <div class="hero__band">
         {%- render 'theme-media', image: section.settings.image, image_mobile: section.settings.image_mobile, aspect: 'wide', alt: section.settings.image_alt, sizes: '100vw', loading: 'eager', fetchpriority: 'high', placeholder_svg: 'placeholder-hero.svg' -%}
       </div>
@@ -1586,7 +1758,9 @@ function buildHeroSection(): ThemeFile {
 {
   "name": "Hero",
   "settings": [
-    { "type": "text", "id": "eyebrow", "label": "Label boven de kop" },
+
+${blueprintVariantSettings("hero", "default")},
+        { "type": "text", "id": "eyebrow", "label": "Label boven de kop" },
     { "type": "text", "id": "heading", "label": "Hoofdkop" },
     { "type": "textarea", "id": "subheading", "label": "Subkop" },
     { "type": "text", "id": "cta_label", "label": "CTA-tekst" },
@@ -1614,7 +1788,7 @@ function buildHeroSection(): ThemeFile {
 function buildThemeMediaSnippet(): ThemeFile {
   const liquid = `{% comment %}
   Centrale media-renderer. Parameters:
-  image, image_mobile (image_picker), aspect (wide|landscape|square|portrait),
+  image, image_mobile (image_picker), aspect (wide|landscape|landscape_4_3|square|portrait|portrait_3_4|tall),
   alt, sizes, loading (eager|lazy), fetchpriority (high|auto),
   placeholder_svg (asset-naam voor de abstracte placeholder).
 {% endcomment %}
@@ -1644,7 +1818,7 @@ function buildThemeMediaSnippet(): ThemeFile {
 }
 
 function buildServicesSection(): ThemeFile {
-  const liquid = `<section class="section">
+  const liquid = `<section class="section services services--{{ section.settings.layout | default: 'grid' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
   <div class="container">
     <div class="section__header">
       <h2>{{ section.settings.heading }}</h2>
@@ -1674,7 +1848,9 @@ function buildServicesSection(): ThemeFile {
 {
   "name": "Diensten",
   "settings": [
-    { "type": "text", "id": "heading", "label": "Kop", "default": "Onze diensten" },
+
+${blueprintVariantSettings("services", "default")},
+        { "type": "text", "id": "heading", "label": "Kop", "default": "Onze diensten" },
     { "type": "textarea", "id": "subheading", "label": "Subkop" }
   ],
   "blocks": [
@@ -1698,7 +1874,7 @@ function buildServicesSection(): ThemeFile {
 }
 
 function buildAboutSection(): ThemeFile {
-  const liquid = `<section class="section section--surface">
+  const liquid = `<section class="section about about--{{ section.settings.layout | default: 'split' }} section--bg-{{ section.settings.background | default: 'surface' }} motion--{{ section.settings.motion | default: 'none' }}">
   <div class="container">
     <div class="section__header">
       <h2>{{ section.settings.heading }}</h2>
@@ -1718,7 +1894,9 @@ function buildAboutSection(): ThemeFile {
 {
   "name": "Over ons",
   "settings": [
-    { "type": "text", "id": "heading", "label": "Kop", "default": "Over ons" },
+
+${blueprintVariantSettings("about", "surface")},
+        { "type": "text", "id": "heading", "label": "Kop", "default": "Over ons" },
     { "type": "richtext", "id": "body", "label": "Tekst" },
     { "type": "image_picker", "id": "image", "label": "Afbeelding (optioneel)" },
     { "type": "image_picker", "id": "image_mobile", "label": "Afbeelding mobiel (optioneel)" },
@@ -1748,7 +1926,7 @@ function buildAboutSection(): ThemeFile {
  * abstracte, token-afgeleide placeholders (nooit stock-foto's).
  */
 function buildGallerySection(): ThemeFile {
-  const liquid = `<section class="section">
+  const liquid = `<section class="section gallery gallery--{{ section.settings.layout | default: 'grid' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
   <div class="container">
     <div class="section__header">
       <h2>{{ section.settings.heading }}</h2>
@@ -1773,7 +1951,9 @@ function buildGallerySection(): ThemeFile {
 {
   "name": "Galerij",
   "settings": [
-    { "type": "text", "id": "heading", "label": "Kop", "default": "Impressie" },
+
+${blueprintVariantSettings("gallery", "default")},
+        { "type": "text", "id": "heading", "label": "Kop", "default": "Impressie" },
     { "type": "textarea", "id": "subheading", "label": "Subkop" }
   ],
   "blocks": [
@@ -1805,7 +1985,7 @@ function buildGallerySection(): ThemeFile {
  */
 function buildTestimonialsSection(): ThemeFile {
   const liquid = `{%- if section.blocks.size > 0 -%}
-<section class="section section--surface">
+<section class="section testimonials testimonials--{{ section.settings.layout | default: 'band' }} section--bg-{{ section.settings.background | default: 'surface' }} motion--{{ section.settings.motion | default: 'none' }}">
   <div class="container">
     <div class="section__header">
       <h2>{{ section.settings.heading }}</h2>
@@ -1829,7 +2009,9 @@ function buildTestimonialsSection(): ThemeFile {
 {
   "name": "Testimonials",
   "settings": [
-    { "type": "text", "id": "heading", "label": "Kop", "default": "Wat klanten zeggen" }
+
+${blueprintVariantSettings("testimonials", "surface")},
+        { "type": "text", "id": "heading", "label": "Kop", "default": "Wat klanten zeggen" }
   ],
   "blocks": [
     {
@@ -1851,7 +2033,7 @@ function buildTestimonialsSection(): ThemeFile {
 }
 
 function buildBenefitsSection(): ThemeFile {
-  const liquid = `<section class="section">
+  const liquid = `<section class="section benefits benefits--{{ section.settings.layout | default: 'grid' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
   <div class="container">
     <div class="section__header">
       <h2>{{ section.settings.heading }}</h2>
@@ -1871,7 +2053,9 @@ function buildBenefitsSection(): ThemeFile {
 {
   "name": "Voordelen",
   "settings": [
-    { "type": "text", "id": "heading", "label": "Kop", "default": "Waarom klanten voor ons kiezen" }
+
+${blueprintVariantSettings("benefits", "default")},
+        { "type": "text", "id": "heading", "label": "Kop", "default": "Waarom klanten voor ons kiezen" }
   ],
   "blocks": [
     {
@@ -1890,7 +2074,7 @@ function buildBenefitsSection(): ThemeFile {
 }
 
 function buildFaqSection(): ThemeFile {
-  const liquid = `<section class="section section--surface">
+  const liquid = `<section class="section faq faq--{{ section.settings.layout | default: 'accordion' }} section--bg-{{ section.settings.background | default: 'surface' }} motion--{{ section.settings.motion | default: 'none' }}">
   <div class="container">
     <div class="section__header">
       <h2>{{ section.settings.heading }}</h2>
@@ -1910,7 +2094,9 @@ function buildFaqSection(): ThemeFile {
 {
   "name": "FAQ",
   "settings": [
-    { "type": "text", "id": "heading", "label": "Kop", "default": "Veelgestelde vragen" }
+
+${blueprintVariantSettings("faq", "surface")},
+        { "type": "text", "id": "heading", "label": "Kop", "default": "Veelgestelde vragen" }
   ],
   "blocks": [
     {
@@ -1930,7 +2116,7 @@ function buildFaqSection(): ThemeFile {
 }
 
 function buildCtaSection(): ThemeFile {
-  const liquid = `<section class="section">
+  const liquid = `<section class="section cta cta--{{ section.settings.layout | default: 'band' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
   <div class="container">
     <div class="section__header" style="text-align:center;margin-inline:auto;">
       <h2>{{ section.settings.heading }}</h2>
@@ -1948,7 +2134,9 @@ function buildCtaSection(): ThemeFile {
 {
   "name": "CTA",
   "settings": [
-    { "type": "text", "id": "heading", "label": "Kop" },
+
+${blueprintVariantSettings("cta", "default")},
+        { "type": "text", "id": "heading", "label": "Kop" },
     { "type": "textarea", "id": "subheading", "label": "Subkop" },
     { "type": "text", "id": "cta_label", "label": "CTA-tekst" },
     { "type": "url", "id": "cta_link", "label": "CTA-link" }
@@ -1961,7 +2149,7 @@ function buildCtaSection(): ThemeFile {
 }
 
 function buildContactSection(): ThemeFile {
-  const liquid = `<section class="section section--surface" id="contact">
+  const liquid = `<section class="section contact contact--{{ section.settings.layout | default: 'split' }} section--bg-{{ section.settings.background | default: 'surface' }} motion--{{ section.settings.motion | default: 'none' }}" id="contact">
   <div class="container">
     <div class="section__header">
       <h2>{{ section.settings.heading }}</h2>
@@ -1969,7 +2157,7 @@ function buildContactSection(): ThemeFile {
         <p>{{ section.settings.intro }}</p>
       {%- endif -%}
     </div>
-    <div style="display:grid;gap:32px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));">
+    <div class="contact-grid">
       <div>
         {%- if section.settings.phone != blank -%}
           <p><strong>{{ 'contact.call_us' | t }}:</strong> <a href="tel:{{ section.settings.phone | remove: ' ' }}">{{ section.settings.phone }}</a></p>
@@ -2019,7 +2207,9 @@ function buildContactSection(): ThemeFile {
 {
   "name": "Contact",
   "settings": [
-    { "type": "text", "id": "heading", "label": "Kop", "default": "Contact" },
+
+${blueprintVariantSettings("contact", "surface")},
+        { "type": "text", "id": "heading", "label": "Kop", "default": "Contact" },
     { "type": "textarea", "id": "intro", "label": "Introductietekst" },
     { "type": "text", "id": "phone", "label": "Telefoonnummer" },
     { "type": "text", "id": "email", "label": "E-mailadres" },
@@ -2034,7 +2224,7 @@ function buildContactSection(): ThemeFile {
 }
 
 function buildRichTextSection(): ThemeFile {
-  const liquid = `<section class="section">
+  const liquid = `<section class="section rich-text rich-text--{{ section.settings.layout | default: 'article' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
   <div class="container">
     <div class="rte" style="max-width:760px;">
       {{ section.settings.body }}
@@ -2046,7 +2236,9 @@ function buildRichTextSection(): ThemeFile {
 {
   "name": "Tekst",
   "settings": [
-    { "type": "richtext", "id": "body", "label": "Tekst" }
+
+${blueprintVariantSettings("rich_text", "default")},
+        { "type": "richtext", "id": "body", "label": "Tekst" }
   ],
   "presets": [{ "name": "Tekst" }]
 }
@@ -2054,6 +2246,399 @@ function buildRichTextSection(): ThemeFile {
 `;
   return { path: "sections/rich-text.liquid", content: liquid };
 }
+
+
+// ---------------------------------------------------------------------------
+// Fase C: blueprint-secties die vóór de compositie geen liquid-bestand hadden.
+// Elke sectie volgt de SECTION-REGISTRY: layoutvarianten als select-setting
+// (registry = bron), bloktypes exact zoals de compositie ze instantieert,
+// beeldsloten via het centrale theme-media-snippet (R1). Content komt nooit
+// uit AI: de compositie vult settings/blocks deterministisch, lege velden
+// vult de merchant of de latere content-pass.
+// ---------------------------------------------------------------------------
+
+function buildUspBandSection(): ThemeFile {
+  const liquid = `<section class="section usp-band usp-band--{{ section.settings.layout | default: 'row' }} section--bg-{{ section.settings.background | default: 'surface' }} motion--{{ section.settings.motion | default: 'none' }}">
+  <div class="container">
+    <div class="usp-row">
+      {%- for block in section.blocks -%}
+        <div class="usp-item" {{ block.shopify_attributes }}>
+          {%- if block.settings.label != blank -%}
+            <p class="usp-item__label">{{ block.settings.label }}</p>
+          {%- endif -%}
+          {%- if block.settings.description != blank -%}
+            <p class="usp-item__description">{{ block.settings.description }}</p>
+          {%- endif -%}
+        </div>
+      {%- endfor -%}
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "USP-band",
+  "settings": [
+${blueprintVariantSettings("usp_band", "surface")}
+  ],
+  "blocks": [
+    {
+      "type": "usp",
+      "name": "Verkoopargument",
+      "settings": [
+        { "type": "text", "id": "label", "label": "Argument (alleen echte USP's)" },
+        { "type": "textarea", "id": "description", "label": "Toelichting (optioneel)" }
+      ]
+    }
+  ],
+  "presets": [{ "name": "USP-band", "blocks": [{ "type": "usp" }, { "type": "usp" }] }]
+}
+{% endschema %}
+`;
+  return { path: "sections/usp-band.liquid", content: liquid };
+}
+
+function buildStatsSection(): ThemeFile {
+  const liquid = `<section class="section stats stats--{{ section.settings.layout | default: 'row' }} section--bg-{{ section.settings.background | default: 'surface' }} motion--{{ section.settings.motion | default: 'none' }}">
+  <div class="container">
+    <div class="section__header">
+      <h2>{{ section.settings.heading }}</h2>
+    </div>
+    <div class="stats-row">
+      {%- for block in section.blocks -%}
+        <div class="stat" {{ block.shopify_attributes }}>
+          {%- if block.settings.value != blank -%}
+            <p class="stat__value">{{ block.settings.value }}</p>
+          {%- endif -%}
+          {%- if block.settings.label != blank -%}
+            <p class="stat__label">{{ block.settings.label }}</p>
+          {%- endif -%}
+        </div>
+      {%- endfor -%}
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Statistieken",
+  "settings": [
+${blueprintVariantSettings("stats", "surface")},
+    { "type": "text", "id": "heading", "label": "Kop", "default": "In cijfers" }
+  ],
+  "blocks": [
+    {
+      "type": "stat",
+      "name": "Statistiek",
+      "settings": [
+        { "type": "text", "id": "label", "label": "Omschrijving (alleen echte cijfers)" },
+        { "type": "text", "id": "value", "label": "Waarde" }
+      ]
+    }
+  ],
+  "presets": [{ "name": "Statistieken", "blocks": [{ "type": "stat" }, { "type": "stat" }] }]
+}
+{% endschema %}
+`;
+  return { path: "sections/stats.liquid", content: liquid };
+}
+
+function buildProcessSection(): ThemeFile {
+  const liquid = `<section class="section process process--{{ section.settings.layout | default: 'steps' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
+  <div class="container">
+    <div class="section__header">
+      <h2>{{ section.settings.heading }}</h2>
+      {%- if section.settings.subheading != blank -%}
+        <p>{{ section.settings.subheading }}</p>
+      {%- endif -%}
+    </div>
+    <ol class="process-list">
+      {%- for block in section.blocks -%}
+        <li class="process-item" {{ block.shopify_attributes }}>
+          <span class="process-item__number" aria-hidden="true">{{ forloop.index }}</span>
+          <div>
+            <h3>{{ block.settings.title }}</h3>
+            {%- if block.settings.description != blank -%}
+              <p>{{ block.settings.description }}</p>
+            {%- endif -%}
+          </div>
+        </li>
+      {%- endfor -%}
+    </ol>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Werkwijze",
+  "settings": [
+${blueprintVariantSettings("process", "default")},
+    { "type": "text", "id": "heading", "label": "Kop", "default": "Zo werken wij" },
+    { "type": "textarea", "id": "subheading", "label": "Subkop" }
+  ],
+  "blocks": [
+    {
+      "type": "step",
+      "name": "Stap",
+      "settings": [
+        { "type": "text", "id": "title", "label": "Titel" },
+        { "type": "textarea", "id": "description", "label": "Toelichting" }
+      ]
+    }
+  ],
+  "presets": [{ "name": "Werkwijze", "blocks": [{ "type": "step" }, { "type": "step" }, { "type": "step" }] }]
+}
+{% endschema %}
+`;
+  return { path: "sections/process.liquid", content: liquid };
+}
+
+function buildProjectsSection(): ThemeFile {
+  const liquid = `<section class="section projects projects--{{ section.settings.layout | default: 'grid' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
+  <div class="container">
+    <div class="section__header">
+      <h2>{{ section.settings.heading }}</h2>
+      {%- if section.settings.subheading != blank -%}
+        <p>{{ section.settings.subheading }}</p>
+      {%- endif -%}
+    </div>
+    <div class="projects-grid">
+      {%- for block in section.blocks -%}
+        <article class="project-card" {{ block.shopify_attributes }}>
+          <div class="project-card__media">
+            {%- render 'theme-media', image: block.settings.image, aspect: 'landscape_4_3', alt: block.settings.image_alt, sizes: '(min-width: 990px) 360px, 100vw', loading: 'lazy', placeholder_svg: 'placeholder.svg' -%}
+          </div>
+          <div class="project-card__body">
+            <h3>{{ block.settings.title }}</h3>
+            {%- if block.settings.description != blank -%}
+              <p>{{ block.settings.description }}</p>
+            {%- endif -%}
+          </div>
+        </article>
+      {%- endfor -%}
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Projecten",
+  "settings": [
+${blueprintVariantSettings("projects", "default")},
+    { "type": "text", "id": "heading", "label": "Kop", "default": "Ons werk" },
+    { "type": "textarea", "id": "subheading", "label": "Subkop" }
+  ],
+  "blocks": [
+    {
+      "type": "project",
+      "name": "Project",
+      "settings": [
+        { "type": "image_picker", "id": "image", "label": "Afbeelding (optioneel)" },
+        { "type": "text", "id": "image_alt", "label": "Alt-tekst afbeelding" },
+        { "type": "text", "id": "title", "label": "Titel" },
+        { "type": "textarea", "id": "description", "label": "Omschrijving" }
+      ]
+    }
+  ],
+  "presets": [{ "name": "Projecten", "blocks": [{ "type": "project" }, { "type": "project" }] }]
+}
+{% endschema %}
+`;
+  return { path: "sections/projects.liquid", content: liquid };
+}
+
+function buildTeamSection(): ThemeFile {
+  const liquid = `<section class="section team team--{{ section.settings.layout | default: 'grid' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
+  <div class="container">
+    <div class="section__header">
+      <h2>{{ section.settings.heading }}</h2>
+    </div>
+    <div class="team-grid">
+      {%- for block in section.blocks -%}
+        <div class="team-member" {{ block.shopify_attributes }}>
+          <div class="team-member__media">
+            {%- render 'theme-media', image: block.settings.image, aspect: 'portrait_3_4', alt: block.settings.name, sizes: '(min-width: 990px) 220px, 50vw', loading: 'lazy', placeholder_svg: 'placeholder.svg' -%}
+          </div>
+          <div class="team-member__body">
+            {%- if block.settings.name != blank -%}
+              <h3>{{ block.settings.name }}</h3>
+            {%- endif -%}
+            {%- if block.settings.role != blank -%}
+              <p class="team-member__role">{{ block.settings.role }}</p>
+            {%- endif -%}
+          </div>
+        </div>
+      {%- endfor -%}
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Team",
+  "settings": [
+${blueprintVariantSettings("team", "default")},
+    { "type": "text", "id": "heading", "label": "Kop", "default": "Ons team" }
+  ],
+  "blocks": [
+    {
+      "type": "member",
+      "name": "Medewerker",
+      "settings": [
+        { "type": "image_picker", "id": "image", "label": "Portret (optioneel)" },
+        { "type": "text", "id": "name", "label": "Naam (alleen indien echt bekend)" },
+        { "type": "text", "id": "role", "label": "Rol" }
+      ]
+    }
+  ],
+  "presets": [{ "name": "Team", "blocks": [{ "type": "member" }] }]
+}
+{% endschema %}
+`;
+  return { path: "sections/team.liquid", content: liquid };
+}
+
+function buildRatesSection(): ThemeFile {
+  const liquid = `<section class="section rates rates--{{ section.settings.layout | default: 'table' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
+  <div class="container">
+    <div class="section__header">
+      <h2>{{ section.settings.heading }}</h2>
+      {%- if section.settings.subheading != blank -%}
+        <p>{{ section.settings.subheading }}</p>
+      {%- endif -%}
+    </div>
+    {%- if section.settings.layout == 'cards' -%}
+      <div class="card-grid">
+        {%- for block in section.blocks -%}
+          <article class="card rate-card" {{ block.shopify_attributes }}>
+            <h3>{{ block.settings.service }}</h3>
+            {%- if block.settings.price != blank -%}
+              <p class="rate-card__price">{{ block.settings.price }}</p>
+            {%- endif -%}
+            {%- if block.settings.description != blank -%}
+              <p>{{ block.settings.description }}</p>
+            {%- endif -%}
+          </article>
+        {%- endfor -%}
+      </div>
+    {%- else -%}
+      <table class="rates-table">
+        <thead>
+          <tr><th scope="col">{{ 'rates.service' | t }}</th><th scope="col">{{ 'rates.price' | t }}</th></tr>
+        </thead>
+        <tbody>
+          {%- for block in section.blocks -%}
+            <tr {{ block.shopify_attributes }}>
+              <td>{{ block.settings.service }}</td>
+              <td class="rates-table__price">{{ block.settings.price }}</td>
+            </tr>
+          {%- endfor -%}
+        </tbody>
+      </table>
+    {%- endif -%}
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Tarieven",
+  "settings": [
+${blueprintVariantSettings("rates", "default")},
+    { "type": "text", "id": "heading", "label": "Kop", "default": "Tarieven" },
+    { "type": "textarea", "id": "subheading", "label": "Subkop" }
+  ],
+  "blocks": [
+    {
+      "type": "rate_item",
+      "name": "Tariefitem",
+      "settings": [
+        { "type": "text", "id": "service", "label": "Dienst (alleen echte tarieven)" },
+        { "type": "text", "id": "price", "label": "Tarief" },
+        { "type": "textarea", "id": "description", "label": "Toelichting (optioneel)" }
+      ]
+    }
+  ],
+  "presets": [{ "name": "Tarieven", "blocks": [{ "type": "rate_item" }] }]
+}
+{% endschema %}
+`;
+  return { path: "sections/rates.liquid", content: liquid };
+}
+
+function buildNewsletterSection(): ThemeFile {
+  const liquid = `<section class="section newsletter newsletter--{{ section.settings.layout | default: 'band' }} section--bg-{{ section.settings.background | default: 'surface' }} motion--{{ section.settings.motion | default: 'none' }}">
+  <div class="container">
+    <div class="newsletter__inner">
+      <div class="newsletter__copy">
+        <h2>{{ section.settings.heading }}</h2>
+        {%- if section.settings.subheading != blank -%}
+          <p>{{ section.settings.subheading }}</p>
+        {%- endif -%}
+      </div>
+      {%- form 'contact' -%}
+        <div class="newsletter__form">
+          <input type="hidden" name="contact[body]" value="Nieuwsbrief-aanmelding via de website.">
+          <div class="field">
+            <label for="NewsletterEmail-{{ section.id }}">{{ 'newsletter.email' | t }}</label>
+            <input type="email" id="NewsletterEmail-{{ section.id }}" name="contact[email]" required autocomplete="email">
+          </div>
+          <button type="submit" class="btn btn--primary">{{ section.settings.button_label }}</button>
+        </div>
+      {%- endform -%}
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Nieuwsbrief",
+  "settings": [
+${blueprintVariantSettings("newsletter", "surface")},
+    { "type": "text", "id": "heading", "label": "Kop", "default": "Blijf op de hoogte" },
+    { "type": "textarea", "id": "subheading", "label": "Subkop" },
+    { "type": "text", "id": "button_label", "label": "Knoptekst", "default": "Aanmelden" }
+  ],
+  "presets": [{ "name": "Nieuwsbrief" }]
+}
+{% endschema %}
+`;
+  return { path: "sections/newsletter.liquid", content: liquid };
+}
+
+function buildBookingSection(): ThemeFile {
+  const liquid = `<section class="section booking booking--{{ section.settings.layout | default: 'band' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
+  <div class="container">
+    <div class="booking__inner">
+      <div class="booking__copy">
+        <h2>{{ section.settings.heading }}</h2>
+        {%- if section.settings.subheading != blank -%}
+          <p>{{ section.settings.subheading }}</p>
+        {%- endif -%}
+      </div>
+      <div class="booking__action">
+        <a class="btn btn--primary" href="{{ section.settings.cta_link | default: '/pages/contact' }}">{{ section.settings.cta_label }}</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Afspraak",
+  "settings": [
+${blueprintVariantSettings("booking", "default")},
+    { "type": "text", "id": "heading", "label": "Kop", "default": "Maak een afspraak" },
+    { "type": "textarea", "id": "subheading", "label": "Subkop" },
+    { "type": "text", "id": "cta_label", "label": "Knoptekst", "default": "Nu aanvragen" },
+    { "type": "url", "id": "cta_link", "label": "Knoplink" }
+  ],
+  "presets": [{ "name": "Afspraak" }]
+}
+{% endschema %}
+`;
+  return { path: "sections/booking.liquid", content: liquid };
+}
+
 
 function buildMainPageSection(): ThemeFile {
   const liquid = `<section class="section">
@@ -2615,6 +3200,17 @@ export function buildShopifyTheme(input: BuildThemeInput): BuiltTheme {
   files.push(buildCtaSection());
   files.push(buildContactSection());
   files.push(buildRichTextSection());
+  // Fase C: blueprint-secties uit de SECTION-REGISTRY (usp-band, stats,
+  // process, projects, team, rates, newsletter, booking) — altijd aanwezig
+  // als sectiebestand; instantiëring gebeurt uitsluitend via het blueprint.
+  files.push(buildUspBandSection());
+  files.push(buildStatsSection());
+  files.push(buildProcessSection());
+  files.push(buildProjectsSection());
+  files.push(buildTeamSection());
+  files.push(buildRatesSection());
+  files.push(buildNewsletterSection());
+  files.push(buildBookingSection());
   files.push(buildMainPageSection());
   files.push(buildMain404Section());
   files.push(buildMainProductSection());
@@ -2626,7 +3222,7 @@ export function buildShopifyTheme(input: BuildThemeInput): BuiltTheme {
   const pageKeyHome = new Set(["home", "index", "start", "homepage"]);
   const navItems = plan.navigation.items.map((item) => ({
     label: item.label,
-    url: pageKeyHome.has(item.pageKey.toLowerCase()) ? "/" : `/pages/${slugifyKey(item.pageKey)}`,
+    url: pageKeyHome.has(item.pageKey.toLowerCase()) ? "/" : `/pages/${slugifyPageKey(item.pageKey)}`,
   }));
   files.push(
     buildHeaderGroup({
@@ -2643,36 +3239,50 @@ export function buildShopifyTheme(input: BuildThemeInput): BuiltTheme {
     })
   );
 
-  // --- Templates: homepage-compositie
-  const home = homePageSectionInstances(spec, contact);
-  files.push(jsonFile("templates/index.json", { sections: home.sections, order: home.order }));
+  // --- Templates: pagina-compositie.
+  //     Fase C: met een blueprint op het Design Plan worden homepage ÉN
+  //     subpagina's deterministisch uit blueprint.pages[].sectionInstances
+  //     opgebouwd (types/layouts uit de SECTION-REGISTRY, volgorde exact,
+  //     geen ongeplande secties). Zonder blueprint (v1-plan) blijft de
+  //     bestaande hardcoded homepage-compositie + contactpagina + lege
+  //     subpagina-shells byte-voor-byte gehandhaafd (backward compat).
+  if (plan.blueprint) {
+    const composition = composeBlueprintTemplates({ blueprint: plan.blueprint, spec, contact });
+    for (const template of composition.templates) {
+      files.push(jsonFile(template.path, template.data));
+    }
+    notes.push(...composition.notes);
+  } else {
+    const home = homePageSectionInstances(spec, contact);
+    files.push(jsonFile("templates/index.json", { sections: home.sections, order: home.order }));
 
-  // --- Templates: contactpagina (altijd, met échte contactgegevens)
-  const contactPage = contactPageTemplate(spec, contact);
-  files.push(jsonFile(contactPage.path, contactPage.data));
+    // --- Templates: contactpagina (altijd, met échte contactgegevens)
+    const contactPage = contactPageTemplate(spec, contact);
+    files.push(jsonFile(contactPage.path, contactPage.data));
 
-  // --- Templates: subpagina's uit het Design Plan (home-contact al gedaan)
-  const plannedKeys = new Set<string>(["contact"]);
-  for (const page of plan.pageStructure) {
-    const key = page.key.trim();
-    if (pageKeyHome.has(key.toLowerCase())) continue;
-    const slugKey = slugifyKey(key);
-    if (plannedKeys.has(slugKey)) continue;
-    plannedKeys.add(slugKey);
-    files.push(
-      jsonFile(`templates/page.${slugKey}.json`, {
-        sections: {
-          main: {
-            type: "main-page",
-            settings: {},
+    // --- Templates: subpagina's uit het Design Plan (home-contact al gedaan)
+    const plannedKeys = new Set<string>(["contact"]);
+    for (const page of plan.pageStructure) {
+      const key = page.key.trim();
+      if (pageKeyHome.has(key.toLowerCase())) continue;
+      const slugKey = slugifyPageKey(key);
+      if (plannedKeys.has(slugKey)) continue;
+      plannedKeys.add(slugKey);
+      files.push(
+        jsonFile(`templates/page.${slugKey}.json`, {
+          sections: {
+            main: {
+              type: "main-page",
+              settings: {},
+            },
           },
-        },
-        order: ["main"],
-      })
-    );
-    notes.push(
-      `Pagina "${page.title ?? key}" wordt als lege, bewerkbare Shopify-pagina aangeleverd (template page.${slugKey}) — content volgt in de revisierondes, er wordt niets verzonnen.`
-    );
+          order: ["main"],
+        })
+      );
+      notes.push(
+        `Pagina "${page.title ?? key}" wordt als lege, bewerkbare Shopify-pagina aangeleverd (template page.${slugKey}) — content volgt in de revisierondes, er wordt niets verzonnen.`
+      );
+    }
   }
 
   // --- Templates: standaardpagina + systeempagina's

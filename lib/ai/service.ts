@@ -54,6 +54,7 @@ import type { ProjectRequirements } from "@/lib/projects/types";
 import type { WebsiteSpecification } from "@/lib/websites/types";
 import { designPlanSchema, type DesignPlan } from "@/lib/websites/design-plan";
 import { buildBlueprintSectionContract } from "@/lib/websites/blueprint/section-registry";
+import { buildArchetypeGuidance, selectBlueprintArchetype } from "@/lib/websites/blueprint/archetypes";
 import type { QCAnalysis } from "@/lib/qc/ai-types";
 import {
   AIInvalidResponseError,
@@ -1033,7 +1034,8 @@ HARD REGELS:
 - Functionaliteit (functionality.features) mag ALLEEN voorkomen als die uit de requirements of questionnaire-antwoorden volgt; vermeld per feature de bron (source: "requirements", "questionnaire" of "lead_notes"). Verzin geen functionaliteit.
 - Kleuren: alleen hex-waarden (#rrggbb) of null. Respecteer voorkeurskleuren (PREFERENTIEKLEUREN) en vermijd expliciet afgekeurde kleuren (AFGEKEURDE KLEUREN) — gebruik die nooit als primary/secondary/accent.
 - Elke navigatieverwijzing (pageKey) moet naar een geplande pagina (pageStructure key) wijzen.
-- BLUEPRINT v2 (plan.blueprint): dit is de machine-uitvoerbare website-architectuur. Plant PER PAGINA de sectie-instanties (type, layout, volgorde) uitsluitend uit de gesloten SECTION-REGISTRY in de prompt. Kies compositie, sectiekeuze en volgorde passend bij DIT bedrijf en deze branche — niet elk bedrijf krijgt dezelfde structuur. Blocks zijn compositie-hints (korte richting uit echte input), geen definitieve copy. trustElements alléén met echte data + verplichte source; ontbreken echte USP's/cijfers/badges, laat de lijst leeg en vermeld het in missingInformation. NOOIT secties plannen die echte data vereisen die er niet is (stats/testimonials/team/rates).
+- BLUEPRINT v2 (plan.blueprint): dit is de machine-uitvoerbare website-architectuur. Plant PER PAGINA de sectie-instanties (type, layout, volgorde) uitsluitend uit de gesloten SECTION-REGISTRY in de prompt. Kies compositie, sectiekeuze en volgorde passend bij DIT bedrijf en deze branche — niet elk bedrijf krijgt dezelfde structuur. Blocks zijn compositie-hints (korte richting uit echte input), geen definitieve copy. trustElements alléén met echte data + verplichte source; ontbreken echte USP's/cijfers/badges, laat de lijst leeg en vermeld het in missingInformation. NOOIT secties plannen die echte data vereisen die er niet is (stats/testimonials/team/rates/usp_band/projects) — dit wordt DETERMINISTISCH afgedwongen (usp_band vereist trustElements.usps, stats vereist trustElements.stats).
+- POSITIEVE COMPOSITIEDOELEN (planning targets in de SECTION-REGISTRY): ontbrekende content betekent NIET automatisch dat een waardevolle sectie wegvalt. Secties met plannableWithEmptySlots=true (hero/services/about/process/gallery/benefits/faq/booking/cta/contact) mogen als ontwerpstructuur bestaan met expliciet lege, merchant-editable slots (hint=null) — registreer dan de ontbrekende informatie in missingInformation. Secties zonder die vlag (evidence_only) zijn NIET planbaar zonder echte input.
 - Compositie-vloer (hard gecontroleerd): de homepage begint met hero en bevat minimaal één contact-, booking- of cta-sectie; geen twee identieke secties direct achter elkaar; maximaal 2 cta-secties en 2 primaire CTA's per pagina; elke cta-instantie heeft verplicht een cta-configuratie (label + target).
 - Geen code, geen HTML, geen Liquid — alleen de gevraagde JSON-structuur.
 - Nederlands, professioneel, concreet en uitvoerbaar voor een webdesigner.
@@ -1063,6 +1065,8 @@ export function buildDesignPlanPrompt(input: DesignPlanInput): string {
     `AANTAL PAGINA'S (bindend voor de paginastructuur): ${input.numberOfPages != null ? String(input.numberOfPages) : "onbekend — plan precies één pagina"}`,
     `E-COMMERCE: ${input.ecommerce === true ? "ja" : input.ecommerce === false ? "nee" : "onbekend"}`,
     `TEMPLATESUGGESTIE (deterministisch): ${input.suggestedTemplate}`,
+    "",
+    ...buildArchetypeGuidance(selectBlueprintArchetype(input.industry)),
     "",
   ];
 

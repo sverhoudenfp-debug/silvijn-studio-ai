@@ -354,5 +354,26 @@ export function validateBlueprintConsistency(
     }
   }
 
+  // 7. ANTI-FABRICATIE (planning targets): trust-gebonden sectietypes
+  //    vereisen geregistreerde ECHTE data in trustElements. Dit is de
+  //    machine-kant van de evidence_only-regel: wie een usp_band/stats-sectie
+  //    plant zonder geregistreerde echte USP's/cijfers, verzint die.
+  const TRUST_BOUND: Array<{ type: BlueprintSectionType; kind: "usps" | "stats" }> = [
+    { type: "usp_band", kind: "usps" },
+    { type: "stats", kind: "stats" },
+  ];
+  for (const page of blueprint.pages) {
+    for (const instance of page.sectionInstances) {
+      for (const bound of TRUST_BOUND) {
+        if (instance.type !== bound.type) continue;
+        if (blueprint.trustElements[bound.kind].length === 0) {
+          errors.push(
+            `Sectie "${instance.type}" op pagina "${page.key}" is evidence_only maar trustElements.${bound.kind} is leeg — plan deze sectie alleen met geregistreerde echte data (anti-fabricatie).`
+          );
+        }
+      }
+    }
+  }
+
   return { passed: errors.length === 0, errors };
 }

@@ -14,6 +14,14 @@
  * - GESLOTEN catalogus: de AI kiest uitsluitend uit deze types/layouts/blocks;
  *   elke afwijking faalt de Zod-validatie. Nieuwe sectietypes = één entry
  *   hier (plus eventueel een renderer in de theme-builder, later).
+ * - PLANNING TARGETS (Design Intelligence, 2026-09-19): elke entry draagt een
+ *   deterministisch planningTarget — de waarde-tier (core/recommended/optional/
+ *   evidence_only), de minimale betrouwbare input, en of de sectie ook met
+ *   lege/merchant-editable slots gepland MAG worden. Deze targets geven de AI
+ *   positieve compositiedoelen: ontbrekende content mag een waardevolle sectie
+ *   niet automatisch laten verdwijnen — maar evidence_only-types vereisen
+ *   ALTIJD echte data (anti-fabricatie is onaangeroerd en wordt nu juist
+ *   extra hard afgedwongen in validateBlueprintConsistency).
  * - De registry bevat GEEN ontwerp, content of bedrijfslogica van externe
  *   referentiethema's (Horizon/Bluestone zijn uitsluitend technische
  *   inspiratie voor composable sections/blocks — niets overgenomen).
@@ -76,6 +84,35 @@ export interface BlueprintBlockDefinition {
   requiredKind: boolean;
 }
 
+/**
+ * Positieve compositie-doelstellingen per sectietype (deterministisch).
+ *
+ * Tiers:
+ * - core           — standaard waardevol op vrijwel elke zakelijke site.
+ * - recommended    — standaard waardevol zodra de minimale input er is.
+ * - optional       — situatie-/branche-afhankelijk waardevol.
+ * - evidence_only  — ALLEEN plannen met echte, geverifieerde data;
+ *                    nooit met lege slots, nooit verzonnen.
+ */
+export const BLUEPRINT_PLANNING_TIERS = ["core", "recommended", "optional", "evidence_only"] as const;
+export type BlueprintPlanningTier = (typeof BLUEPRINT_PLANNING_TIERS)[number];
+
+export interface BlueprintPlanningTarget {
+  /** Waarde-tier van de sectie (zie BLUEPRINT_PLANNING_TIERS). */
+  tier: BlueprintPlanningTier;
+  /**
+   * true = de sectie mag als ontwerpstructuur bestaan met expliciet lege,
+   * merchant-editable slots (hint=null, geen verzonden data); de ontbrekende
+   * informatie moet dan in missingInformation staan.
+   * false = zonder de minimale betrouwbare input NIET plannen.
+   */
+  plannableWithEmptySlots: boolean;
+  /** Minimale betrouwbare input die nodig is (NL, voor het AI-contract). */
+  minimalTrustedInput: string;
+  /** Hoe de lege slots eruitzien (alleen relevant als plannableWithEmptySlots). */
+  emptySlotShape: string | null;
+}
+
 export interface BlueprintSectionDefinition {
   type: BlueprintSectionType;
   /** Nederlands label (mens-leesbaar, voor UI en logs). */
@@ -94,10 +131,21 @@ export interface BlueprintSectionDefinition {
   mediaRoles: BlueprintMediaRole[];
   /** Korte NL-compositiehint voor het AI-contract. */
   compositionHint: string;
+  /** Positief compositiedoel: wanneer en waardevol, en onder welke voorwaarden. */
+  planningTarget: BlueprintPlanningTarget;
 }
 
 function layout(key: string, description: string): BlueprintLayoutDefinition {
   return { key, description };
+}
+
+function target(
+  tier: BlueprintPlanningTier,
+  plannableWithEmptySlots: boolean,
+  minimalTrustedInput: string,
+  emptySlotShape: string | null
+): BlueprintPlanningTarget {
+  return { tier, plannableWithEmptySlots, minimalTrustedInput, emptySlotShape };
 }
 
 export const BLUEPRINT_SECTION_REGISTRY: Record<BlueprintSectionType, BlueprintSectionDefinition> = {
@@ -117,6 +165,7 @@ export const BLUEPRINT_SECTION_REGISTRY: Record<BlueprintSectionType, BlueprintS
     supportsCta: true,
     mediaRoles: ["image", "image_background"],
     compositionHint: "Altijd als EERSTE sectie van de homepage; maximaal één per pagina.",
+    planningTarget: target("core", true, "Bedrijfsnaam + branche + primair doel (altijd uit echte input).", "Kop/subkop-slot merchant-editable; CTA-label ontleend aan het echte conversiedoel."),
   },
   usp_band: {
     type: "usp_band",
@@ -131,6 +180,7 @@ export const BLUEPRINT_SECTION_REGISTRY: Record<BlueprintSectionType, BlueprintS
     supportsCta: false,
     mediaRoles: [],
     compositionHint: "Alleen USP's die uit echte input volgen (requirements/questionnaire/lead-notities); anders niet plannen.",
+    planningTarget: target("evidence_only", false, "Minimaal 2 ECHTE USP-onderdelen (trustElements.usps met source).", null),
   },
   stats: {
     type: "stats",
@@ -145,6 +195,7 @@ export const BLUEPRINT_SECTION_REGISTRY: Record<BlueprintSectionType, BlueprintS
     supportsCta: false,
     mediaRoles: [],
     compositionHint: "NOOIT cijfers verzinnen; ontbreken echte cijfers, plan deze sectie dan niet.",
+    planningTarget: target("evidence_only", false, "Echte, vermelde cijfers (trustElements.stats met source).", null),
   },
   services: {
     type: "services",
@@ -161,6 +212,7 @@ export const BLUEPRINT_SECTION_REGISTRY: Record<BlueprintSectionType, BlueprintS
     supportsCta: true,
     mediaRoles: ["image"],
     compositionHint: "Aantal dienstblokken volgt het echte aanbod uit de input — nooit opvullen om het grid vol te maken.",
+    planningTarget: target("core", true, "Het echte aanbod (requirements/questionnaire/lead-notities); ontbreekt het volledig, plan de sectie dan met lege dienstslots.", "Diensttitel- en toelichtingsslots merchant-editable; nooit diensten verzinnen."),
   },
   about: {
     type: "about",
@@ -177,6 +229,7 @@ export const BLUEPRINT_SECTION_REGISTRY: Record<BlueprintSectionType, BlueprintS
     supportsCta: false,
     mediaRoles: ["image"],
     compositionHint: "Optioneel per website; alleen als er echt verhaalmateriaal is.",
+    planningTarget: target("recommended", true, "Bedrijfsnaam + branche-basis volstaan als fundament; echt verhaalmateriaal maakt de sectie sterker.", "Verhaalslot merchant-editable; beeldslot blijft leeg voor de merchant."),
   },
   process: {
     type: "process",
@@ -191,6 +244,7 @@ export const BLUEPRINT_SECTION_REGISTRY: Record<BlueprintSectionType, BlueprintS
     supportsCta: false,
     mediaRoles: [],
     compositionHint: "Sterk voor dienstverleners; stappen moeten uit echte input volgen.",
+    planningTarget: target("recommended", true, "Een echte aanduiding van de aanpak maakt de sectie sterk; zonder die input zijn lege stapslots acceptabel.", "Staptitel-sloten merchant-editable; geen verzonnen werkwijze-claims."),
   },
   gallery: {
     type: "gallery",
@@ -205,6 +259,7 @@ export const BLUEPRINT_SECTION_REGISTRY: Record<BlueprintSectionType, BlueprintS
     supportsCta: false,
     mediaRoles: ["image"],
     compositionHint: "Beeldsloten blijven leeg voor de merchant (image_picker); verzin nooit foto's.",
+    planningTarget: target("optional", true, "Beeldslots zijn per definitie merchant-editable; echte werk-/sfeerbeelden maken de sectie waardevol.", "Alle beeldslots leeg voor de merchant (image_picker)."),
   },
   projects: {
     type: "projects",
@@ -219,6 +274,7 @@ export const BLUEPRINT_SECTION_REGISTRY: Record<BlueprintSectionType, BlueprintS
     supportsCta: true,
     mediaRoles: ["image"],
     compositionHint: "Alleen plannen als er echte projecten/cases bekend zijn; anders weglaten (geen fabricatie).",
+    planningTarget: target("evidence_only", false, "Minimaal 2 echte projecten/cases uit echte input.", null),
   },
   testimonials: {
     type: "testimonials",
@@ -234,6 +290,7 @@ export const BLUEPRINT_SECTION_REGISTRY: Record<BlueprintSectionType, BlueprintS
     supportsCta: false,
     mediaRoles: [],
     compositionHint: "NOOIT reviews of namen verzinnen; ontbreken echte uitspraken, dan deze sectie niet plannen.",
+    planningTarget: target("evidence_only", false, "Echte klantuitspraken (auteur alleen als echt bekend).", null),
   },
   team: {
     type: "team",
@@ -248,6 +305,7 @@ export const BLUEPRINT_SECTION_REGISTRY: Record<BlueprintSectionType, BlueprintS
     supportsCta: false,
     mediaRoles: ["image"],
     compositionHint: "NOOIT medewerkers verzinnen; ontbreekt echte teaminformatie, dan niet plannen.",
+    planningTarget: target("evidence_only", false, "Echte namen + rollen van medewerkers.", null),
   },
   benefits: {
     type: "benefits",
@@ -263,6 +321,7 @@ export const BLUEPRINT_SECTION_REGISTRY: Record<BlueprintSectionType, BlueprintS
     supportsCta: false,
     mediaRoles: [],
     compositionHint: "Voordelen moeten uit echte input volgen (vraag-aanleiding, questionnaire).",
+    planningTarget: target("recommended", true, "Echte klachtaanleiding/voordelen uit de input; zonder die input zijn lege voordeelslots acceptabel.", "Voordeelzin-sloten merchant-editable; geen verzonnen voordelen."),
   },
   faq: {
     type: "faq",
@@ -277,6 +336,7 @@ export const BLUEPRINT_SECTION_REGISTRY: Record<BlueprintSectionType, BlueprintS
     supportsCta: false,
     mediaRoles: [],
     compositionHint: "Alleen plannen bij echte, algemene branche-/bedrijfsvragen die uit de input volgen.",
+    planningTarget: target("optional", true, "Echte, terugkerende klantvragen; zonder echte vragen zijn lege vraagslots acceptabel maar minder sterk.", "Vraag/antwoord-sloten merchant-editable; antwoorden claimen nooit feiten."),
   },
   rates: {
     type: "rates",
@@ -291,6 +351,7 @@ export const BLUEPRINT_SECTION_REGISTRY: Record<BlueprintSectionType, BlueprintS
     supportsCta: false,
     mediaRoles: [],
     compositionHint: "NOOIT prijzen of ranges verzinnen; ontbreken echte tarieven, dan NIET plannen.",
+    planningTarget: target("evidence_only", false, "Echte, vermelde tarieven (dienst + tarief).", null),
   },
   newsletter: {
     type: "newsletter",
@@ -305,6 +366,7 @@ export const BLUEPRINT_SECTION_REGISTRY: Record<BlueprintSectionType, BlueprintS
     supportsCta: false,
     mediaRoles: [],
     compositionHint: "Alleen plannen als een nieuwsbrief expliciet gewenst is (requirements/questionnaire).",
+    planningTarget: target("optional", false, "Expliciete wens voor een nieuwsbrief (requirements/questionnaire).", null),
   },
   booking: {
     type: "booking",
@@ -319,6 +381,7 @@ export const BLUEPRINT_SECTION_REGISTRY: Record<BlueprintSectionType, BlueprintS
     supportsCta: true,
     mediaRoles: [],
     compositionHint: "Sterk voor afspraakgebonden branches (salon, praktijk, dienst op locatie); CTA-label uit echte input.",
+    planningTarget: target("optional", true, "Afspraakgebonden branche of expliciete wens voor directe boeking.", "Uitnodiging bestaat structureel; knoplabel ontleend aan het echte conversiedoel."),
   },
   cta: {
     type: "cta",
@@ -334,6 +397,7 @@ export const BLUEPRINT_SECTION_REGISTRY: Record<BlueprintSectionType, BlueprintS
     supportsCta: true,
     mediaRoles: [],
     compositionHint: "CTA-configuratie (label + doel) verplicht op elke cta-instantie; maximaal 2 cta-secties per pagina.",
+    planningTarget: target("core", true, "Het primaire conversiedoel (altijd bekend uit requirements/context).", "CTA-label/-doel-slot ontleend aan het echte conversiedoel; geen verzonnen acties."),
   },
   contact: {
     type: "contact",
@@ -349,6 +413,7 @@ export const BLUEPRINT_SECTION_REGISTRY: Record<BlueprintSectionType, BlueprintS
     supportsCta: false,
     mediaRoles: [],
     compositionHint: "Contactgegevens worden DETERMINISTISCH door de generator ingevoegd (nooit AI-verzonnen); minimaal één contact- of booking-sectie op de homepage.",
+    planningTarget: target("core", true, "Bedrijfsnaam; echte contactgegevens worden DETERMINISTISCH door de generator ingevoegd.", "Gegevensvelden blijven leeg indien onbekend (missingInformation); formulier is altijd structureel aanwezig."),
   },
   rich_text: {
     type: "rich_text",
@@ -363,6 +428,7 @@ export const BLUEPRINT_SECTION_REGISTRY: Record<BlueprintSectionType, BlueprintS
     supportsCta: false,
     mediaRoles: ["image"],
     compositionHint: "Kan meerdere keren per pagina; hints uit echte input, geen verzonnen content.",
+    planningTarget: target("optional", false, "Echte redactionele inhoud (uitbreiding/uitleg) - zonder echte tekst rendert de sectie onzichtbaar.", null),
   },
 };
 
@@ -385,12 +451,40 @@ export function assertBlueprintRegistryInvariants(): void {
         throw new Error(`SECTION-REGISTRY: blok "${block.key}" bij "${type}" heeft max < min.`);
       }
     }
+  
+    const pt = def.planningTarget;
+    if (!pt || !BLUEPRINT_PLANNING_TIERS.includes(pt.tier)) {
+      throw new Error(`SECTION-REGISTRY: "${type}" heeft geen geldig planningTarget.`);
+    }
+    if (pt.tier === "evidence_only" && pt.plannableWithEmptySlots) {
+      throw new Error(
+        `SECTION-REGISTRY: evidence_only-sectie "${type}" mag nooit met lege slots planbaar zijn (anti-fabricatie).`
+      );
+    }
+    if (pt.plannableWithEmptySlots && !pt.emptySlotShape) {
+      throw new Error(`SECTION-REGISTRY: "${type}" is leeg-slot-planbaar maar beschrijft geen emptySlotShape.`);
+    }
+    if (!pt.plannableWithEmptySlots && pt.emptySlotShape) {
+      throw new Error(`SECTION-REGISTRY: "${type}" is niet leeg-slot-planbaar maar heeft toch een emptySlotShape.`);
+    }
   }
 }
 
 /** True als de layout onder dit sectietype bestaat. */
 export function isBlueprintLayout(type: BlueprintSectionType, layoutKey: string): boolean {
   return BLUEPRINT_SECTION_REGISTRY[type]?.layouts.some((l) => l.key === layoutKey) ?? false;
+}
+
+/** Planning target van een sectietype (deterministisch, één bron van waarheid). */
+export function getBlueprintPlanningTarget(type: BlueprintSectionType): BlueprintPlanningTarget {
+  const def = BLUEPRINT_SECTION_REGISTRY[type];
+  if (!def) throw new Error(`Onbekend sectietype "${type}" bij planning-target lookup.`);
+  return def.planningTarget;
+}
+
+/** Sectietypes per planning-tier (voor UI, tests en compositie-advies). */
+export function blueprintSectionTypesByTier(tier: BlueprintPlanningTier): BlueprintSectionType[] {
+  return BLUEPRINT_SECTION_TYPES.filter((t) => BLUEPRINT_SECTION_REGISTRY[t].planningTarget.tier === tier);
 }
 
 /** Toegestane blokkeys voor een sectietype (leeg = geen blokken). */
@@ -414,8 +508,20 @@ export function buildBlueprintSectionContract(): string {
       ? def.blocks.map((b) => `${b.key} (min ${b.requiredKind ? b.min : 0}, max ${b.max})`).join(", ")
       : "geen blokken";
     const media = def.mediaRoles.length ? def.mediaRoles.join("|") : "geen media";
+    const pt = def.planningTarget;
+    const tierText =
+      pt.tier === "core"
+        ? "standaard waardevol"
+        : pt.tier === "recommended"
+          ? "standaard waardevol zodra de minimale input er is"
+          : pt.tier === "optional"
+            ? "optioneel (situatie-/branche-afhankelijk)"
+            : "ALLEEN met echte data (evidence_only)";
+    const emptyText = pt.plannableWithEmptySlots
+      ? `mag met lege slots als de input ontbreekt (${pt.emptySlotShape})`
+      : "NIET plannen als de input ontbreekt";
     lines.push(
-      `- ${type} (${def.label}): layouts ${layouts}; blokken: ${blocks}; media: ${media}; CTA ${def.supportsCta ? "ondersteund" : "niet"} — ${def.purpose} ${def.compositionHint}`
+      `- ${type} (${def.label}) [${pt.tier} = ${tierText}; ${emptyText}; minimaal nodig: ${pt.minimalTrustedInput}]: layouts ${layouts}; blokken: ${blocks}; media: ${media}; CTA ${def.supportsCta ? "ondersteund" : "niet"} — ${def.purpose} ${def.compositionHint}`
     );
   }
   return lines.join("\n");

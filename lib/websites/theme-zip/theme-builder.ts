@@ -35,9 +35,19 @@ export interface ThemeDesignTokens {
   sectionSpacing: string;
   containerWidth: string;
   radius: string;
+  /** Typografische kopgrootte (90-130, settings-range) uit plan.typography.scale. */
+  headingScale: number;
+  /** Font-weights uit plan.typography.weights (hoogste = kop, laagste = lopende tekst). */
+  headingWeight: number;
+  bodyWeight: number;
+  /** Gecontroleerde hero-variant uit imagery/aboveTheFold/mood — bepaalt de CSS-opbouw. */
+  heroLayout: "focused" | "centered" | "split";
 }
 
-const FALLBACK_TOKENS: Omit<ThemeDesignTokens, "primary" | "secondary" | "accent"> = {
+const FALLBACK_TOKENS: Omit<
+  ThemeDesignTokens,
+  "primary" | "secondary" | "accent" | "headingScale" | "headingWeight" | "bodyWeight" | "heroLayout"
+> = {
   background: "#ffffff",
   surface: "#f7f7f8",
   text: "#1f2328",
@@ -49,6 +59,81 @@ const FALLBACK_TOKENS: Omit<ThemeDesignTokens, "primary" | "secondary" | "accent
   containerWidth: "1160",
   radius: "10",
 };
+
+const FALLBACK_TYPOGRAPHY_TOKENS: Pick<
+  ThemeDesignTokens,
+  "headingScale" | "headingWeight" | "bodyWeight" | "heroLayout"
+> = {
+  headingScale: 100,
+  headingWeight: 700,
+  bodyWeight: 400,
+  heroLayout: "focused",
+};
+
+/** Herkende font-weights (300-700) met NL/EN-kernwoorden — deterministisch. */
+const WEIGHT_KEYWORDS: ReadonlyArray<readonly [RegExp, number]> = [
+  [/^(300|licht|light|thin)$/, 300],
+  [/^(400|regular|normaal|boek)$/, 400],
+  [/^(500|medium)$/, 500],
+  [/^(600|semibold|halfvet|demi-?bold)$/, 600],
+  [/^(700|bold|vet|zwaar)$/, 700],
+];
+
+function weightsFor(weights: ReadonlyArray<string>): { heading: number; body: number } {
+  const recognized: number[] = [];
+  for (const raw of weights) {
+    // Eén entry kan meerdere woorden bevatten ("300 licht", "600 halfvet").
+    for (const word of raw.toLowerCase().split(/[\s,]+/).filter(Boolean)) {
+      for (const [pattern, value] of WEIGHT_KEYWORDS) {
+        if (pattern.test(word)) {
+          recognized.push(value);
+          break;
+        }
+      }
+    }
+  }
+  if (recognized.length === 0) {
+    return { heading: FALLBACK_TYPOGRAPHY_TOKENS.headingWeight, body: FALLBACK_TYPOGRAPHY_TOKENS.bodyWeight };
+  }
+  return { heading: Math.max(...recognized), body: Math.min(...recognized) };
+}
+
+/** Kopgrootte uit plan.typography.scale (vrije tekst) — keyword-mapping, nooit random. */
+function headingScaleFor(scale: string | null): number {
+  const value = (scale ?? "").toLowerCase();
+  if (/(klein|subtiel|bescheiden|compact|small)/.test(value)) return 95;
+  if (/(grote|grotere|groot|expressief|uitbundig|dramatisch|large|big|bold)/.test(value)) return 115;
+  return 100;
+}
+
+/** Hoekafmeting uit stijlrichting/mood — hoekig=2px, zacht=16px, neutraal=10px. */
+function radiusFor(styleDirection: string | null, mood: ReadonlyArray<string>): number {
+  const signals = [styleDirection ?? "", mood.join(" ")].join(" ").toLowerCase();
+  if (/(hoekig|strak|industriel|technisch|minimal|architect)/.test(signals)) return 2;
+  if (/(zacht|warm|organisch|speels|rond|vriendelijk)/.test(signals)) return 16;
+  return 10;
+}
+
+/**
+ * Gecontroleerde hero-variant: split bij expliciet gepland beeldmateriaal,
+ * centered bij expliciet centraal/luxe-signaal, anders focused. De variant
+ * kiest uitsluitend bestaande, vooraf gebouwde CSS-opbouwen — nooit AI-CSS.
+ */
+function heroLayoutFor(plan: DesignPlan): ThemeDesignTokens["heroLayout"] {
+  const imageSignals = [plan.imagery.style ?? "", plan.visualHierarchy.aboveTheFold.join(" ")]
+    .join(" ")
+    .toLowerCase();
+  if (/(beeld|foto|visual|image|visuals)/.test(imageSignals)) return "split";
+  const centerSignals = [
+    plan.visualHierarchy.aboveTheFold.join(" "),
+    plan.branding.styleDirection ?? "",
+    plan.branding.mood.join(" "),
+  ]
+    .join(" ")
+    .toLowerCase();
+  if (/(gecentreerd|centraal|symmetrisch|luxe|premium|elegant)/.test(centerSignals)) return "centered";
+  return "focused";
+}
 
 /** Deterministische fallback-kleur wanneer het Design Plan geen kleur bevat. */
 const FALLBACK_PALETTE = { primary: "#3f5f4f", secondary: "#8d9a92", accent: "#c9a55a" } as const;
@@ -102,6 +187,7 @@ export function buildThemeDesignTokens(plan: DesignPlan): ThemeDesignTokens {
   const neutrals = plan.colors.neutrals.filter((c) => /^#[0-9a-fA-F]{6}$/.test(c));
   const fontKey = fontKeyFor(plan.typography.pairing);
   const fonts = FONT_STACKS[fontKey];
+  const weights = weightsFor(plan.typography.weights);
   return {
     primary,
     secondary,
@@ -115,7 +201,11 @@ export function buildThemeDesignTokens(plan: DesignPlan): ThemeDesignTokens {
     bodyFont: fonts.body,
     sectionSpacing: spacingFor(plan.spacing.density),
     containerWidth: FALLBACK_TOKENS.containerWidth,
-    radius: FALLBACK_TOKENS.radius,
+    radius: String(radiusFor(plan.branding.styleDirection, plan.branding.mood)),
+    headingScale: headingScaleFor(plan.typography.scale),
+    headingWeight: weights.heading,
+    bodyWeight: weights.body,
+    heroLayout: heroLayoutFor(plan),
   };
 }
 
@@ -149,7 +239,8 @@ function slugifyKey(key: string): string {
 function buildSettingsSchema(
   businessName: string,
   contact: WebsiteContactContext,
-  seoDescription: string
+  seoDescription: string,
+  tokens: ThemeDesignTokens
 ): ThemeFile {
   const schema = [
     {
@@ -165,8 +256,12 @@ function buildSettingsSchema(
       settings: [
         { type: "image_picker", id: "favicon", label: "Favicon" },
         { type: "color", id: "color_primary", label: "Primaire kleur", default: "#3f5f4f" },
+        { type: "color", id: "color_secondary", label: "Secundaire kleur", default: tokens.secondary },
         { type: "color", id: "color_accent", label: "Accentkleur", default: "#c9a55a" },
         { type: "color", id: "color_background", label: "Achtergrond", default: "#ffffff" },
+        { type: "color", id: "color_surface", label: "Oppervlakte (sectie-achtergronden)", default: tokens.surface },
+        { type: "color", id: "color_muted", label: "Gedempte tekstkleur", default: tokens.mutedText },
+        { type: "color", id: "color_border", label: "Randkleur", default: tokens.border },
         { type: "color", id: "color_text", label: "Tekstkleur", default: "#1f2328" },
       ],
     },
@@ -191,7 +286,32 @@ function buildSettingsSchema(
           max: 130,
           step: 5,
           unit: "%",
-          default: 100,
+          default: tokens.headingScale,
+        },
+        {
+          type: "select",
+          id: "heading_weight",
+          label: "Kop-dikte",
+          default: String(tokens.headingWeight),
+          options: [
+            { value: "300", label: "Licht" },
+            { value: "400", label: "Normaal" },
+            { value: "500", label: "Medium" },
+            { value: "600", label: "Halfvet" },
+            { value: "700", label: "Vet" },
+          ],
+        },
+        {
+          type: "select",
+          id: "body_weight",
+          label: "Tekst-dikte",
+          default: String(tokens.bodyWeight),
+          options: [
+            { value: "300", label: "Licht" },
+            { value: "400", label: "Normaal" },
+            { value: "500", label: "Medium" },
+            { value: "600", label: "Halfvet" },
+          ],
         },
       ],
     },
@@ -217,6 +337,27 @@ function buildSettingsSchema(
             { value: "compact", label: "Compact" },
             { value: "normal", label: "Normaal" },
             { value: "spacious", label: "Ruim" },
+          ],
+        },
+        {
+          type: "range",
+          id: "corner_radius",
+          label: "Hoekafmeting",
+          min: 0,
+          max: 20,
+          step: 2,
+          unit: "px",
+          default: Number.parseInt(tokens.radius, 10),
+        },
+        {
+          type: "select",
+          id: "hero_layout",
+          label: "Hero-opbouw",
+          default: tokens.heroLayout,
+          options: [
+            { value: "focused", label: "Gefocust (smal tekstblok)" },
+            { value: "centered", label: "Gecentreerd" },
+            { value: "split", label: "Split (tekst + beeld)" },
           ],
         },
       ],
@@ -280,13 +421,21 @@ function buildSettingsData(
   const data = {
     current: {
       color_primary: tokens.primary,
+      color_secondary: tokens.secondary,
       color_accent: tokens.accent,
       color_background: tokens.background,
+      color_surface: tokens.surface,
+      color_muted: tokens.mutedText,
+      color_border: tokens.border,
       color_text: tokens.text,
       font_heading: tokens.headingFont === FONT_STACKS.serif.heading ? "serif" : "sans",
-      heading_scale: 100,
+      heading_scale: tokens.headingScale,
+      heading_weight: String(tokens.headingWeight),
+      body_weight: String(tokens.bodyWeight),
       page_width: Number.parseInt(tokens.containerWidth, 10),
       section_spacing: tokens.sectionSpacing,
+      corner_radius: Number.parseInt(tokens.radius, 10),
+      hero_layout: tokens.heroLayout,
       // Alleen geverifieerde lead-/specificatiedata; nooit ingevulde waarden
       // verzinnen (lege string = bewust leeg gelaten).
       brand_name: businessName,
@@ -331,17 +480,20 @@ function buildThemeLayout(spec: WebsiteSpecification, tokens: ThemeDesignTokens)
     {% style %}
       :root {
         --color-primary: {{ settings.color_primary }};
+        --color-secondary: {{ settings.color_secondary }};
         --color-accent: {{ settings.color_accent }};
         --color-background: {{ settings.color_background }};
         --color-text: {{ settings.color_text }};
-        --color-surface: {{ settings.color_background | color_mix: settings.color_text, 5 }};
-        --color-border: {{ settings.color_background | color_mix: settings.color_text, 14 }};
-        --color-muted: {{ settings.color_background | color_mix: settings.color_text, 45 }};
+        --color-surface: {{ settings.color_surface }};
+        --color-border: {{ settings.color_border }};
+        --color-muted: {{ settings.color_muted }};
         --font-heading: {% if settings.font_heading == 'serif' %}${FONT_STACKS.serif.heading}{% else %}${FONT_STACKS.sans.heading}{% endif %};
         --font-body: ${tokens.bodyFont};
+        --font-weight-heading: {{ settings.heading_weight }};
+        --font-weight-body: {{ settings.body_weight }};
         --heading-scale: {{ settings.heading_scale | divided_by: 100.0 }};
         --page-width: {{ settings.page_width }}px;
-        --radius: ${tokens.radius}px;
+        --radius: {{ settings.corner_radius }}px;
       }
     {% endstyle %}
     {{ 'theme.css' | asset_url | stylesheet_tag }}
@@ -440,10 +592,11 @@ body {
   font-family: var(--font-body);
   font-size: 1rem;
   line-height: 1.65;
+  font-weight: var(--font-weight-body);
   color: var(--color-text);
   background: var(--color-background);
 }
-h1, h2, h3, h4 { font-family: var(--font-heading); line-height: 1.2; margin: 0 0 .6em; font-size: calc(1em * var(--heading-scale)); }
+h1, h2, h3, h4 { font-family: var(--font-heading); font-weight: var(--font-weight-heading); line-height: 1.2; margin: 0 0 .6em; font-size: calc(1em * var(--heading-scale)); }
 h1 { font-size: calc(2.4rem * var(--heading-scale)); }
 h2 { font-size: calc(1.8rem * var(--heading-scale)); }
 h3 { font-size: calc(1.25rem * var(--heading-scale)); }
@@ -461,19 +614,24 @@ img { max-width: 100%; height: auto; display: block; }
 /* Header */
 .site-header { border-bottom: 1px solid var(--color-border); background: var(--color-background); position: sticky; top: 0; z-index: 10; }
 .site-header__inner { display: flex; align-items: center; gap: 16px; justify-content: space-between; padding-block: 14px; }
-.site-header__brand { font-family: var(--font-heading); font-weight: 700; font-size: 1.2rem; color: var(--color-text); text-decoration: none; }
+.site-header__brand { font-family: var(--font-heading); font-weight: var(--font-weight-heading); font-size: 1.2rem; color: var(--color-text); text-decoration: none; }
 .site-nav { display: flex; gap: 20px; flex-wrap: wrap; }
 .site-nav a { text-decoration: none; color: var(--color-text); font-weight: 500; }
 .site-nav a:hover, .site-nav a:focus { color: var(--color-primary); }
 .site-header__actions { display: flex; gap: 12px; align-items: center; }
 .header-nav-toggle { display: none; }
 
-/* Hero */
+/* Hero — basis + gecontroleerde varianten (focused/centered/split) uit het Design Plan */
 .hero { padding-block: var(--section-spacing); background: linear-gradient(180deg, var(--color-surface), var(--color-background)); }
 .hero__inner { display: grid; gap: 24px; max-width: 720px; }
 .hero__eyebrow { text-transform: uppercase; letter-spacing: .12em; font-size: .8rem; color: var(--color-primary); font-weight: 600; margin-bottom: 8px; }
 .hero p { font-size: 1.15rem; color: var(--color-muted); }
 .hero__actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.hero--centered .hero__inner { max-width: 820px; margin-inline: auto; text-align: center; }
+.hero--centered .hero__actions { justify-content: center; }
+.hero--split .hero__inner { max-width: none; grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); gap: 40px; align-items: center; }
+.hero--split .hero__media img { width: 100%; height: auto; display: block; border-radius: var(--radius); background: var(--color-surface); }
+.hero--split .hero__actions { margin-top: 8px; }
 
 /* Buttons */
 .btn {
@@ -484,7 +642,7 @@ img { max-width: 100%; height: auto; display: block; }
 }
 .btn--primary { background: var(--color-primary); color: #fff; }
 .btn--primary:hover, .btn--primary:focus { background: var(--color-accent); color: #fff; }
-.btn--secondary { background: transparent; color: var(--color-primary); border-color: var(--color-primary); }
+.btn--secondary { background: transparent; color: var(--color-secondary); border-color: var(--color-secondary); }
 .btn--secondary:hover, .btn--secondary:focus { background: var(--color-surface); }
 
 /* Sections */
@@ -547,6 +705,8 @@ img { max-width: 100%; height: auto; display: block; }
     flex-direction: column; padding: 16px 20px; gap: 14px;
   }
   .site-nav[data-open="true"] { display: flex; }
+  .hero--split .hero__inner { grid-template-columns: 1fr; gap: 24px; }
+  .hero--split .hero__media { order: -1; }
   .hero h1 { font-size: calc(1.8rem * var(--heading-scale)); }
 }
 
@@ -1357,22 +1517,29 @@ function buildFooterSection(): ThemeFile {
 }
 
 function buildHeroSection(): ThemeFile {
-  const liquid = `<section class="hero">
+  const liquid = `<section class="hero hero--{{ settings.hero_layout | default: 'focused' }}">
   <div class="container">
     <div class="hero__inner">
-      {%- if section.settings.eyebrow != blank -%}
-        <p class="hero__eyebrow">{{ section.settings.eyebrow }}</p>
-      {%- endif -%}
-      <h1>{{ section.settings.heading }}</h1>
-      {%- if section.settings.subheading != blank -%}
-        <p>{{ section.settings.subheading }}</p>
-      {%- endif -%}
-      <div class="hero__actions">
-        <a class="btn btn--primary" href="{{ section.settings.cta_link | default: '/pages/contact' }}">{{ section.settings.cta_label }}</a>
-        {%- if section.settings.cta_secondary_label != blank -%}
-          <a class="btn btn--secondary" href="{{ section.settings.cta_secondary_link | default: '#main-content' }}">{{ section.settings.cta_secondary_label }}</a>
+      <div class="hero__content">
+        {%- if section.settings.eyebrow != blank -%}
+          <p class="hero__eyebrow">{{ section.settings.eyebrow }}</p>
         {%- endif -%}
+        <h1>{{ section.settings.heading }}</h1>
+        {%- if section.settings.subheading != blank -%}
+          <p>{{ section.settings.subheading }}</p>
+        {%- endif -%}
+        <div class="hero__actions">
+          <a class="btn btn--primary" href="{{ section.settings.cta_link | default: '/pages/contact' }}">{{ section.settings.cta_label }}</a>
+          {%- if section.settings.cta_secondary_label != blank -%}
+            <a class="btn btn--secondary" href="{{ section.settings.cta_secondary_link | default: '#main-content' }}">{{ section.settings.cta_secondary_label }}</a>
+          {%- endif -%}
+        </div>
       </div>
+      {%- if settings.hero_layout == 'split' -%}
+        <div class="hero__media">
+          <img src="{{ 'placeholder.svg' | asset_url }}" alt="" role="presentation" loading="lazy">
+        </div>
+      {%- endif -%}
     </div>
   </div>
 </section>
@@ -2148,7 +2315,7 @@ export function buildShopifyTheme(input: BuildThemeInput): BuiltTheme {
 
   // --- Config + layout + assets + locales
   files.push(
-    buildSettingsSchema(spec.business.businessName, contact, spec.seo.metaDescription)
+    buildSettingsSchema(spec.business.businessName, contact, spec.seo.metaDescription, tokens)
   );
   files.push(
     buildSettingsData(tokens, spec.business.businessName, contact, spec.seo.metaDescription)

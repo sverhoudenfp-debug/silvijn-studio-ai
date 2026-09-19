@@ -13,6 +13,8 @@ import {
   attachAIAttemptMetadata,
   readAIAttemptMetadata,
 } from "../lib/ai/errors";
+import { buildWebsiteQCPrompt } from "../lib/ai/service";
+import type { WebsiteQualityAnalysisInput } from "../lib/ai/types";
 
 const root = process.cwd();
 const serviceSource = readFileSync(path.join(root, "lib/ai/service.ts"), "utf8");
@@ -160,4 +162,57 @@ test("QC-service: AI-call blijft alléén adviserend — APPROVED blijft een men
   assert.match(qcServiceSource, /MENSelijke approval — de harde gate/, "approve-documentatie ongewijzigd");
   assert.match(qcServiceSource, /requireStudioOwner/, "approval vereist de ingelogde eigenaar");
   assert.doesNotMatch(qcServiceSource, /approveWebsite[\s\S]*?service_role/i, "geen service-role approval-pad");
+});
+
+const qcPromptInput: WebsiteQualityAnalysisInput = {
+  businessName: "Studio Fictief",
+  industry: "interieur",
+  city: "Amsterdam",
+  leadStatus: "qualified",
+  requirementsSummary: "type: business_website",
+  specificationSummary: "1 pagina, business standard",
+  generatedSectionsSummary: "header/hero/services/cta/contact/footer",
+  deterministicResults: "geen",
+};
+const qcPrompt = buildWebsiteQCPrompt(qcPromptInput);
+const qcSchemaSource = readFileSync(path.join(root, "lib/ai/schemas.ts"), "utf8");
+
+// ------------------------------------------------------------------
+// d. QC-prompt JSON-contract (live-incident 2026-09-19 ~11:00 UTC: de AI
+//    leverde 11 issues ZONDER message — de prompt noemde het issues-shape
+//    nergens, alleen "result/issues/notes". Zelfde les als de questionnaire
+//    type-contract-fix: expliciet veldcontract in de prompt.)
+// ------------------------------------------------------------------
+
+test("QC-prompt: expliciet issues-contract (severity + message ALTIJD, message minimaal 5 tekens)", () => {
+  // runtime-check op de promptbouwer: service.ts laadt zonder React (geen auth/server in de importketen van de promptbouwer)
+  // — geïmporteerd via dezelfde module als de andere runtime-tests in deze suite.
+  assert.match(qcPrompt, /ALTIJD BEIDE velden: severity/, "severity is verplicht in elk issue");
+  assert.match(qcPrompt, /EN message \(één concrete Nederlandse zin, minimaal 5 tekens/, "message is verplicht en niet-hernoembaar");
+  assert.match(qcPrompt, /exact één van "info", "warning", "error", "critical"/, "severity-enum expliciet");
+  assert.match(qcPrompt, /result: exact één van "passed", "warning", "failed", "not_checked"/, "result-enum expliciet");
+  assert.match(qcPrompt, /notes: string of null/, "notes-contract expliciet");
+  assert.match(qcPrompt, /Antwoord met uitsluitend de JSON/, "JSON-only-gebod staat in de prompt");
+});
+
+test("QC-prompt: alle vijf assessments + recommendations + summary staan in het contract", () => {
+  for (const assessment of [
+    "contentAssessment",
+    "designAssessment",
+    "responsiveAssessment",
+    "conversionAssessment",
+    "businessAccuracyAssessment",
+  ]) {
+    assert.ok(qcPrompt.includes(assessment), `${assessment} moet expliciet in het contract staan`);
+  }
+  assert.match(qcPrompt, /recommendations: een ARRAY van korte Nederlandse zinnen/);
+  assert.match(qcPrompt, /summary: één string/);
+});
+
+test("QC-schema-bewaking: QCAnalysisSchema blijft de autoriteit (issues verplicht, message minimaal 5 tekens)", () => {
+  // Bron-contract: de schema-laag mag niet worden versoepeld om de prompt
+  // te "redden" — truncatie-achtige output blijft een FOUT.
+  assert.match(qcSchemaSource, /severity: z\.enum\(\["info", "warning", "error", "critical"\]\)/);
+  assert.match(qcSchemaSource, /message: z\.string\(\)\.min\(5\)/);
+  assert.match(qcSchemaSource, /\.max\(10\)/, "issues-limiet 10 blijft gehandhaafd");
 });

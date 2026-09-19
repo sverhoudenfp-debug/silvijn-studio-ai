@@ -1095,7 +1095,7 @@ export function getWebsiteQCTier(): AIModelTier {
   return AI_AGENTS.website_quality_control.defaultTier;
 }
 
-function buildWebsiteQCPrompt(input: WebsiteQualityAnalysisInput): string {
+export function buildWebsiteQCPrompt(input: WebsiteQualityAnalysisInput): string {
   return [
     "Beoordeel de volgende gegenereerde website op content, UX, design, conversion en business-consistentie.",
     "",
@@ -1117,7 +1117,14 @@ function buildWebsiteQCPrompt(input: WebsiteQualityAnalysisInput): string {
     "DETERMINISTISCHE CHECKRESULTATEN (serieus nemen — niet afzwakken):",
     input.deterministicResults,
     "",
-    "Lever JSON met: contentAssessment, designAssessment, responsiveAssessment, conversionAssessment, businessAccuracyAssessment (elk met result/issues/notes), recommendations en summary.",
+    "Lever JSON met EXACT dit contract (geen extra velden, geen ontbrekende velden):",
+    "- contentAssessment, designAssessment, responsiveAssessment, conversionAssessment, businessAccuracyAssessment: elk een object met ALTIJD de drie velden result, issues en notes.",
+    '  - result: exact één van "passed", "warning", "failed", "not_checked".',
+    "  - issues: een ARRAY (max 10) van objecten; ELK issue-object bevat ALTIJD BEIDE velden: severity (exact één van \"info\", \"warning\", \"error\", \"critical\") EN message (één concrete Nederlandse zin, minimaal 5 tekens, nooit weglaten of hernoemen).",
+    "  - notes: string of null (korte toelichting op het assessment; null als er niets te vermelden valt).",
+    "- recommendations: een ARRAY van korte Nederlandse zinnen (strings).",
+    "- summary: één string — je algehele oordeel in het Nederlands.",
+    "Antwoord met uitsluitend de JSON — geen uitleg eromheen.",
   ].join("\n");
 }
 

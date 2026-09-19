@@ -53,6 +53,7 @@ import type {
 import type { ProjectRequirements } from "@/lib/projects/types";
 import type { WebsiteSpecification } from "@/lib/websites/types";
 import { designPlanSchema, type DesignPlan } from "@/lib/websites/design-plan";
+import { buildBlueprintSectionContract } from "@/lib/websites/blueprint/section-registry";
 import type { QCAnalysis } from "@/lib/qc/ai-types";
 import {
   AIInvalidResponseError,
@@ -561,12 +562,19 @@ export class AIService {
           // Live-les 2026-09-19 (Velora Interieur, design plan v2, ai_run
           // 23:49 UTC): claude-sonnet-5 denkt EERST en thinking-tokens tellen
           // mee voor max_tokens. Bij rijke questionnaire-input sloot het oude
-          // 4000-budget de volledige output af (stop_reason=max_tokens, 3×
+          // 4000-budget de volledige output af (stop_reason=max_tokens, 3x
           // achtereen in productie). Een volledig Design Plan is een GROOT
           // JSON-object (~19 top-level velden) op boven van de denklengte:
-          // 12000 geeft ruim voldoende headroom (v1 mat ~4900 total tokens;
-          // v2 met rijkere input zit structureel hoger). Verlaag dit budget niet terug naar 4000.
-          maxTokens: 12000,
+          // v1 mat ~4900 total tokens; v2 met rijkere input zat structureel
+          // hoger (vandaar de eerdere 12000-ruimte). Sinds Fase A+B
+          // (2026-09-19) bevat het plan ÓOK het machine-uitvoerbare
+          // Website Blueprint v2: per pagina sectie-instanties met layouts,
+          // blokken, media en CTA's (tot 10 pagina's x 12 instanties) —
+          // structureel extra output boven op het v1-plan. Budget 16000
+          // houdt headroom voor denken + v1 + blueprint zonder extreme
+          // waarden. Verlaag dit budget niet terug: 4000 was fataal en
+          // 12000 is achterhaald sinds het blueprint verplicht is.
+          maxTokens: 16000,
           temperature: 0.4,
         },
         designPlanSchema
@@ -907,6 +915,8 @@ const DESIGN_PLANNING_JSON_CONTRACT = [
   "accessibility: { contrast: string|null, focusAndKeyboard: string|null, semantics: string|null, formsAndLabels: string|null, guidelines: array van strings (max 8) }",
   "seoPerformance: { titleStrategy: string|null, metaStrategy: string|null, localSeo: string|null, performanceBudget: string|null, imageOptimization: string|null }",
   "basis: { sources: array uit: lead, project, requirements, questionnaire, sales_context (minimaal 1) }",
+  "blueprint: MACHINE-BLUEPRINT v2 — VERPLICHT object (niet null). Zie de SECTION-REGISTRY en BLUEPRINT-REGELS hieronder voor de exacte structuur: { version: 2 (letterlijk), pages: array van { key, title: string|null, purpose: string|null, seo: { title: string|null, metaDescription: string|null }|null, sectionInstances: array van { type, layout, blocks: array van { kind, hint: string|null }, media: array van { role, ratio, alt: string|null }, cta: { label, target, prominence }|null, background, motion, contentHints: string|null } } }, trustElements: { usps: array van { label, source }, stats: array van { label, value, source }, badges: array van { label, source } } (source altijd: requirements|questionnaire|lead_notes; ALLEEN echte data, anders lege lijst), conversionPlan: { primaryGoal: string|null, leadCapture: boolean|null, contactPreference: form|call|booking|unknown|null }, missingInformation: array van strings (max 20) }",
+  "blueprint.pages moet EXACT hetzelfde aantal pagina's en dezelfde keys bevatten als pageStructure — het blueprint is de machine-uitvoerbare versie van diezelfde paginastructuur.",
   "missingInformation: array van strings (max 20)",
   "LET OP: geen extra velden die hierboven niet genoemd zijn; geef verplichte string-velden nooit als object of array terug.",
 ].join("\n");
@@ -1022,6 +1032,8 @@ HARD REGELS:
 - Functionaliteit (functionality.features) mag ALLEEN voorkomen als die uit de requirements of questionnaire-antwoorden volgt; vermeld per feature de bron (source: "requirements", "questionnaire" of "lead_notes"). Verzin geen functionaliteit.
 - Kleuren: alleen hex-waarden (#rrggbb) of null. Respecteer voorkeurskleuren (PREFERENTIEKLEUREN) en vermijd expliciet afgekeurde kleuren (AFGEKEURDE KLEUREN) — gebruik die nooit als primary/secondary/accent.
 - Elke navigatieverwijzing (pageKey) moet naar een geplande pagina (pageStructure key) wijzen.
+- BLUEPRINT v2 (plan.blueprint): dit is de machine-uitvoerbare website-architectuur. Plant PER PAGINA de sectie-instanties (type, layout, volgorde) uitsluitend uit de gesloten SECTION-REGISTRY in de prompt. Kies compositie, sectiekeuze en volgorde passend bij DIT bedrijf en deze branche — niet elk bedrijf krijgt dezelfde structuur. Blocks zijn compositie-hints (korte richting uit echte input), geen definitieve copy. trustElements alléén met echte data + verplichte source; ontbreken echte USP's/cijfers/badges, laat de lijst leeg en vermeld het in missingInformation. NOOIT secties plannen die echte data vereisen die er niet is (stats/testimonials/team/rates).
+- Compositie-vloer (hard gecontroleerd): de homepage begint met hero en bevat minimaal één contact-, booking- of cta-sectie; geen twee identieke secties direct achter elkaar; maximaal 2 cta-secties en 2 primaire CTA's per pagina; elke cta-instantie heeft verplicht een cta-configuratie (label + target).
 - Geen code, geen HTML, geen Liquid — alleen de gevraagde JSON-structuur.
 - Nederlands, professioneel, concreet en uitvoerbaar voor een webdesigner.
 
@@ -1068,6 +1080,15 @@ export function buildDesignPlanPrompt(input: DesignPlanInput): string {
     "",
     "VERPLICHTe JSON-STRUCTUUR (exact deze veldnamen, geen eigen veldnamen verzinnen; verplichte velden mogen NOOIT ontbreken):",
     DESIGN_PLANNING_JSON_CONTRACT,
+    "",
+    "BLUEPRINT-REGELS:",
+    "- blueprint.version is letterlijk 2; blueprint.pages is de machine-uitvoerbare spiegel van pageStructure (zelfde aantal, dezelfde keys).",
+    "- Sectie-instanties gebruiken uitsluitend types/layouts/blokkeys/mediarollen uit de SECTION-REGISTRY hieronder; elke afwijking wordt deterministisch verworpen.",
+    "- De homepage (key home/index/start/homepage) begint met hero; cta-instanties hebben verplicht een cta-configuratie.",
+    "- Blocks: { kind, hint } — hint is een korte compositie-richting uit echte input (of null); GEEN definitieve copy, GEEN verzonnen feiten.",
+    "- CTA-target: paginakey, #anker, form, mailto:/tel: of URL.",
+    "",
+    buildBlueprintSectionContract(),
     "",
     "Output: uitsluitend een JSON-object met precies deze velden."
   );

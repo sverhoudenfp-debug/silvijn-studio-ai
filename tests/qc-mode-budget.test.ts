@@ -56,7 +56,11 @@ test("budget-guardian: AI-QC-call heeft thinking-proof budget (6000), niet het f
 });
 
 test("budget-guardian: eerdere budget-fixes blijven intact (alleen verzwaren, niets afzwakken)", () => {
-  assert.match(serviceSource, /maxTokens: 12000/, "designplanning houdt 12000");
+  // Fase A+B (2026-09-19): designplanning is verzwaard van 12000 naar
+  // 16000 — het verplichte Website Blueprint v2 voegt per pagina
+  // sectie-instanties toe (10 pagina's x 12 instanties) boven op het v1-plan.
+  assert.match(serviceSource, /maxTokens: 16000/, "designplanning houdt 16000 (blauwdruk-headroom)");
+  assert.doesNotMatch(serviceSource, /maxTokens: 12000/, "het pre-blueprint 12000-budget is achterhaald");
   const qcStart = serviceSource.indexOf("async generateWebsiteQualityAnalysis");
   const qcBlock = serviceSource.slice(qcStart, serviceSource.indexOf("QCAnalysisSchema", qcStart));
   assert.match(qcBlock, /maxTokens: 6000/, "QC gebruikt 6000");

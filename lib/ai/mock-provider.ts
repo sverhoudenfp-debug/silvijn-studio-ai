@@ -306,7 +306,7 @@ function buildMockQuestionnaire(prompt: string): string {
   return JSON.stringify(output);
 }
 
-function buildMockDesignPlan(prompt: string): string {
+export function buildMockDesignPlan(prompt: string): string {
   // Deterministische, veilige mock-designplanning: uitsluitend echte data
   // uit de prompt; alle onbekende velden zijn null en worden expliciet als
   // missingInformation genoemd — nooit fabricatie.
@@ -320,6 +320,11 @@ function buildMockDesignPlan(prompt: string): string {
   const missing: string[] = [];
   const pages: Array<Record<string, unknown>> = [];
   const navigation: Array<Record<string, unknown>> = [];
+  // BLUEPRINT v2 (Fase A): deterministische, registry-conforme
+  // machine-architectuur per pagina. Compositie-hints zijn null (geen
+  // fabricatie); de structuur zelf volgt de gesloten SECTION-REGISTRY en
+  // doorloopt exact dezelfde validatie als live-AI-output.
+  const blueprintPages: Array<Record<string, unknown>> = [];
   for (let i = 1; i <= pageCount; i += 1) {
     const key = i === 1 ? "home" : `page-${i}`;
     pages.push({
@@ -329,6 +334,77 @@ function buildMockDesignPlan(prompt: string): string {
       sections: i === 1 ? ["hero", "diensten", "over", "contact"] : ["intro", "content", "contact"],
     });
     navigation.push({ label: i === 1 ? "Home" : `Pagina ${i}`, pageKey: key });
+    const homeInstances = [
+      {
+        type: "hero",
+        layout: "split",
+        blocks: [],
+        media: [{ role: "image", ratio: "wide", alt: null }],
+        cta: { label: "Neem contact op", target: "form", prominence: "primary" },
+        background: "default",
+        motion: "none",
+        contentHints: `Primaire boodschap voor ${businessName}.`,
+      },
+      {
+        type: "services",
+        layout: "grid",
+        blocks: [1, 2, 3].map((n) => ({ kind: "service", hint: `Dienst ${n} (TESTDATA)` })),
+        media: [],
+        cta: null,
+        background: "default",
+        motion: "none",
+        contentHints: null,
+      },
+      {
+        type: "cta",
+        layout: "band",
+        blocks: [],
+        media: [],
+        cta: { label: "Vraag een offerte aan", target: "form", prominence: "primary" },
+        background: "surface",
+        motion: "none",
+        contentHints: null,
+      },
+      {
+        type: "contact",
+        layout: "split",
+        blocks: [],
+        media: [],
+        cta: null,
+        background: "default",
+        motion: "none",
+        contentHints: null,
+      },
+    ];
+    const subPageInstances = [
+      {
+        type: "rich_text",
+        layout: "article",
+        blocks: [{ kind: "paragraph", hint: `Aanvullende informatie (TESTDATA)` }],
+        media: [],
+        cta: null,
+        background: "default",
+        motion: "none",
+        contentHints: null,
+      },
+      {
+        type: "cta",
+        layout: "closing",
+        blocks: [],
+        media: [],
+        cta: { label: "Terug naar het aanbod", target: "home", prominence: "secondary" },
+        background: "default",
+        motion: "none",
+        contentHints: null,
+      },
+    ];
+    blueprintPages.push({
+      key,
+      title: i === 1 ? `Home | ${businessName}` : `Pagina ${i}`,
+      purpose: i === 1 ? `Kernpagina met aanbod en conversie voor ${businessName}.` : `Aanvullende pagina binnen de afgesproken scope.`,
+      seo: null,
+      sectionInstances: i === 1 ? homeInstances : subPageInstances,
+    });
   }
 
   if (!/SPECIALE WENSEN:/.test(prompt)) missing.push("Speciale wensen zijn niet gedocumenteerd");
@@ -431,6 +507,13 @@ function buildMockDesignPlan(prompt: string): string {
     },
     basis: {
       sources: ["lead", "requirements"],
+    },
+    blueprint: {
+      version: 2,
+      pages: blueprintPages,
+      trustElements: { usps: [], stats: [], badges: [] },
+      conversionPlan: { primaryGoal: null, leadCapture: null, contactPreference: null },
+      missingInformation: [],
     },
     missingInformation: missing,
   };

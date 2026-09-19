@@ -33,7 +33,7 @@ const serviceSource = readFileSync(path.join(root, "lib/ai/service.ts"), "utf8")
  *    ai-questionnaire-completion.test.ts; hier opnieuw bewaakt voor de
  *    designplanning-request-vorm);
  * b. service: de designplanning-call heeft een thinking-proof tokenbudget
- *    (12000), niet het fatale 4000;
+ *    (12000, sinds Fase A+B 16000 voor het blueprint), niet het fatale 4000;
  * c. prompt-contract: de user-prompt bevat het expliciete, volledige
  *    JSON-veldcontract (DESIGN_PLANNING_JSON_CONTRACT) en verbiedt eigen
  *    veldnamen — het strikte schema-contract blijft in de prompt staan;
@@ -101,13 +101,18 @@ test("provider: stop_reason=end_turn met volledige JSON komt ongewijzigd door (b
   assert.equal(result.mode, "live");
 });
 
-test("service-contract: designplanning-call heeft een thinking-proof tokenbudget (12000), niet het fatale 4000", () => {
+test("service-contract: designplanning-call heeft een thinking-proof tokenbudget (16000, sinds het blueprint), niet het fatale 4000", () => {
   const start = serviceSource.indexOf("async generateDesignPlan");
   const end = serviceSource.indexOf("designPlanSchema", start);
   assert.ok(start !== -1 && end > start, "generateDesignPlan moet in service.ts staan");
   const block = serviceSource.slice(start, end);
-  assert.match(block, /maxTokens: 12000/, "budget moet 12000 zijn (gemeten: v1 ~4900 total tokens; v2 met rijke input > 4000 output-only)");
+  assert.match(
+    block,
+    /maxTokens: 16000/,
+    "budget moet 16000 zijn (Fase A+B: v1-plan ~4900 total tokens + rijke input ~10k + blueprint-sectie-instanties; terug naar 12000 of lager riskeert opnieuw stop_reason=max_tokens)"
+  );
   assert.doesNotMatch(block, /maxTokens: 4000/, "het oude, fatale 4000-budget mag niet terugkeren");
+  assert.doesNotMatch(block, /maxTokens: 12000/, "het pre-blueprint budget is achterhaald: blueprint-instanties kosten structureel extra output-tokens");
 });
 
 test("prompt-contract: user-prompt bevat het expliciete, volledige JSON-veldcontract en verbiedt eigen veldnamen", () => {

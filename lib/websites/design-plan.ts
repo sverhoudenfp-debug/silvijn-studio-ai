@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ProjectRequirements } from "@/lib/projects/types";
 import { scanTextForFabricationPatterns } from "./safety-check";
+import { validateBlueprintConsistency, websiteBlueprintSchema } from "./blueprint/blueprint";
 
 /**
  * Design Plan (Fase I.1) — het INTERNE ontwerpplan per project.
@@ -141,6 +142,17 @@ export const designPlanSchema = z.object({
   basis: z.object({
     sources: z.array(z.enum(["lead", "project", "requirements", "questionnaire", "sales_context"])).min(1),
   }),
+  /**
+   * WEBSITE BLUEPRINT v2 (Fase A, 2026-09-19) — machine-uitvoerbare
+   * website-architectuur: per pagina sectie-instanties (volgorde, layout,
+   * blokken, media, CTA's) uit de gesloten SECTION-REGISTRY.
+   *
+   * ADDITIEF en OPTIONEEL: bestaande Design Plans (vóór de blueprint-fase)
+   * blijven exact geldig; plan.blueprint === null betekent "nog geen
+   * blueprint geplant". Compositie-/scope-checks lopen alleen als het
+   * blueprint aanwezig is (zie validateDesignPlanConsistency).
+   */
+  blueprint: websiteBlueprintSchema.nullable().optional(),
   missingInformation: z.array(z.string().min(3).max(200)).max(20),
 });
 
@@ -202,6 +214,22 @@ export function validateDesignPlanConsistency(
     errors.push(
       ...fabricationIssues.map((issue) => `Fabricatie-patroon "${issue.rule}" gevonden: ${issue.reason}`)
     );
+  }
+
+  // 4. BLUEPRINT v2 (alleen als aanwezig): scope/prijsintegriteit,
+  //    navigatieverwijzingen, v1<->v2-paginaset en compositie-vloer.
+  //    Backward compatible: plannen zonder blueprint (null/undefined)
+  //    doorlopen deze tak niet en gedragen zich exact als voorheen.
+  if (plan.blueprint != null) {
+    const blueprintConsistency = validateBlueprintConsistency(
+      plan.blueprint,
+      requirements,
+      plan.navigation.items,
+      plan.pageStructure.map((page) => page.key)
+    );
+    if (!blueprintConsistency.passed) {
+      errors.push(...blueprintConsistency.errors.map((error) => `Blueprint: ${error}`));
+    }
   }
 
   return { passed: errors.length === 0, errors };

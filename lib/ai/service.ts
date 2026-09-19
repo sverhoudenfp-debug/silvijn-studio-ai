@@ -1000,6 +1000,7 @@ export function buildWebsitePlanningPrompt(input: WebsiteSpecificationInput): st
   }
 
   lines.push(
+    `BEDRIJFSNAAM-CONTRACT: spec.business.businessName moet EXACT de waarde bij "Bedrijf" hierboven zijn — letterlijk, inclusief eventuele haken, prefixen, interpunctie en hoofdletters. NOOIT inkorten, normaliseren, vertalen of opsplitsen.`,
     "AFWIJKINGEN: verzin niets dat hierboven niet staat; ontbrekende informatie → null of [INFORMATIE ONBEKEND] + missingInformation.",
     "",
     "VERPLICHTe JSON-STRUCTUUR (exact deze veldnamen, geen eigen veldnamen verzinnen; verplichte velden mogen NOOIT ontbreken):",

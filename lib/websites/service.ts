@@ -15,6 +15,7 @@ import {
   summarizeDesignPlanForGeneration,
 } from "./design-plan-generation";
 import type { DesignPlan } from "./design-plan";
+import { enforceTrustedBusinessName } from "./business-name";
 import type { GeneratedWebsite, WebsiteSpecification } from "./types";
 
 /**
@@ -206,6 +207,21 @@ export class WebsiteGenerationService {
         lead.id
       );
       const specification = planning.data;
+      // ---- 5a. BEDRIJFSNAAM-TROUW-GUARD (2026-09-19, A/B v3/v4): de exacte
+      //      bedrijfsnaam uit de lead-data is de ENIGE autoriteit. De live AI
+      //      normaliseerde de fixture-naam systematisch naar "Studio Fictief";
+      //      bij elke mismatch wordt hier deterministisch de bronwaarde
+      //      teruggezet — de AI kan de naam nooit inkorten of aanpassen.
+      const nameGuard = enforceTrustedBusinessName(specification, lead.businessName);
+      if (nameGuard.corrected) {
+        await getAIActivityRepository().log({
+          leadId: lead.id,
+          type: "website_planning",
+          status: "completed",
+          message: `Bedrijfsnaam in de specificatie hersteld naar de bronwaarde: AI leverde "${nameGuard.aiValue ?? "(leeg)"}", lead-data is authoritatief.`,
+          metadata: { projectId, websiteId: website.id },
+        });
+      }
       // Design Plan-functionaliteit deterministisch afdwingen (één richting:
       // alleen verzwaren, nooit afzwakken of data verzinnen — zie
       // design-plan-generation.ts). De AI kan het plan hebben gemist; dit

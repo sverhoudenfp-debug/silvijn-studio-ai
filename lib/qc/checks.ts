@@ -301,7 +301,19 @@ export function runDeterministicChecks(input: DeterministicCheckInput): Determin
     issues.add("conversion", "critical", "missing_contact", "Geen contactsectie — bezoekers kunnen niet reageren.");
   }
   if (spec.conversion.contactMethods.length === 0) {
-    issues.add("conversion", "error", "no_contact_methods", "Geen contactmethodes gedefinieerd.");
+    // Fix 2026-09-19: een aanwezig contactformulier (leadCapture=true) is een
+    // geldige contactmethode. Telefoon/e-mail die ontbreekt blijft een warning,
+    // maar is géén error/critical meer zodra het formulier bestaat.
+    if (spec.conversion.leadCapture === true) {
+      issues.add(
+        "conversion",
+        "warning",
+        "no_contact_channels",
+        "Telefoon/e-mail ontbreekt — het aanwezige contactformulier is op dit moment de enige contactmethode."
+      );
+    } else {
+      issues.add("conversion", "error", "no_contact_methods", "Geen contactmethodes gedefinieerd.");
+    }
   }
   if (spec.content.services.length === 0) {
     issues.add("conversion", "error", "no_services", "Geen diensten — de bezoeker begrijpt niet wat het bedrijf doet.");

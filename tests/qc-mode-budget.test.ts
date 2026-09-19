@@ -189,7 +189,8 @@ test("QC-prompt: expliciet issues-contract (severity + message ALTIJD, message m
   // — geïmporteerd via dezelfde module als de andere runtime-tests in deze suite.
   assert.match(qcPrompt, /ALTIJD BEIDE velden: severity/, "severity is verplicht in elk issue");
   assert.match(qcPrompt, /EN message \(één concrete Nederlandse zin, minimaal 5 tekens/, "message is verplicht en niet-hernoembaar");
-  assert.match(qcPrompt, /exact één van "info", "warning", "error", "critical"/, "severity-enum expliciet");
+  assert.match(qcPrompt, /exact één van "info", "warning", "error"/, "severity-enum expliciet");
+  assert.match(qcPrompt, /"critical" is voorbehouden aan de deterministische laag/, "critical is deterministisch-voorbehouden");
   assert.match(qcPrompt, /result: exact één van "passed", "warning", "failed", "not_checked"/, "result-enum expliciet");
   assert.match(qcPrompt, /notes: string of null/, "notes-contract expliciet");
   assert.match(qcPrompt, /Antwoord met uitsluitend de JSON/, "JSON-only-gebod staat in de prompt");

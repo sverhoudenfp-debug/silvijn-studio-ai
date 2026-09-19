@@ -203,10 +203,15 @@ export class QualityControlService {
         ["conversion", analysis.conversionAssessment],
         ["business_accuracy", analysis.businessAccuracyAssessment],
       ] as const) {
+        // Fix 2026-09-19: de AI mag de deterministische laag niet onterecht
+        // verzwaren (live-incident: AI escaleerde no_contact_methods naar
+        // critical terwijl het contactformulier aanwezig was, waardoor een
+        // verbeterde website lager scoorde). "critical" is daarom voorbehouden
+        // aan de deterministische laag; AI-issues worden gemaximeerd tot "error".
         const aiIssues: QCIssue[] = assessment.issues.map((issue, index) => ({
           id: `ai-${categoryKey}-${index + 1}`,
           category: categoryKey as QCIssue["category"],
-          severity: issue.severity,
+          severity: issue.severity === "critical" ? "error" : issue.severity,
           rule: "ai",
           message: issue.message,
         }));

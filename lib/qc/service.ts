@@ -3,7 +3,8 @@ import { getAIActivityRepository } from "@/lib/repositories/ai-activity-reposito
 import { getLeadRepository } from "@/lib/repositories/lead-repository";
 import { getProjectRepository } from "@/lib/projects/repository";
 import type { Project } from "@/lib/projects/types";
-import { AIService } from "@/lib/ai/service";
+import { AIService, getWebsiteQCTier } from "@/lib/ai/service";
+import { readAIAttemptMetadata } from "@/lib/ai/errors";
 import { getGeneratedWebsiteRepository } from "@/lib/websites/repository";
 import type { GeneratedWebsite } from "@/lib/websites/types";
 import type { QCAnalysis } from "./ai-types";
@@ -86,7 +87,12 @@ function summarizeSections(website: GeneratedWebsite): string {
 }
 
 export class QualityControlService {
-  private aiService = new AIService();
+  private readonly aiService: AIService;
+
+  /** Optioneel injecteerbaar voor regressietests; productie gebruikt de echte AIService. */
+  constructor(aiService?: AIService) {
+    this.aiService = aiService ?? new AIService();
+  }
 
   async getQcById(id: string): Promise<QualityControl> {
     const record = await getQualityControlRepository().getById(id);
@@ -143,14 +149,18 @@ export class QualityControlService {
       metadata: { websiteId: website.id, projectId: project.id, websiteVersion: website.version },
     });
 
+    // Fix 2026-09-19: het record start met de DAADWERKELIJK geplande AI-call
+    // (mode + model), niet met de misleidende init-waarde "mock"/"n.v.t." —
+    // een live run toonde anders mock, ook als de call live faalde.
+    const aiAttempt = this.aiService.attemptInfo("website_quality_control", getWebsiteQCTier());
     let qc = await getQualityControlRepository().create({
       generatedWebsiteId: website.id,
       projectId: project.id,
       leadId: lead.id,
       websiteVersion: website.version,
       status: "running",
-      mode: "mock",
-      model: "n.v.t. (nog geen AI-call)",
+      mode: aiAttempt.mode,
+      model: aiAttempt.mode === "mock" ? `${aiAttempt.model} (mock)` : aiAttempt.model,
     });
 
     // ---- 1. DETERMINISTISCHE CHECKS (prioriteit voor harde regels)
@@ -217,8 +227,19 @@ export class QualityControlService {
       // AI-failure is géén QC-pass: rapport wordt FAILED en de website keert
       // terug naar ready_for_qc. Deterministische resultaten blijven bewaard.
       const reason = error instanceof Error ? error.message : "Onbekende fout";
+      // Fix 2026-09-19: een FAILED live AI-call mag niet als mode=mock in
+      // het rapport blijven staan. De AI-service zet de pogings-metadata
+      // (echte mode + model) op de fout; die is hier de autoriteit. Zonder
+      // metadata (fout vóór de provider) blijft de create-waarde staan.
+      const failedAttempt = readAIAttemptMetadata(error);
       qc = (await getQualityControlRepository().update(qc.id, {
         status: "failed",
+        ...(failedAttempt
+          ? {
+              mode: failedAttempt.mode,
+              model: failedAttempt.model,
+            }
+          : {}),
         checks: mergedChecks,
         issues: mergedIssues,
         recommendations: ["Voer de kwaliteitscontrole opnieuw uit nadat de AI-analyse beschikbaar is."],

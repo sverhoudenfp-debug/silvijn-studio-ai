@@ -139,9 +139,16 @@ function buildWebsiteSections(
     }
   }
 
-  // 4) Contact — echte gegevens komen DETERMINISTISCH uit de lead-context
+  // 4) Contact — echte gegevens komen DETERMINISTISCH uit de lead-context.
+  //    Eerlijk over wat de bezoeker ziet: het formulier hangt aan
+  //    conversion.leadCapture (productiebug 2026-09-19: de note claimde een
+  //    formulier dat er bij leadCapture=false niet is).
   if (!contact.phone && !contact.email) {
-    notes.push("Geen echte contactgegevens bekend — de contactsectie toont alleen het contactformulier.");
+    notes.push(
+      specification.conversion.leadCapture
+        ? "Geen echte contactgegevens bekend — de contactsectie toont alleen het contactformulier."
+        : "Geen echte contactgegevens bekend en lead-capture staat uit — de contactsectie toont géén contactformulier."
+    );
   }
   sections.push({
     type: "contact",

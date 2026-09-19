@@ -9,6 +9,12 @@ import { getWebsiteGeneratorProvider, type WebsiteContactContext } from "./gener
 import { WebsiteBuildService } from "./build-service";
 import { getGeneratedWebsiteRepository } from "./repository";
 import { ThemeZipService } from "./theme-zip/service";
+import { getDesignPlanRepository } from "./design-plan-repository";
+import {
+  applyDesignPlanToSpecification,
+  summarizeDesignPlanForGeneration,
+} from "./design-plan-generation";
+import type { DesignPlan } from "./design-plan";
 import type { GeneratedWebsite, WebsiteSpecification } from "./types";
 
 /**
@@ -118,6 +124,19 @@ export class WebsiteGenerationService {
       );
     }
 
+    // ---- 2a. INTERNE DESIGN PLAN (Fase I.1, fix 2026-09-19): optionele
+    //      AANVULLENDE bron. Het plan bepaalt geplande functionaliteit (bijv.
+    //      contactformulier) die deterministisch naar de specificatie moet
+    //      doorwerken; het vervangt nooit requirements en verzint nooit data.
+    //      Read-only lookup — geen AI-kost, geen mutatie van het plan.
+    const designPlanRecords = await getDesignPlanRepository().listByProject(projectId);
+    const latestDesignPlanRecord =
+      designPlanRecords
+        .filter((record) => record.status === "completed" && record.plan !== null)
+        .sort((a, b) => b.version - a.version)[0] ?? null;
+    const designPlan: DesignPlan | null = latestDesignPlanRecord?.plan ?? null;
+    const designPlanSummary = designPlan === null ? null : summarizeDesignPlanForGeneration(designPlan);
+
     // ---- 2b. Generatie-limiet (pas na de guards — guards kosten geen AI)
     this.generationsThisRun += 1;
     const max = getMaxWebsiteGenerationsPerRun();
@@ -181,11 +200,17 @@ export class WebsiteGenerationService {
           googleRating: lead.googleRating,
           reviewCount: lead.reviewCount,
           suggestedTemplate,
+          designPlanSummary,
         },
         project.requirements,
         lead.id
       );
       const specification = planning.data;
+      // Design Plan-functionaliteit deterministisch afdwingen (één richting:
+      // alleen verzwaren, nooit afzwakken of data verzinnen — zie
+      // design-plan-generation.ts). De AI kan het plan hebben gemist; dit
+      // is de harde waarborg dat geplande functionaliteit doorwerkt.
+      const planMerge = applyDesignPlanToSpecification(specification, designPlan);
 
       // ---- 6. DETERMINISTISCHE GENERATIE (gecontroleerde componenten)
       await getGeneratedWebsiteRepository().update(website.id, {
@@ -201,6 +226,7 @@ export class WebsiteGenerationService {
         province: lead.province,
       };
       const generated = provider.generate(specification, contact);
+      generated.notes.push(...planMerge.appliedNotes, ...planMerge.unsupportedNotes);
 
       // ---- 7. BUILD / VALIDATION
       await getGeneratedWebsiteRepository().update(website.id, {

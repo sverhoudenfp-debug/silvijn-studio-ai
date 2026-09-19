@@ -291,6 +291,13 @@ export interface WebsiteSpecificationInput {
   googleRating: number | null; // échte Google-data; mag gebruikt worden
   reviewCount: number | null;
   suggestedTemplate: string; // deterministische suggestie (engine)
+  /**
+   * Compacte samenvatting van het INTERNE Design Plan (Fase I.1) — optionele
+   * AANVULLENDE bron. Geplande functionaliteit hieruit (bijv. contactformulier)
+   * moet in de specificatie terugkomen; de samenvatting bevat uitsluitend
+   * feiten uit het plan zelf en is nooit een vrijbrief om data te verzinnen.
+   */
+  designPlanSummary?: string | null;
 }
 
 /**

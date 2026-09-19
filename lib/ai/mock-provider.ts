@@ -513,7 +513,12 @@ export function buildMockDesignPlan(prompt: string): string {
       pages: blueprintPages,
       trustElements: { usps: [], stats: [], badges: [] },
       conversionPlan: { primaryGoal: null, leadCapture: null, contactPreference: null },
-      missingInformation: [],
+      // Eerlijke trust-disclosure: de mock kent geen echte USP's/cijfers/reviews, dus
+      // plant hij geen trust-secties en registreert dat expliciet (conversieketen-
+      // check A3: trust mag ontbreken mits eerlijk gemarkeerd, nooit fabriceren).
+      missingInformation: [
+        "TESTDATA (mock): geen echte USP's, cijfers of reviews aangeleverd — trust-secties zijn niet gepland.",
+      ],
     },
     missingInformation: missing,
   };

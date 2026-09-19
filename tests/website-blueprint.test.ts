@@ -107,7 +107,7 @@ function minimalBlueprint(pages = 1): Record<string, unknown> {
     pages: blueprintPages,
     trustElements: { usps: [], stats: [], badges: [] },
     conversionPlan: { primaryGoal: null, leadCapture: null, contactPreference: null },
-    missingInformation: [],
+    missingInformation: ["Geen echte USP's, cijfers of reviews aangeleverd — trust-secties niet gepland."],
   };
 }
 
@@ -348,7 +348,7 @@ function v1Plan(blueprint?: unknown) {
     seoPerformance: { titleStrategy: null, metaStrategy: null, localSeo: null, performanceBudget: null, imageOptimization: null },
     basis: { sources: ["lead"] },
     ...(blueprint === undefined ? {} : { blueprint }),
-    missingInformation: [],
+    missingInformation: ["Geen echte USP's, cijfers of reviews aangeleverd — trust-secties niet gepland."],
   };
 }
 

@@ -92,7 +92,7 @@ function minimalBlueprint(): Record<string, unknown> {
     ],
     trustElements: { usps: [], stats: [], badges: [] },
     conversionPlan: { primaryGoal: null, leadCapture: null, contactPreference: null },
-    missingInformation: [],
+    missingInformation: ["Geen echte USP's, cijfers of reviews aangeleverd — trust-secties niet gepland."],
   };
 }
 
@@ -375,7 +375,10 @@ test("anti-fabricatie: lege-slot-planbare kernsecties veroorzaken géén consist
     { kind: "service", hint: null },
     { kind: "service", hint: null },
   ];
-  bp.missingInformation = ["Echte dienstnamen ontbreken — dienstslots zijn merchant-editable gelaten."];
+  bp.missingInformation = [
+    "Echte dienstnamen ontbreken — dienstslots zijn merchant-editable gelaten.",
+    "Geen echte USP's, cijfers of reviews aangeleverd — trust-secties niet gepland.",
+  ];
   const parsed = websiteBlueprintSchema.parse(bp);
   const result = validateBlueprintConsistency(parsed, requirements(1));
   assert.equal(result.passed, true, result.errors.join("; "));

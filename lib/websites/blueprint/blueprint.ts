@@ -227,6 +227,166 @@ export interface BlueprintConsistencyResult {
   errors: string[];
 }
 
+// ---------------------------------------------------------------------------
+// Conversieketen (A3, 2026-09-19) — attention / interest / trust / action
+// ---------------------------------------------------------------------------
+
+/**
+ * Sectietypes die de INTEREST-schakel vervullen: inhoudelijke secties die
+ * de bezoeker vertellen wat het bedrijf doet of laat (uit de registry).
+ */
+const INTEREST_SECTION_TYPES: ReadonlySet<BlueprintSectionType> = new Set([
+  "services",
+  "benefits",
+  "projects",
+  "gallery",
+  "process",
+  "about",
+  "faq",
+  "rich_text",
+]);
+
+/**
+ * Sectietypes die de TRUST-schakel vervullen: betrouwbaar bewijs. Dit zijn
+ * precies de evidence_only-secties — alleen planbaar met echte data
+ * (check 7 dwingt de binding voor usp_band/stats deterministisch af).
+ */
+const TRUST_SECTION_TYPES: ReadonlySet<BlueprintSectionType> = new Set([
+  "usp_band",
+  "stats",
+  "testimonials",
+  "team",
+  "projects",
+  "rates",
+]);
+
+/**
+ * Sectietypes die de ACTION-schakel vervullen: daadwerkelijk uitvoerbare
+ * conversie (zelfde verzameling als de compositie-vloer, aangevuld met
+ * newsletter — de keten geldt websitebreed, niet alleen op de homepage).
+ */
+const ACTION_SECTION_TYPES: ReadonlySet<BlueprintSectionType> = new Set([
+  "cta",
+  "contact",
+  "booking",
+  "newsletter",
+]);
+
+/**
+ * Herkent een EERLIJKE trust-disclosure in missingInformation: een regel
+ * die expliciet benoemt dat betrouwbaar bewijs (USP's, cijfers, reviews,
+ * referenties, certificering, team, tarieven, ...) ontbreekt.
+ */
+const TRUST_DISCLOSURE_PATTERN =
+  /(usp|trust|betrouwbaar|bewijs|testimoni|referent|review|cijfer|statist|garantie|certific|keurmerk|klantuitspraak|team|tarie(v|f))/i;
+
+/** Status van de trust-schakel: aanwezig, of eerlijk afgezien (waived). */
+export interface ConversionTrustStatus {
+  satisfied: boolean;
+  waived: boolean;
+}
+
+export interface ConversionStructureChain {
+  attention: boolean;
+  interest: boolean;
+  trust: ConversionTrustStatus;
+  action: boolean;
+}
+
+export interface ConversionStructureResult {
+  passed: boolean;
+  errors: string[];
+  /** Machineleesbare ketenstatus — ook bij passed=false volledig gevuld. */
+  chain: ConversionStructureChain;
+}
+
+/**
+ * Deterministische conversieketen-check (AIDA): controleert of het blueprint
+ * een logische conversiestructuur bevat — attention (homepage opent met
+ * hero-positionering), interest (inhoudelijke sectie), trust (bewijs óf een
+ * expliciete, eerlijke registratie van ontbrekend bewijs) en action
+ * (uitvoerbare conversie). Dit is géén volgorde-check: alleen de keten als
+ * geheel moet logisch zijn, niet één vaste sectievolgorde.
+ *
+ * Trust-uitsondering: ontbreekt betrouwbaar bewijs, dan mag de trust-schakel
+ * ontbreken mits dat EXPLICIET in blueprint.missingInformation staat. Dit
+ * mag nooit tot gefabriceerde claims leiden — check 7 blokkeert trust-secties
+ * zonder geregistreerde echte data, en deze check blokkeert het omgekeerde:
+ * geregistreerde trust-data die stilletjes nergens zichtbaar wordt.
+ */
+export function validateConversionStructure(blueprint: WebsiteBlueprint): ConversionStructureResult {
+  const errors: string[] = [];
+  const instances = blueprint.pages.flatMap((page) =>
+    page.sectionInstances.map((instance) => ({ pageKey: page.key, instance }))
+  );
+  const homePages = blueprint.pages.filter((p) => HOME_KEYS.has(p.key.toLowerCase()));
+
+  // 1. ATTENTION: de homepage opent met positionering (hero).
+  const attention =
+    homePages.length === 1 && homePages[0].sectionInstances[0]?.type === "hero";
+  if (!attention) {
+    errors.push(
+      homePages.length === 0
+        ? "Conversieketen: geen homepage — de attention-positie (hero) ontbreekt."
+        : `Conversieketen: homepage "${homePages[0].key}" opent niet met een hero-sectie — de attention-positie ontbreekt.`
+    );
+  }
+
+  // 2. INTEREST: minimaal één inhoudelijke sectie, ergens op de website.
+  const interest = instances.some(({ instance }) =>
+    INTEREST_SECTION_TYPES.has(instance.type as BlueprintSectionType)
+  );
+  if (!interest) {
+    errors.push(
+      "Conversieketen: geen interest-sectie (services, benefits, projects, gallery, process, about, faq of rich_text) — de bezoeker vindt nergens inhoudelijk aanbod."
+    );
+  }
+
+  // 3. TRUST: betrouwbaar bewijs of een expliciete, eerlijke uitzondering.
+  const trustPlanned = instances.some(({ instance }) =>
+    TRUST_SECTION_TYPES.has(instance.type as BlueprintSectionType)
+  );
+  const trustDataRegistered =
+    blueprint.trustElements.usps.length > 0 || blueprint.trustElements.stats.length > 0;
+  const trustDisclosed = blueprint.missingInformation.some((entry) =>
+    TRUST_DISCLOSURE_PATTERN.test(entry)
+  );
+  let trust: ConversionTrustStatus;
+  if (trustPlanned) {
+    trust = { satisfied: true, waived: false };
+  } else if (trustDisclosed) {
+    trust = { satisfied: true, waived: true };
+  } else {
+    trust = { satisfied: false, waived: false };
+    errors.push(
+      "Conversieketen: geen trust-sectie en geen expliciete registratie van ontbrekend betrouwbaar bewijs in missingInformation — registreer het ontbreken eerlijk (nooit trust claims verzinnen)."
+    );
+  }
+  // Anti-fabricatie, omgekeerde richting: geregistreerde ECHTE trust-data moet
+  // ook echt zichtbaar worden gepland, niet als 'ontbrekend' worden weggezet.
+  if (!trustPlanned && trustDataRegistered) {
+    errors.push(
+      "Conversieketen: trustElements bevatten geregistreerde echte data, maar er is geen trust-sectie gepland — gebruik de echte data in de compositie i.p.v. deze te negeren."
+    );
+  }
+
+  // 4. ACTION: minimaal één daadwerkelijk uitvoerbare conversie.
+  const action = instances.some(({ instance }) =>
+    ACTION_SECTION_TYPES.has(instance.type as BlueprintSectionType)
+  );
+  if (!action) {
+    errors.push(
+      "Conversieketen: geen action-sectie (cta, contact, booking of newsletter) — de website biedt nergens een uitvoerbare conversie."
+    );
+  }
+
+  return {
+    passed: errors.length === 0,
+    errors,
+    chain: { attention, interest, trust, action },
+  };
+}
+
 /**
  * Deterministische consistentie-checks op een Zod-geldig blueprint.
  * Vallen buiten Zod omdat ze afhankelijk zijn van de project-requirements
@@ -374,6 +534,12 @@ export function validateBlueprintConsistency(
       }
     }
   }
+
+  // 8. CONVERSIEKETEN (A3): attention/interest/trust/action — logisch
+  //    genoeg, zonder één vaste sectievolgorde af te dwingen. Trust mag
+  //    ontbreken mits eerlijk geregistreerd; fabricatie blijft geblokkeerd.
+  const conversion = validateConversionStructure(blueprint);
+  errors.push(...conversion.errors);
 
   return { passed: errors.length === 0, errors };
 }

@@ -64,9 +64,12 @@ export function getAIConfig(): AIConfig {
   const mode: AIMode = modeEnv === "live" ? "live" : "mock";
   const apiKey = process.env.ANTHROPIC_API_KEY?.trim() || null;
   const maxRequests = Number.parseInt(process.env.AI_MAX_REQUESTS_PER_RUN ?? "", 10);
-  // Request-timeout per AI-aanroep. Live designplanning is gemeten op ~34s
-  // (claude-sonnet-5, 4000 maxTokens); zware planningcalls mogen de oude
-  // 30s-grens dus overschrijden. Configureerbaar via AI_REQUEST_TIMEOUT_MS.
+  // Request-timeout per AI-aanroep. Live designplanning is gemeten op 84,4s
+  // (claude-sonnet-5, 12000 maxTokens, Velora Interieur v3, 2026-09-19); de
+  // oude 60s-default sneed dergelijke volledige planningcalls af. Zware
+  // planningcalls met rijke input (thinking + groot JSON) horen ruim binnen
+  // de default te passen zonder env-configuratie. Configureerbaar via
+  // AI_REQUEST_TIMEOUT_MS (1s-300s).
   const timeoutEnv = Number.parseInt(process.env.AI_REQUEST_TIMEOUT_MS ?? "", 10);
 
   return {
@@ -81,7 +84,7 @@ export function getAIConfig(): AIConfig {
     requestTimeoutMs:
       Number.isFinite(timeoutEnv) && timeoutEnv >= 1_000 && timeoutEnv <= 300_000
         ? timeoutEnv
-        : 60_000,
+        : 120_000,
     maxRetries: 2,
   };
 }

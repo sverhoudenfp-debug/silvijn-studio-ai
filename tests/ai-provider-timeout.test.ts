@@ -71,18 +71,18 @@ const REQUEST = {
   temperature: 0.4,
 };
 
-test("config: request-timeout default is 60s — boven de gemeten ~34s designplanning", () => {
+test("config: request-timeout default is 120s — boven de gemeten 84,4s designplanning (Velora v3, 2026-09-19)", () => {
   const config = getAIConfig();
-  assert.equal(config.requestTimeoutMs, 60_000);
+  assert.equal(config.requestTimeoutMs, 120_000);
 });
 
 test("config: AI_REQUEST_TIMEOUT_MS overschrijft de default met grenzen", () => {
   process.env.AI_REQUEST_TIMEOUT_MS = "45000";
   assert.equal(getAIConfig().requestTimeoutMs, 45_000);
   process.env.AI_REQUEST_TIMEOUT_MS = "500"; // < 1s minimum: terug naar default
-  assert.equal(getAIConfig().requestTimeoutMs, 60_000);
+  assert.equal(getAIConfig().requestTimeoutMs, 120_000);
   process.env.AI_REQUEST_TIMEOUT_MS = "999999"; // > cap: terug naar default
-  assert.equal(getAIConfig().requestTimeoutMs, 60_000);
+  assert.equal(getAIConfig().requestTimeoutMs, 120_000);
 });
 
 test("REGRESSIE: een trage (maar geslaagde) response wordt niet achteraf weggegooid", async () => {

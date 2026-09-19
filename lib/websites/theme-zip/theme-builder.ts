@@ -502,11 +502,11 @@ function buildSettingsData(
 // ---------------------------------------------------------------------------
 
 function buildThemeLayout(spec: WebsiteSpecification, tokens: ThemeDesignTokens): ThemeFile {
-  const liquid = `{comment}
+  const liquid = `{% comment %}
   Gegenereerd door Silvijn Studio — deterministisch thema op basis van de
   gevalideerde WebsiteSpecification en het interne Design Plan.
   Content staat in de JSON-templates; ontwerp staat in de settings.
-{/comment}
+{% endcomment %}
 <!doctype html>
 <html lang="nl">
   <head>
@@ -1133,10 +1133,10 @@ function buildLocaleFile(): ThemeFile {
  * content_for_layout. Geen visuele elementen uit de referenties gekopieerd.
  */
 function buildPasswordLayout(): ThemeFile {
-  const liquid = `{comment}
+  const liquid = `{% comment %}
   Gegenereerd door Silvijn Studio — deterministische password-layout voor de
   launch-fase van deze klant (Shopify password-protected storefront).
-{/comment}
+{% endcomment %}
 <!doctype html>
 <html lang="nl">
   <head>

@@ -337,6 +337,30 @@ test("theme-zip: share_image/og:image en JSON-LD zijn settings-gedreven", () => 
   assert.equal(data.seo_description, SPECIFICATION.seo.metaDescription);
 });
 
+test("theme-zip: layouts gebruiken geldige Shopify Liquid comments (regressie: nooit {comment})", () => {
+  const files = builtTheme();
+  // Geen enkel gegenereerd bestand mag een ongeldige accolade-tag {tag}/{/tag} bevatten:
+  // Shopify renders die letterlijk als zichtbare tekst vóór de doctype.
+  const invalidTag = /\{(?!%|\{)[a-z_]+\}|\{\/[a-z_]+\}/;
+  for (const f of files) {
+    if (f.path.endsWith(".liquid")) {
+      const m = f.content.match(invalidTag);
+      assert.ok(!m, `${f.path} bevat ongeldige accolade-tag ${m?.[0]} die Shopify letterlijk rendert`);
+    }
+  }
+  // Beide layouts bevatten een expliciet geldig Liquid-commentpaar.
+  for (const p of ["layout/theme.liquid", "layout/password.liquid"]) {
+    const layout = files.find((f) => f.path === p)!;
+    assert.ok(layout.content.includes("{% comment %}"), `${p} mist {% comment %}`);
+    assert.ok(layout.content.includes("{% endcomment %}"), `${p} mist {% endcomment %}`);
+    assert.ok(!layout.content.includes("{comment}"), `${p} bevat nog {comment}`);
+    assert.ok(!layout.content.includes("{/comment}"), `${p} bevat nog {/comment}`);
+  }
+  // Het comment staat ná de doctype noch vóór: alleen comment-inhoud, nooit output.
+  const theme = files.find((f) => f.path === "layout/theme.liquid")!;
+  assert.ok(theme.content.trimStart().startsWith("{% comment %}"), "theme.liquid begint met het Liquid-comment");
+});
+
 test("theme-zip: title en meta-description hebben betrouwbare fallbackketen", () => {
   const layout = builtTheme().find((f) => f.path === "layout/theme.liquid")!;
   assert.ok(layout.content.includes("{{ page_title | default: shop.name }}"), "title-fallback via page_title");

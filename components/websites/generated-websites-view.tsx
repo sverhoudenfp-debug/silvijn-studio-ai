@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import type { GeneratedWebsite } from "@/lib/websites/types";
+import { ThemeZipDownloadButton } from "@/components/websites/theme-zip-download-button";
+import type { DownloadableArtifactSummary } from "@/lib/websites/theme-zip/download";
 
 /**
  * Generated websites-overzicht (Fase 9/10) — echte repository-data, geen
@@ -39,9 +41,11 @@ function StatTile({ label, count }: { label: string; count: number }) {
 export function GeneratedWebsitesView({
   websites,
   projectNames,
+  zipArtifacts = {},
 }: {
   websites: GeneratedWebsite[];
   projectNames: Record<string, string>;
+  zipArtifacts: Record<string, DownloadableArtifactSummary>;
 }) {
   const active = websites.filter((w) => w.status !== "archived");
   const generating = active.filter((w) => ["generating", "generated", "building"].includes(w.status));
@@ -93,6 +97,7 @@ export function GeneratedWebsitesView({
                 <th className="px-3 py-2.5 font-medium">Versie</th>
                 <th className="px-3 py-2.5 font-medium">Preview</th>
                 <th className="px-3 py-2.5 font-medium">QC-rapport</th>
+                <th className="px-3 py-2.5 font-medium">Theme ZIP</th>
                 <th className="px-3 py-2.5 font-medium">Gegenereerd</th>
               </tr>
             </thead>
@@ -122,6 +127,13 @@ export function GeneratedWebsitesView({
                     <Link href={`/generated-websites/${website.slug}/qc`} className="text-indigo-400 hover:text-indigo-300">
                       QC
                     </Link>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    {zipArtifacts[website.id] ? (
+                      <ThemeZipDownloadButton artifact={zipArtifacts[website.id]} label="Download ZIP" />
+                    ) : (
+                      <span className="text-zinc-600">—</span>
+                    )}
                   </td>
                   <td className="px-3 py-2.5 text-zinc-500">
                     {new Date(website.createdAt).toLocaleDateString("nl-NL")}

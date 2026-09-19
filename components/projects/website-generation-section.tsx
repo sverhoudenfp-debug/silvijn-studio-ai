@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 import { generateWebsiteAction, runQualityControlAction } from "@/app/actions/websites";
+import { ThemeZipDownloadButton } from "@/components/websites/theme-zip-download-button";
+import type { DownloadableArtifactSummary } from "@/lib/websites/theme-zip/download";
 import type { QualityControl } from "@/lib/qc/types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -36,12 +38,14 @@ export function WebsiteGenerationSection({
   leadStatus,
   websites,
   latestQc,
+  zipArtifact,
 }: {
   projectId: string;
   projectStatus: string;
   leadStatus: string;
   websites: GeneratedWebsite[];
   latestQc: QualityControl | null;
+  zipArtifact: DownloadableArtifactSummary | null;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -114,6 +118,21 @@ export function WebsiteGenerationSection({
               {latestQc.score}/100 · {latestQc.issues.filter((i) => i.severity === "critical").length} critical ·{" "}
               {latestQc.issues.filter((i) => i.severity === "warning").length} warning
               {latestQc.approval ? ` · laatste actie: ${latestQc.approval.action} (${latestQc.approval.by})` : ""}
+            </div>
+          )}
+          {zipArtifact && (
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/20 px-3 py-2.5">
+              <p className="text-xs text-zinc-300">
+                <span className="font-semibold text-emerald-300">Shopify theme-ZIP beschikbaar:</span>{" "}
+                artefact v{zipArtifact.version} · {zipArtifact.fileName} — gevalideerd en opgeslagen.
+              </p>
+              <div className="mt-2">
+                <ThemeZipDownloadButton
+                  artifact={zipArtifact}
+                  variant="success"
+                  label="Download Shopify Theme ZIP"
+                />
+              </div>
             </div>
           )}
           <div className="flex flex-wrap gap-2">

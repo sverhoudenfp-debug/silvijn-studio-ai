@@ -11,6 +11,8 @@ import type { GeneratedWebsite } from "@/lib/websites/types";
 import { ProductionGateError } from "@/lib/payments/service";
 import { AIError } from "@/lib/ai/errors";
 import { WebsiteGenerationError, WebsiteLimitError } from "@/lib/websites/service";
+import { ThemeZipService, ThemeZipGenerationError } from "@/lib/websites/theme-zip/service";
+import { assertProductionAuthorized } from "@/lib/payments/service";
 
 /**
  * Server actions voor websitegeneratie (Fase 9) + quality control en
@@ -102,6 +104,39 @@ export async function archiveWebsiteAction(websiteId: string): Promise<Generated
   revalidatePath("/generated-websites");
   revalidatePath(`/projects/${website.projectId}`);
   return website;
+}
+
+/**
+ * Download-actie voor een bestaand, gevalideerd theme-ZIP-artefact.
+ *
+ * HARDE GRENS: dit start géén nieuwe website-/theme-generatie en raakt
+ * geen enkele QC-, payment-, approval- of delivery-gate — het levert
+ * uitsluitend een tijdelijke signed URL ( privé bucket, 300s) naar een
+ * reeds opgeslagen ZIP die de validatie heeft doorstaan. Intern gebruik:
+ * alleen de ingelogde studio-owner.
+ */
+export type ThemeZipDownloadResult =
+  | { ok: true; url: string; fileName: string }
+  | { ok: false; error: string };
+
+export async function createThemeZipDownloadUrlAction(artifactId: string): Promise<ThemeZipDownloadResult> {
+  await requireStudioOwner();
+  try {
+    const zipService = new ThemeZipService({ productionGate: assertProductionAuthorized });
+    const artifact = await zipService.getArtifact(artifactId);
+    if (!artifact) return { ok: false, error: "Theme-artefact niet gevonden." };
+    if (artifact.status !== "passed" || !artifact.storagePath || !artifact.storageBucket) {
+      return { ok: false, error: "Dit artefact heeft geen opgeslagen, gevalideerde ZIP." };
+    }
+    const url = await zipService.createArtifactSignedUrl(artifactId);
+    return { ok: true, url, fileName: artifact.fileName };
+  } catch (error) {
+    // Verwachte fouten (o.a. opslag niet geconfigureerd) komen als
+    // { ok: false, error } terug; onverwachte fouten blijven throwen voor
+    // Vercel-logging (zelfde patroon als generateWebsiteAction).
+    if (error instanceof ThemeZipGenerationError) return { ok: false, error: error.message };
+    throw error;
+  }
 }
 
 export async function listWebsitesAction(): Promise<GeneratedWebsite[]> {

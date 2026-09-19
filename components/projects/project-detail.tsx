@@ -18,6 +18,7 @@ import type { Project, ProjectStatus } from "@/lib/projects/types";
 import { fromFormState, toFormState, type RequirementsFormState } from "@/lib/projects/requirements-form";
 import type { PriceIndication } from "@/lib/pricing/types";
 import { WebsiteGenerationSection } from "@/components/projects/website-generation-section";
+import type { DownloadableArtifactSummary } from "@/lib/websites/theme-zip/download";
 import { DesignPlanSection } from "@/components/projects/design-plan-section";
 import { RequirementsCompletenessSection } from "@/components/projects/requirements-completeness-section";
 import type { DesignPlanRecord } from "@/lib/websites/design-plan";
@@ -68,6 +69,7 @@ export function ProjectDetail({
   latestQualification,
   websites,
   latestQc,
+  latestZipArtifact,
   designPlans,
   completeness,
 }: {
@@ -76,6 +78,7 @@ export function ProjectDetail({
   latestQualification: { status: string; interestLevel: string; projectType: string | null; timeline: string | null; missingInformation: string[] } | null;
   websites: GeneratedWebsite[];
   latestQc: QualityControl | null;
+  latestZipArtifact: DownloadableArtifactSummary | null;
   designPlans: DesignPlanRecord[];
   completeness: CompletenessEvaluation;
 }) {
@@ -492,6 +495,7 @@ export function ProjectDetail({
         leadStatus={lead?.leadStatus ?? "unknown"}
         websites={websites}
         latestQc={latestQc}
+        zipArtifact={latestZipArtifact}
       />
     </div>
   );

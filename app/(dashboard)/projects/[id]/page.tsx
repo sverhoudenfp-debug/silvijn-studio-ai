@@ -9,6 +9,7 @@ import { getSalesInteractionRepository } from "@/lib/sales/repository";
 import { getProjectRepository } from "@/lib/projects/repository";
 import { QualityControlService } from "@/lib/qc/service";
 import { getGeneratedWebsiteRepository } from "@/lib/websites/repository";
+import { getDownloadableArtifactForWebsite } from "@/lib/websites/theme-zip/download";
 import { findQuestionnairesByLead } from "@/lib/questionnaire/service";
 import { QuestionnaireSection } from "@/components/leads/questionnaire-section";
 import { DesignPlanService } from "@/lib/websites/design-plan-service";
@@ -47,6 +48,7 @@ export default async function ProjectDetailPage(props: PageProps<"/projects/[id]
   const latestQc = latestWebsite
     ? await new QualityControlService().getLatestQcForWebsite(latestWebsite.id)
     : null;
+  const latestZipArtifact = latestWebsite ? await getDownloadableArtifactForWebsite(latestWebsite.id) : null;
   const latestQualification = interactions[0]?.qualification ?? null;
 
   return (
@@ -70,6 +72,7 @@ export default async function ProjectDetailPage(props: PageProps<"/projects/[id]
       }
       websites={websites}
       latestQc={latestQc}
+      latestZipArtifact={latestZipArtifact}
       designPlans={designPlans}
       completeness={completeness}
       latestQualification={

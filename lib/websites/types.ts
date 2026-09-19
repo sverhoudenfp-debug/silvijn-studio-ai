@@ -18,6 +18,8 @@ export const WEBSITE_SECTION_TYPES = [
   "hero",
   "services",
   "about",
+  "gallery",
+  "testimonials",
   "benefits",
   "faq",
   "cta",
@@ -161,7 +163,7 @@ export interface WebsiteSpecification {
  * gerenderd door vooraf gecontroleerde React-componenten (géén vrije code).
  */
 export interface GeneratedSectionData {
-  type: "header" | "hero" | "services" | "about" | "benefits" | "faq" | "cta" | "contact" | "footer";
+  type: WebsiteSectionType;
   data: Record<string, unknown>;
 }
 

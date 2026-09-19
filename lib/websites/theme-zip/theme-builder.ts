@@ -1,4 +1,14 @@
 import type { DesignPlan } from "../design-plan";
+import {
+  findSlot,
+  mediaSlotsFor,
+  galleryBlockCount,
+  hasGalleryRequirement,
+  hasRealTestimonials,
+  mediaPlanFor,
+  slotAlt,
+} from "./media-slots";
+import { buildGenericPlaceholderSvg, buildMediaPlaceholderSvgs } from "./placeholders";
 import type { WebsiteContactContext } from "../generator";
 import type { WebsiteSpecification } from "../types";
 import type { ThemeFile } from "./theme-structure";
@@ -714,6 +724,40 @@ img { max-width: 100%; height: auto; display: block; }
   .btn { transition: none; }
 }
 `;
+  // Media & beelden (R1): centrale media-slot-stijlen — aspect-ratio's
+  // reserveren de ruimte (anti-CLS), object-fit/-position regelen echte
+  // afbeeldingen incl. focal point; placeholders zijn abstract per ontwerp.
+  css += `
+/* --- Media-sloten (R1: theme-media snippet) --- */
+.theme-media { position: relative; overflow: hidden; border-radius: var(--radius); background: var(--color-surface); }
+.theme-media--wide { aspect-ratio: 16 / 9; }
+.theme-media--landscape { aspect-ratio: 4 / 3; }
+.theme-media--square { aspect-ratio: 1 / 1; }
+.theme-media--portrait { aspect-ratio: 3 / 4; }
+.theme-media img { width: 100%; height: 100%; object-fit: cover; object-position: var(--media-focal, 50% 50%); display: block; }
+.theme-media--placeholder img { object-position: center; }
+.hero__band { margin-top: 32px; }
+.about__grid { display: grid; gap: 40px; align-items: center; grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); }
+.about__grid--media-left .about__media { order: -1; }
+.card--media { padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+.card--media .card__media .theme-media { border-radius: 0; aspect-ratio: 4 / 3; }
+.card--media .card__body { padding: 18px 22px; }
+.card--media h3, .card--media p { margin: 0 0 .4em; }
+.card--media p:last-child { margin: 0; }
+.gallery-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.gallery-item { margin: 0; }
+.gallery-item .theme-media { border-radius: 0 0 var(--radius) var(--radius); }
+.gallery-item__caption { font-size: .9rem; color: var(--color-muted); padding: 10px 4px 0; }
+.testimonial-grid { display: grid; gap: 20px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.testimonial { margin: 0; padding: 22px; background: var(--color-background); border: 1px solid var(--color-border); border-radius: var(--radius); }
+.testimonial__mark { display: block; font-family: var(--font-heading); font-size: 2rem; line-height: 1; color: var(--color-accent); margin-bottom: 6px; }
+.testimonial__quote { font-size: 1.05rem; color: var(--color-text); margin: 0 0 8px; }
+.testimonial__author { margin: 0; font-size: .9rem; color: var(--color-muted); }
+@media (max-width: 760px) {
+  .about__grid { grid-template-columns: 1fr; gap: 24px; }
+  .about__grid--media-left .about__media { order: 0; }
+}
+`;
   // Klantaccountpagina's (Fase I.2 completeness) — neutraal, gebruikt de
   // bestaande design-tokens; geen referentie-ontwerp gekopieerd.
   css += `
@@ -753,17 +797,6 @@ function buildThemeJs(): ThemeFile {
 })();
 `;
   return { path: "assets/theme.js", content: js };
-}
-
-function buildPlaceholderSvg(tokens: ThemeDesignTokens): ThemeFile {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" role="img" aria-label="Placeholder-afbeelding">
-  <rect width="800" height="500" fill="${tokens.surface}"/>
-  <circle cx="400" cy="250" r="130" fill="${tokens.primary}" opacity="0.14"/>
-  <circle cx="400" cy="250" r="80" fill="${tokens.accent}" opacity="0.2"/>
-  <rect x="140" y="380" width="520" height="12" rx="6" fill="${tokens.primary}" opacity="0.18"/>
-</svg>
-`;
-  return { path: "assets/placeholder.svg", content: svg };
 }
 
 function buildLocaleFile(): ThemeFile {
@@ -1537,10 +1570,15 @@ function buildHeroSection(): ThemeFile {
       </div>
       {%- if settings.hero_layout == 'split' -%}
         <div class="hero__media">
-          <img src="{{ 'placeholder.svg' | asset_url }}" alt="" role="presentation" loading="lazy">
+          {%- render 'theme-media', image: section.settings.image, image_mobile: section.settings.image_mobile, aspect: 'wide', alt: section.settings.image_alt, sizes: '(min-width: 990px) 50vw, 100vw', loading: 'eager', fetchpriority: 'high', placeholder_svg: 'placeholder-hero.svg' -%}
         </div>
       {%- endif -%}
     </div>
+    {%- if settings.hero_layout != 'split' -%}
+      <div class="hero__band">
+        {%- render 'theme-media', image: section.settings.image, image_mobile: section.settings.image_mobile, aspect: 'wide', alt: section.settings.image_alt, sizes: '100vw', loading: 'eager', fetchpriority: 'high', placeholder_svg: 'placeholder-hero.svg' -%}
+      </div>
+    {%- endif -%}
   </div>
 </section>
 
@@ -1554,13 +1592,55 @@ function buildHeroSection(): ThemeFile {
     { "type": "text", "id": "cta_label", "label": "CTA-tekst" },
     { "type": "url", "id": "cta_link", "label": "CTA-link" },
     { "type": "text", "id": "cta_secondary_label", "label": "Secondaire CTA-tekst" },
-    { "type": "url", "id": "cta_secondary_link", "label": "Secondaire CTA-link" }
+    { "type": "url", "id": "cta_secondary_link", "label": "Secondaire CTA-link" },
+    { "type": "image_picker", "id": "image", "label": "Hero-afbeelding (optioneel)" },
+    { "type": "image_picker", "id": "image_mobile", "label": "Hero-afbeelding mobiel (optioneel)" },
+    { "type": "text", "id": "image_alt", "label": "Alt-tekst afbeelding" }
   ],
   "presets": [{ "name": "Hero" }]
 }
 {% endschema %}
 `;
   return { path: "sections/hero.liquid", content: liquid };
+}
+
+/**
+ * Centrale media-renderer (R1). Alle beeldsloten (hero/about/services/gallery)
+ * renderen via dit snippet: echte afbeeldingen krijgen Shopify-srcset
+ * (widths/sizes, focal point, aparte mobiele variant), zonder afbeelding
+ * verschijnt een abstracte, token-afgeleide placeholder (decoratief, geen
+ * gesimuleerde foto). Bestaat dus altijd in het thema.
+ */
+function buildThemeMediaSnippet(): ThemeFile {
+  const liquid = `{% comment %}
+  Centrale media-renderer. Parameters:
+  image, image_mobile (image_picker), aspect (wide|landscape|square|portrait),
+  alt, sizes, loading (eager|lazy), fetchpriority (high|auto),
+  placeholder_svg (asset-naam voor de abstracte placeholder).
+{% endcomment %}
+{%- liquid
+  assign media_loading = loading | default: 'lazy'
+  assign media_aspect = aspect | default: 'wide'
+  assign fallback_svg = placeholder_svg | default: 'placeholder.svg'
+-%}
+{%- if image != blank -%}
+  <div class="theme-media theme-media--{{ media_aspect }}" {% if image.presentation.focal_point %}style="--media-focal: {{ image.presentation.focal_point }}"{% endif %}>
+    {%- if image_mobile != blank and image_mobile != image -%}
+      <picture>
+        <source media="(max-width: 749px)" srcset="{{ image_mobile | image_url: width: 750 }}">
+        {{ image | image_url: width: 1500 | image_tag: widths: '480, 750, 1100, 1500', sizes: sizes, alt: alt, class: 'theme-media__img', loading: media_loading, fetchpriority: fetchpriority }}
+      </picture>
+    {%- else -%}
+      {{ image | image_url: width: 1500 | image_tag: widths: '480, 750, 1100, 1500', sizes: sizes, alt: alt, class: 'theme-media__img', loading: media_loading, fetchpriority: fetchpriority }}
+    {%- endif -%}
+  </div>
+{%- else -%}
+  <div class="theme-media theme-media--{{ media_aspect }} theme-media--placeholder">
+    <img src="{{ fallback_svg | asset_url }}" alt="" role="presentation" loading="{{ media_loading }}" decoding="async">
+  </div>
+{%- endif -%}
+`;
+  return { path: "snippets/theme-media.liquid", content: liquid };
 }
 
 function buildServicesSection(): ThemeFile {
@@ -1574,11 +1654,16 @@ function buildServicesSection(): ThemeFile {
     </div>
     <div class="card-grid">
       {%- for block in section.blocks -%}
-        <article class="card" {{ block.shopify_attributes }}>
-          <h3>{{ block.settings.title }}</h3>
-          {%- if block.settings.description != blank -%}
-            <p>{{ block.settings.description }}</p>
-          {%- endif -%}
+        <article class="card card--media" {{ block.shopify_attributes }}>
+          <div class="card__media">
+            {%- render 'theme-media', image: block.settings.image, aspect: 'landscape', sizes: '(min-width: 990px) 360px, 100vw', loading: 'lazy', placeholder_svg: 'placeholder-service.svg' -%}
+          </div>
+          <div class="card__body">
+            <h3>{{ block.settings.title }}</h3>
+            {%- if block.settings.description != blank -%}
+              <p>{{ block.settings.description }}</p>
+            {%- endif -%}
+          </div>
         </article>
       {%- endfor -%}
     </div>
@@ -1597,6 +1682,7 @@ function buildServicesSection(): ThemeFile {
       "type": "service",
       "name": "Dienst",
       "settings": [
+        { "type": "image_picker", "id": "image", "label": "Afbeelding (optioneel)" },
         { "type": "text", "id": "title", "label": "Titel" },
         { "type": "textarea", "id": "description", "label": "Omschrijving" }
       ]
@@ -1617,8 +1703,13 @@ function buildAboutSection(): ThemeFile {
     <div class="section__header">
       <h2>{{ section.settings.heading }}</h2>
     </div>
-    <div class="rte">
-      {{ section.settings.body }}
+    <div class="about__grid about__grid--media-{{ section.settings.image_position | default: 'right' }}">
+      <div class="about__body rte">
+        {{ section.settings.body }}
+      </div>
+      <div class="about__media">
+        {%- render 'theme-media', image: section.settings.image, image_mobile: section.settings.image_mobile, aspect: 'landscape', alt: section.settings.image_alt, sizes: '(min-width: 990px) 480px, 100vw', loading: 'lazy', placeholder_svg: 'placeholder-about.svg' -%}
+      </div>
     </div>
   </div>
 </section>
@@ -1628,13 +1719,135 @@ function buildAboutSection(): ThemeFile {
   "name": "Over ons",
   "settings": [
     { "type": "text", "id": "heading", "label": "Kop", "default": "Over ons" },
-    { "type": "richtext", "id": "body", "label": "Tekst" }
+    { "type": "richtext", "id": "body", "label": "Tekst" },
+    { "type": "image_picker", "id": "image", "label": "Afbeelding (optioneel)" },
+    { "type": "image_picker", "id": "image_mobile", "label": "Afbeelding mobiel (optioneel)" },
+    { "type": "text", "id": "image_alt", "label": "Alt-tekst afbeelding" },
+    {
+      "type": "select",
+      "id": "image_position",
+      "label": "Positie afbeelding",
+      "default": "right",
+      "options": [
+        { "value": "left", "label": "Links" },
+        { "value": "right", "label": "Rechts" }
+      ]
+    }
   ],
   "presets": [{ "name": "Over ons" }]
 }
 {% endschema %}
 `;
   return { path: "sections/about.liquid", content: liquid };
+}
+
+/**
+ * Galerij-sectie (R1) — wordt uitsluitend geinstantieerd als de AI een
+ * gallery-achtig beeldvereiste heeft gepland; de sectie zelf is een
+ * gecontroleerd component met image_picker-blokken. Zonder echte beelden:
+ * abstracte, token-afgeleide placeholders (nooit stock-foto's).
+ */
+function buildGallerySection(): ThemeFile {
+  const liquid = `<section class="section">
+  <div class="container">
+    <div class="section__header">
+      <h2>{{ section.settings.heading }}</h2>
+      {%- if section.settings.subheading != blank -%}
+        <p>{{ section.settings.subheading }}</p>
+      {%- endif -%}
+    </div>
+    <div class="gallery-grid">
+      {%- for block in section.blocks -%}
+        <figure class="gallery-item" {{ block.shopify_attributes }}>
+          {%- render 'theme-media', image: block.settings.image, aspect: 'square', alt: block.settings.alt, sizes: '(min-width: 990px) 33vw, (min-width: 750px) 50vw, 100vw', loading: 'lazy', placeholder_svg: 'placeholder-gallery.svg' -%}
+          {%- if block.settings.caption != blank -%}
+            <figcaption class="gallery-item__caption">{{ block.settings.caption }}</figcaption>
+          {%- endif -%}
+        </figure>
+      {%- endfor -%}
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Galerij",
+  "settings": [
+    { "type": "text", "id": "heading", "label": "Kop", "default": "Impressie" },
+    { "type": "textarea", "id": "subheading", "label": "Subkop" }
+  ],
+  "blocks": [
+    {
+      "type": "gallery_image",
+      "name": "Beeld",
+      "settings": [
+        { "type": "image_picker", "id": "image", "label": "Afbeelding" },
+        { "type": "text", "id": "caption", "label": "Bijschrift (optioneel)" },
+        { "type": "text", "id": "alt", "label": "Alt-tekst (voor echte afbeelding)" }
+      ]
+    }
+  ],
+  "presets": [
+    { "name": "Galerij", "blocks": [{ "type": "gallery_image" }, { "type": "gallery_image" }, { "type": "gallery_image" }] }
+  ]
+}
+{% endschema %}
+`;
+  return { path: "sections/gallery.liquid", content: liquid };
+}
+
+/**
+ * Testimonials-sectie (R1) — rendert UITSLUITEND echte, in de specificatie
+ * bekende uitspraken (content.testimonials). Er wordt nooit een naam, quote,
+ * rol of gezicht verzonnen: auteur is een vrij veld dat alleen de merchant
+ * invult met echt bekende bronnen. Portretten ontbreken bewust — er is geen
+ * pad naar echte klantfoto's, dus geen gesimuleerde gezichten.
+ */
+function buildTestimonialsSection(): ThemeFile {
+  const liquid = `{%- if section.blocks.size > 0 -%}
+<section class="section section--surface">
+  <div class="container">
+    <div class="section__header">
+      <h2>{{ section.settings.heading }}</h2>
+    </div>
+    <div class="testimonial-grid">
+      {%- for block in section.blocks -%}
+        <blockquote class="testimonial" {{ block.shopify_attributes }}>
+          <span class="testimonial__mark" aria-hidden="true">&ldquo;</span>
+          <p class="testimonial__quote">{{ block.settings.quote }}</p>
+          {%- if block.settings.author != blank -%}
+            <p class="testimonial__author">&mdash; {{ block.settings.author }}</p>
+          {%- endif -%}
+        </blockquote>
+      {%- endfor -%}
+    </div>
+  </div>
+</section>
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "Testimonials",
+  "settings": [
+    { "type": "text", "id": "heading", "label": "Kop", "default": "Wat klanten zeggen" }
+  ],
+  "blocks": [
+    {
+      "type": "testimonial",
+      "name": "Ervaring",
+      "settings": [
+        { "type": "textarea", "id": "quote", "label": "Echte uitspraak (uit bekende bron)" },
+        { "type": "text", "id": "author", "label": "Naam (alleen indien echt bekend)" }
+      ]
+    }
+  ],
+  "presets": [
+    { "name": "Testimonials", "blocks": [{ "type": "testimonial" }] }
+  ]
+}
+{% endschema %}
+`;
+  return { path: "sections/testimonials.liquid", content: liquid };
 }
 
 function buildBenefitsSection(): ThemeFile {
@@ -2183,6 +2396,8 @@ function homePageSectionInstances(spec: WebsiteSpecification, contact: WebsiteCo
   const sections: Record<string, Record<string, unknown>> = {};
   const order: string[] = [];
 
+  const mediaSlots = mediaSlotsFor(spec);
+  const heroSlot = findSlot(mediaSlots, "hero");
   sections.hero = {
     type: "hero",
     settings: {
@@ -2193,6 +2408,7 @@ function homePageSectionInstances(spec: WebsiteSpecification, contact: WebsiteCo
       cta_link: "/pages/contact",
       cta_secondary_label: spec.content.ctaSecondaryText,
       cta_secondary_link: "#main-content",
+      image_alt: slotAlt(heroSlot, null),
     },
   };
   order.push("hero");
@@ -2213,11 +2429,49 @@ function homePageSectionInstances(spec: WebsiteSpecification, contact: WebsiteCo
   }
 
   if (spec.content.about) {
+    const aboutSlot = findSlot(mediaSlots, "about");
     sections.about = {
       type: "about",
-      settings: { heading: `Over ${spec.business.businessName}`, body: `<p>${escapeHtml(spec.content.about)}</p>` },
+      settings: {
+        heading: `Over ${spec.business.businessName}`,
+        body: `<p>${escapeHtml(spec.content.about)}</p>`,
+        image_alt: slotAlt(aboutSlot, null),
+      },
     };
     order.push("about");
+  }
+
+  // R1: gallery uitsluitend als de AI een gallery-achtig beeldvereiste plande;
+  // blokken zijn lege image-slots (alt/caption volgen uit de planning).
+  if (hasGalleryRequirement(spec)) {
+    const galleryCount = galleryBlockCount(spec);
+    sections.gallery = {
+      type: "gallery",
+      settings: { heading: "Impressie", subheading: null },
+      blocks: Object.fromEntries(
+        Array.from({ length: galleryCount }, (_, i) => [
+          `image-${i + 1}`,
+          { type: "gallery_image", settings: { caption: spec.media.imageDescriptions[i] ?? null, alt: null } },
+        ])
+      ),
+      block_order: Array.from({ length: galleryCount }, (_, i) => `image-${i + 1}`),
+    };
+    order.push("gallery");
+  }
+
+  // R1: testimonials uitsluitend met ECHTE, in de specification bekende
+  // uitspraken — auteur blijft leeg (nooit een verzonnen naam/gezicht).
+  if (hasRealTestimonials(spec)) {
+    const quotes = spec.content.testimonials.filter((q) => q.trim().length > 0);
+    sections.testimonials = {
+      type: "testimonials",
+      settings: { heading: "Wat klanten zeggen" },
+      blocks: Object.fromEntries(
+        quotes.map((quote, i) => [`testimonial-${i + 1}`, { type: "testimonial", settings: { quote, author: null } }])
+      ),
+      block_order: quotes.map((_, i) => `testimonial-${i + 1}`),
+    };
+    order.push("testimonials");
   }
 
   if (spec.content.benefits.length > 0) {
@@ -2325,7 +2579,12 @@ export function buildShopifyTheme(input: BuildThemeInput): BuiltTheme {
   files.push(buildButtonSnippet());
   files.push(buildThemeCss(tokens));
   files.push(buildThemeJs());
-  files.push(buildPlaceholderSvg(tokens));
+  // R1: media-plan (sloten + placeholder-variant) uit specification + Design
+  // Plan; de generieke placeholder blijft voor product-cards/giftcard.
+  const mediaPlan = mediaPlanFor(spec, plan.imagery.placeholderStrategy);
+  files.push(buildGenericPlaceholderSvg(tokens));
+  files.push(...buildMediaPlaceholderSvgs(mediaPlan.variant, tokens));
+  files.push(buildThemeMediaSnippet());
   files.push(buildLocaleFile());
 
   // --- Password-status (branded "coming soon" tijdens de launch)
@@ -2349,6 +2608,8 @@ export function buildShopifyTheme(input: BuildThemeInput): BuiltTheme {
   files.push(buildHeroSection());
   files.push(buildServicesSection());
   files.push(buildAboutSection());
+  files.push(buildGallerySection());
+  files.push(buildTestimonialsSection());
   files.push(buildBenefitsSection());
   files.push(buildFaqSection());
   files.push(buildCtaSection());
@@ -2422,6 +2683,24 @@ export function buildShopifyTheme(input: BuildThemeInput): BuiltTheme {
   files.push(jsonFile("templates/cart.json", { sections: { main: { type: "main-cart", settings: {} } }, order: ["main"] }));
   files.push(jsonFile("templates/search.json", { sections: { main: { type: "main-search", settings: {} } }, order: ["main"] }));
 
+  if (hasGalleryRequirement(spec)) {
+    notes.push(
+      "Galerij-sectie geactiveerd met abstracte beeldplaceholders — echte foto's kiest de merchant via de image_picker-settings (geen stock-fabricatie)."
+    );
+  } else {
+    notes.push(
+      "Geen galerij geinstantieerd: de planning bevat geen gallery-achtig beeldvereiste."
+    );
+  }
+  if (hasRealTestimonials(spec)) {
+    notes.push(
+      "Testimonials-sectie toont uitsluitend uit de specificatie bekende uitspraken; auteursnamen zijn bewust leeg gelaten (geen fabricatie)."
+    );
+  } else {
+    notes.push(
+      "Testimonials-sectie beschikbaar maar niet geactiveerd: geen echte klantuitingen bekend — niets verzonnen."
+    );
+  }
   if (spec.missingInformation.length > 0) {
     notes.push(
       `${spec.missingInformation.length} ontbrekende informatiepunten uit de specification zijn bewust placeholder gelaten (geen fabricatie).`

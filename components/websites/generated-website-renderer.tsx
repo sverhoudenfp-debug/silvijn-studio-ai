@@ -183,6 +183,61 @@ function AboutSection({ data }: { data: Record<string, unknown> }) {
   );
 }
 
+/**
+ * R1 — Galerij-preview: abstracte beeldvlakken (geen stock-foto's, geen
+ * gesimuleerde foto-content). Bijschriften volgen de AI-planning of blijven weg.
+ */
+function GallerySection({ data }: { data: Record<string, unknown> }) {
+  const d = asRecord(data);
+  const captions = (Array.isArray(d.captions) ? d.captions : []) as (string | null)[];
+  if (captions.length === 0) return null;
+  return (
+    <section className="bg-white py-14 sm:py-16">
+      <div className="mx-auto max-w-6xl px-4 sm:px-6">
+        <h2 className="text-2xl font-bold text-zinc-900 sm:text-3xl">Impressie</h2>
+        <p className="mt-2 text-sm text-zinc-500">
+          Beeldsloten — echte foto&apos;s volgen zodra ze beschikbaar zijn (abstracte voorbeeldopbouw).
+        </p>
+        <div className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-3">
+          {captions.map((caption, i) => (
+            <figure key={i} className="overflow-hidden rounded-xl border border-zinc-200">
+              <div className="flex aspect-square items-center justify-center bg-gradient-to-br from-zinc-100 to-zinc-200">
+                <span className="h-10 w-10 rounded-full bg-zinc-300/70" aria-hidden="true" />
+              </div>
+              {caption && <figcaption className="px-3 py-2 text-xs text-zinc-600">{caption}</figcaption>}
+            </figure>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * R1 — Testimonials-preview: uitsluitend echte, uit de specificatie bekende
+ * uitspraken; geen verzonnen namen, quotes of gezichten.
+ */
+function TestimonialsSection({ data }: { data: Record<string, unknown> }) {
+  const d = asRecord(data);
+  const quotes = (Array.isArray(d.quotes) ? d.quotes : []) as string[];
+  if (quotes.length === 0) return null;
+  return (
+    <section className="bg-zinc-50 py-14 sm:py-16">
+      <div className="mx-auto max-w-6xl px-4 sm:px-6">
+        <h2 className="text-2xl font-bold text-zinc-900 sm:text-3xl">Wat klanten zeggen</h2>
+        <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {quotes.map((quote, i) => (
+            <blockquote key={i} className="rounded-xl border border-zinc-200 bg-white p-5">
+              <span className="block font-serif text-3xl leading-none text-indigo-400" aria-hidden="true">&ldquo;</span>
+              <p className="mt-2 text-sm leading-relaxed text-zinc-700">{quote}</p>
+            </blockquote>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function BenefitsSection({ data }: { data: Record<string, unknown> }) {
   const d = asRecord(data);
   const benefits = (Array.isArray(d.benefits) ? d.benefits : []) as string[];
@@ -348,6 +403,10 @@ function SectionComponent({ section }: { section: GeneratedSectionData }) {
       return <ServicesSection data={data} />;
     case "about":
       return <AboutSection data={data} />;
+    case "gallery":
+      return <GallerySection data={data} />;
+    case "testimonials":
+      return <TestimonialsSection data={data} />;
     case "benefits":
       return <BenefitsSection data={data} />;
     case "faq":

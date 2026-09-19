@@ -161,7 +161,7 @@ export function runDeterministicChecks(input: DeterministicCheckInput): Determin
     allowedEmail: lead.email,
     allowedRating: lead.googleRating,
     allowedReviewCount: lead.reviewCount,
-    leadNotes: lead.notes,
+    leadNotes: lead.notes ?? [],
   });
   for (const issue of safety.issues) {
     issues.add("content", "error", `fabrication_${issue.rule}`, `Mogelijk gefabriceerde bedrijfsinformatie: ${issue.reason}`);
@@ -275,6 +275,30 @@ export function runDeterministicChecks(input: DeterministicCheckInput): Determin
     if (!spec.media.imageRequirements.some((r) => r.key === "hero")) {
       issues.add("design", "warning", "missing_media", "Geen hero-beeldvereiste gedefinieerd — de hero oogt leeg.");
     }
+    // R1 (additief): beeldsloten zijn abstracte placeholders totdat echte
+    // foto's worden aangeleverd — expliciet geen gesimuleerde/stock-foto's.
+    issues.add(
+      "design",
+      "info",
+      "media_placeholders",
+      "Beeldsloten (hero/about/services" + (content?.sections.some((s) => s.type === "gallery") ? "/gallery" : "") + ") tonen abstracte, token-afgeleide placeholders tot echte afbeeldingen worden aangeleverd — geen stock-foto's of gesimuleerde bedrijfsbeelden."
+    );
+    // R1 (additief): testimonials tonen uitsluitend échte, bekende uitspraken.
+    if (content?.sections.some((s) => s.type === "testimonials")) {
+      issues.add(
+        "business_accuracy",
+        "info",
+        "testimonials_real_data_only",
+        "Testimonials-sectie actief — toont uitsluitend uit de specificatie bekende uitspraken; namen en gezichten zijn nooit verzonnen."
+      );
+    } else if (spec.content.testimonials.length > 0) {
+      issues.add(
+        "design",
+        "warning",
+        "testimonials_missing_section",
+        "Specificatie bevat testimonials, maar de sectie is niet geemit — consistentie controleren."
+      );
+    }
   }
 
   // ============================================================
@@ -282,7 +306,7 @@ export function runDeterministicChecks(input: DeterministicCheckInput): Determin
   // ============================================================
   if (content) {
     const structuralOk = content.sections.every(
-      (s) => ["header", "hero", "services", "about", "benefits", "faq", "cta", "contact", "footer"].includes(s.type)
+      (s) => ["header", "hero", "services", "about", "gallery", "testimonials", "benefits", "faq", "cta", "contact", "footer"].includes(s.type)
     );
     if (structuralOk) {
       // De gecontroleerde componentenbibliotheek is mobile-first en responsive BY CONSTRUCTION.

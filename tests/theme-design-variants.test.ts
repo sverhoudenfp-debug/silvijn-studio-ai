@@ -295,7 +295,11 @@ test("variants: hero-sectie kent de variant-klasse en conditionele split-media",
   const split = builtTheme(planWith({ imagery: { style: "Sfeerbeelden" } })).files.get("sections/hero.liquid")!;
   assert.ok(split.includes("hero--{{ settings.hero_layout | default: 'focused' }}"));
   assert.ok(split.includes("settings.hero_layout == 'split'"));
-  assert.ok(split.includes("'placeholder.svg' | asset_url"));
+  // R1: hero-media loopt via het centrale theme-media-snippet met de
+  // hero-specifieke placeholder (niet langer de generieke placeholder.svg).
+  assert.ok(split.includes("render 'theme-media'"));
+  assert.ok(split.includes("placeholder-hero.svg"));
+  assert.ok(!split.includes("'placeholder.svg' | asset_url"));
 
   const css = builtTheme(planWith({})).files.get("assets/theme.css")!;
   for (const expected of [".hero--centered", ".hero--split", "font-weight: var(--font-weight-heading)", "font-weight: var(--font-weight-body)"]) {

@@ -1,4 +1,5 @@
 import { getWebsiteTemplateConfig } from "./templates";
+import { galleryBlockCount, hasGalleryRequirement, hasRealTestimonials } from "./theme-zip/media-slots";
 import type { GeneratedSectionData, GeneratedWebsiteContent, WebsiteSpecification, WebsiteTemplateType } from "./types";
 
 /**
@@ -137,6 +138,33 @@ function buildWebsiteSections(
       default:
         break;
     }
+  }
+
+  // 3b) R1 — Galerij: uitsluitend als de AI een gallery-achtig beeldvereiste
+  //     plande; blokken tonen abstracte placeholders in de preview (geen
+  //     stock-fabricatie). Bijschriften volgen de geplande beschrijvingen.
+  if (hasGalleryRequirement(specification)) {
+    const count = galleryBlockCount(specification);
+    sections.push({
+      type: "gallery",
+      data: {
+        captions: Array.from({ length: count }, (_, i) => specification.media.imageDescriptions[i] ?? null),
+        accent: templateConfig.accent,
+      },
+    });
+  }
+
+  // 3c) R1 — Testimonials: uitsluitend met ECHTE, in de specification bekende
+  //     uitspraken (content.testimonials); namen/gezichten worden nooit
+  //     verzonnen, dus de preview toont alleen de uitspraken zelf.
+  if (hasRealTestimonials(specification)) {
+    sections.push({
+      type: "testimonials",
+      data: {
+        quotes: specification.content.testimonials.filter((q) => q.trim().length > 0),
+        accent: templateConfig.accent,
+      },
+    });
   }
 
   // 4) Contact — echte gegevens komen DETERMINISTISCH uit de lead-context.

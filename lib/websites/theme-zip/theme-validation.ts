@@ -316,6 +316,77 @@ function validateSecurityAndContent(files: ThemeFile[], errors: string[]): void 
  * Alle controles draaien op alles: een ZIP die hier niet doorheen komt, wordt
  * nooit opgeslagen als geldig artefact.
  */
+/**
+ * 5d. Media-slotverplichtingen (R1 — Media & beelden): de gecontroleerde
+ * secties met beeldsloten (hero/about/services/gallery) MOETEN renderen via
+ * het centrale theme-media-snippet; het snippet zelf moet responsive Shopify-
+ * image_tag-rendering (sizes) gebruiken; alle via render-parameters
+ * doorgegeven placeholder-assets moeten bestaan; en externe afbeeldings-URL's
+ * zijn verboden (geen stock-foto's, geen tracking-pixels, geen fabricatie).
+ */
+function validateMediaSlots(files: ThemeFile[], assetPaths: Set<string>, errors: string[]): void {
+  const byPath = new Map(files.map((f) => [f.path, f.content]));
+
+  // 1. Secties met beeldsloten renderen via het centrale snippet.
+  const MEDIA_SECTION_PATHS = [
+    "sections/hero.liquid",
+    "sections/about.liquid",
+    "sections/services.liquid",
+    "sections/gallery.liquid",
+  ] as const;
+  for (const path of MEDIA_SECTION_PATHS) {
+    const content = byPath.get(path);
+    if (content !== undefined && !content.includes("render 'theme-media'")) {
+      errors.push(
+        `Sectie "${path}" moet beeldsloten renderen via {% render 'theme-media' %} (centrale media-renderer).`
+      );
+    }
+  }
+
+  // 2. Het snippet zelf: responsive Shopify-rendering met sizes + focal point.
+  const snippet = byPath.get("snippets/theme-media.liquid");
+  if (snippet !== undefined) {
+    if (!snippet.includes("image_tag")) {
+      errors.push("snippets/theme-media.liquid moet echte afbeeldingen renderen via image_tag.");
+    }
+    if (!snippet.includes("sizes:")) {
+      errors.push("snippets/theme-media.liquid mist een sizes-attribuut (responsive afbeeldingen vereist).");
+    }
+    if (!snippet.includes("image_mobile")) {
+      errors.push("snippets/theme-media.liquid mist ondersteuning voor een aparte mobiele afbeelding.");
+    }
+    if (!snippet.includes("focal_point")) {
+      errors.push("snippets/theme-media.liquid mist focal-point-ondersteuning (object-position).");
+    }
+  }
+
+  // 3. Placeholder-assets die via render-parameters zijn doorgegeven moeten
+  //    bestaan in assets/ (variable indirection ontsnapt aan de bestaande
+  //    literal-asset_url-controle).
+  const placeholderParam = /placeholder_svg:\s*'([^']+)'/g;
+  for (const file of files) {
+    if (!file.path.endsWith(".liquid")) continue;
+    let m: RegExpExecArray | null;
+    while ((m = placeholderParam.exec(file.content)) !== null) {
+      if (!assetPaths.has(`assets/${m[1]}`)) {
+        errors.push(`"${file.path}" verwijst naar onbekende placeholder-asset "${m[1]}".`);
+      }
+    }
+  }
+
+  // 4. Externe afbeeldings-URL's zijn verboden: alle beelden komen uit
+  //    Shopify-assets of image_picker-settings — nooit van een externe host.
+  const externalMediaPattern = /(src|srcset|data-src)\s*=\s*["']https?:\/\//i;
+  for (const file of files) {
+    if (!file.path.endsWith(".liquid") && !file.path.endsWith(".json")) continue;
+    if (externalMediaPattern.test(file.content)) {
+      errors.push(
+        `Extern afbeeldings-URL in "${file.path}" — beelden mogen alleen via assets of image_picker-settings (geen stock-foto's).`
+      );
+    }
+  }
+}
+
 export function validateThemeFiles(files: ThemeFile[]): ThemeValidationResult {
   const errors: string[] = [];
   const seen = new Set<string>();
@@ -390,6 +461,9 @@ export function validateThemeFiles(files: ThemeFile[]): ThemeValidationResult {
 
   // ---- 4. Liquid-inhoud
   validateLiquidContent(files, assetPaths, snippetPaths, sectionGroupPaths, sectionLiquid, errors);
+
+  // ---- 4b. Media-slotverplichtingen (R1)
+  validateMediaSlots(files, assetPaths, errors);
 
   // ---- 5. Layout-verplichtingen
   const layout = files.find((f) => f.path === "layout/theme.liquid");

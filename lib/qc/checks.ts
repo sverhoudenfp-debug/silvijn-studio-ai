@@ -22,6 +22,30 @@ export interface DeterministicCheckInput {
   website: GeneratedWebsite;
   lead: Lead;
   project: Project;
+  /**
+   * C3e (additief): coverage-samenvatting van het actuele completed
+   * ContentPlan voor dit project, of null wanneer er geen plan is.
+   * Alleen bedoeld voor eerlijke WARNINGS over nog aan te leveren
+   * klant-/merchant-content — nooit voor critical/fail-besluiten.
+   */
+  contentPlanCoverage?: ContentPlanCoverageSummary | null;
+}
+
+/**
+ * C3e: deterministische samenvatting van ContentPlan-coverage voor QC.
+ * Puur data — de service berekent deze uit het actuele completed plan;
+ * de check hieronder beslist er uitsluitend eerlijk over (warnings/info).
+ */
+export interface ContentPlanCoverageSummary {
+  version: number;
+  generatedCount: number;
+  fixedCount: number;
+  customerSlotCount: number;
+  merchantSlotCount: number;
+  /** Soorten die nog klantinput vereisen (uniek, max. 6, ter informatie). */
+  customerKinds: readonly string[];
+  /** Soorten die de merchant nog invult (uniek, max. 6, ter informatie). */
+  merchantKinds: readonly string[];
 }
 
 export interface DeterministicCheckResult {
@@ -61,7 +85,7 @@ function collectSectionText(sections: GeneratedSectionData[]): string {
 }
 
 export function runDeterministicChecks(input: DeterministicCheckInput): DeterministicCheckResult {
-  const { website, lead, project } = input;
+  const { website, lead, project, contentPlanCoverage = null } = input;
   const spec = website.specification;
   const content = website.generatedContent;
   const issues = new IssueCollector();
@@ -367,6 +391,46 @@ export function runDeterministicChecks(input: DeterministicCheckInput): Determin
       issues.add("accessibility", "info", "form_labels", "Contactformulier is aanwezig in de gecontroleerde renderer (presentatie-only in deze fase; echte verzending komt in de delivery-fase).");
     }
     issues.add("accessibility", "info", "wcag_not_audited", "Volledige WCAG-compliance is NIET bewezen: kleurcontrast en keyboard-navigatie vereisen een echte audit (NOT_CHECKED).");
+  }
+
+  // ============================================================
+  // C3e: CONTENTPLAN-COVERAGE — additief, uitsluitend warning/info
+  // ============================================================
+  // Eerlijkheidsregel: ontbrekende klant-/merchant-content is GEEN
+  // kwaliteitsfaalt van de build — het is bewust leeg gelaten, invulbaar
+  // veld ("nog te leveren"). Daarom: warning (zichtbaar in QC), nooit
+  // critical/error, en dus nooit blokkerend voor PASS of gates.
+  if (contentPlanCoverage) {
+    const cov = contentPlanCoverage;
+    if (cov.customerSlotCount > 0) {
+      issues.add(
+        "content",
+        "warning",
+        "contentplan_customer_slots",
+        `${cov.customerSlotCount} contentvelden wachten op klantinput (customer_slot: ${cov.customerKinds.join(", ")}) — lever deze vóór de finale levering; instructies staan in het ContentPlan.`
+      );
+    }
+    if (cov.merchantSlotCount > 0) {
+      issues.add(
+        "content",
+        "warning",
+        "contentplan_merchant_slots",
+        `${cov.merchantSlotCount} velden zijn bewust leeg gelaten voor de merchant (merchant_slot: ${cov.merchantKinds.join(", ")}) — invulbaar in Shopify, geen verzonnen tekst.`
+      );
+    }
+    issues.add(
+      "content",
+      "info",
+      "contentplan_coverage",
+      `ContentPlan v${cov.version}: ${cov.generatedCount} generated, ${cov.fixedCount} fixed, ${cov.customerSlotCount} customer_slot, ${cov.merchantSlotCount} merchant_slot.`
+    );
+  } else {
+    issues.add(
+      "content",
+      "info",
+      "contentplan_absent",
+      "Geen completed ContentPlan voor dit project — contentplan-coverage is niet gecontroleerd (bestaande generatie-flow, additieve check)."
+    );
   }
 
   // ============================================================

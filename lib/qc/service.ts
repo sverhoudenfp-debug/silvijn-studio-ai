@@ -8,7 +8,8 @@ import { readAIAttemptMetadata } from "@/lib/ai/errors";
 import { getGeneratedWebsiteRepository } from "@/lib/websites/repository";
 import type { GeneratedWebsite } from "@/lib/websites/types";
 import type { QCAnalysis } from "./ai-types";
-import { runDeterministicChecks } from "./checks";
+import { runDeterministicChecks, type ContentPlanCoverageSummary } from "./checks";
+import { getContentPlanRepository } from "@/lib/websites/content/content-plan-repository";
 import { computeOverallResult, computeScore, summarizeCategoryResults } from "./rules";
 import { getQualityControlRepository } from "./repository";
 import {
@@ -31,6 +32,55 @@ import { worstResult } from "./types";
  * READY_FOR_SILVIJN → APPROVED is alléén een menselijke actie
  * (server action). Er is geen override.
  */
+
+/**
+ * C3e (additief): coverage-samenvatting van het actuele completed
+ * ContentPlan voor een project — puur informatief voor de deterministische
+ * QC-warnings. Geen plan → null → check meldt NOT_CHECKED (info).
+ * Fouten hier mogen QC nooit blokkeren (additieve check).
+ */
+async function summarizeContentPlanCoverage(projectId: string): Promise<ContentPlanCoverageSummary | null> {
+  try {
+    const records = await getContentPlanRepository().listByProject(projectId);
+    const completed = records
+      .filter((r) => r.status === "completed" && r.plan !== null)
+      .sort((a, b) => b.version - a.version)[0];
+    if (!completed?.plan) return null;
+    const plan = completed.plan;
+    let generated = 0;
+    let fixed = 0;
+    let customer = 0;
+    let merchant = 0;
+    const customerKinds = new Set<string>();
+    const merchantKinds = new Set<string>();
+    for (const page of plan.pages) {
+      for (const unit of page.units) {
+        if (unit.status === "generated") generated += 1;
+        else if (unit.status === "fixed") fixed += 1;
+        else if (unit.status === "customer_slot") {
+          customer += 1;
+          customerKinds.add(unit.kind);
+        } else if (unit.status === "merchant_slot") {
+          merchant += 1;
+          merchantKinds.add(unit.kind);
+        }
+      }
+    }
+    const take6 = (set: Set<string>) => [...set].slice(0, 6);
+    return {
+      version: completed.version,
+      generatedCount: generated,
+      fixedCount: fixed,
+      customerSlotCount: customer,
+      merchantSlotCount: merchant,
+      customerKinds: take6(customerKinds),
+      merchantKinds: take6(merchantKinds),
+    };
+  } catch {
+    // Additieve check: bij een repo-fout géén plan als coverage rapporteren.
+    return null;
+  }
+}
 
 export class QualityControlError extends Error {
   constructor(message: string) {
@@ -164,7 +214,8 @@ export class QualityControlService {
     });
 
     // ---- 1. DETERMINISTISCHE CHECKS (prioriteit voor harde regels)
-    const deterministic = runDeterministicChecks({ website, lead, project });
+    const contentPlanCoverage = await summarizeContentPlanCoverage(project.id);
+    const deterministic = runDeterministicChecks({ website, lead, project, contentPlanCoverage });
     const mergedChecks: QCCategoryCheck[] = deterministic.checks.map((check) => ({ ...check, issues: [...check.issues] }));
     const mergedIssues: QCIssue[] = [...deterministic.issues];
 

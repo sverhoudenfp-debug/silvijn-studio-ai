@@ -43,6 +43,23 @@ import { contentPlanSchema, type ContentPlan, type ContentUnit } from "./content
  *    conversiedoel; de rest wordt customer_slot + missingInformation.
  * 6. Het resultaat doorloopt daarna het C3a-schema + de C3a-consistency
  *    (de service roept die afzonderlijk aan) — dubbele afdwang.
+ *
+ * 7. BEWUSTE ONTWERPKEUZE / GEACCEPTEERD REST-RISICO (C3e-besluit,
+ *    Silvijn 2026-09-20): voor NIET-fact-locked commerciële AI-copy
+ *    (status "generated") geldt de verbatim-evidence-afdwang van regel 2
+ *    NIET — alleen aanwezigheidscontrole (regel 3). De gekozen beveiliging
+ *    voor deze units is de combinatie van:
+ *      (a) evidence-aanwezigheid verplicht (geen evidence → customer_slot),
+ *      (b) de fabricagescan in de ZIP-validatie (prijzen/reviews/
+ *          certificeringen/openingstijden/contact e.d.), en
+ *      (c) AI-copy krijgt expliciet GEEN trusted-claims-status: alleen
+ *          fact-locked "fixed"-units worden aan trustedClaims toegevoegd
+ *          (C3d), dus AI-geformuleerde commerciële tekst kan nooit als
+ *          bewezen feit de ZIP in stromen.
+ *    Geen nieuwe architectuurlaag voor verbatim-evidence-matching op
+ *    niet-fact-locked copy; het rest-risico (AI reformuleert commerciële
+ *    bewoording zodanig dat (b)/(c) niets vangen) is bewust geaccepteerd
+ *    en hier vastgelegd.
  */
 
 export class ContentPlanFinalizeError extends Error {

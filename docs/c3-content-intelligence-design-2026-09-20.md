@@ -241,6 +241,18 @@ Deterministische consistentichecks (in `content-policy.ts`):
    verbatim in evidence. De bestaande fabricatie-regels (prijzen, reviews,
    certificeringen, diensten, openingstijden, contactgegevens) blijven
    onaangeroerd en gelden nu óók per unit in plaats van alleen plan-breed.
+   **BESLOTEN (C3e-afronding, 2026-09-20 — bewuste ontwerpkeuze / geaccepteerd
+   rest-risico):** de verbatim-afdwang van punt 2 geldt volledig voor de
+   `evidence`-fragmenten zélf, maar de uiteindelijke unit-tékst van
+   NIET-fact-locked commerciële AI-copy wordt alleen op evidence-aanwezigheid
+   gecontroleerd, niet woord-voor-woord tegen de SourceBundle. De gekozen
+   beveiliging voor deze units is de combinatie van (a) verplichte
+   evidence-aanwezigheid (geen evidence → customer_slot), (b) de fabricagescan
+   in de ZIP-validatie, en (c) géén trusted-claims-status voor AI-copy (alleen
+   fact-locked `fixed`-units komen in trustedClaims, C3d). Er komt bewust GEEN
+   nieuwe architectuurlaag voor verbatim-tekstmatching op niet-fact-locked
+   copy; het rest-risico (reformulering die (b)/(c) niet vangt) is geaccepteerd
+   en vastgelegd in de finalizer-kopdocumentatie.
 4. **Policy-override (deterministisch wint)**: de AI-uitkomst is een advies;
    `content-policy.ts` kan elk unit dat het beleid schendt deterministisch
    omzetten naar `customer_slot` (met instructie) — hetzelfde patroon als

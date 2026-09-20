@@ -2,6 +2,15 @@ import type { WebsiteBlueprint, BlueprintPage, BlueprintSectionInstance } from "
 import type { BlueprintSectionType } from "../blueprint/section-registry";
 import type { WebsiteSpecification } from "../types";
 import type { WebsiteContactContext } from "../generator";
+import type { ContentPlan, ContentUnit } from "../content/content-plan";
+import type { ContentUnitKind } from "../content/content-slots";
+import {
+  buildContentPlanIndex,
+  resolveSlotText,
+  resolveBlockTexts,
+  unitRenderText,
+  type PageContentIndex,
+} from "../content/content-plan-consumption";
 
 /**
  * BLUEPRINT-COMPOSITIE (Fase C, 2026-09-19) — de deterministische vertaling
@@ -84,6 +93,44 @@ export interface BlueprintCompositionResult {
   notes: string[];
 }
 
+/**
+ * C3d: ContentPlan-units die per sectietype daadwerkelijk naar een
+ * instantie-setting of blok-setting vertalen. Soorten die hier NIET in
+ * staan (bijv. contact microcopy: themabreed via locales) worden eerlijk
+ * als niet-instantieerbaar genoteerd — nooit stil weggegooid.
+ */
+const RENDERABLE_UNIT_KINDS: Record<BlueprintSectionType, ReadonlySet<string>> = {
+  hero: new Set(["headline", "subheadline", "cta_label", "cta_secondary_label"]),
+  usp_band: new Set(["item_label", "item_hint"]),
+  stats: new Set(["stat_label", "stat_value"]),
+  services: new Set(["item_title", "item_body"]),
+  about: new Set(["heading", "body", "alt_text"]),
+  process: new Set(["step_title", "step_body"]),
+  gallery: new Set(["caption", "alt_text"]),
+  projects: new Set(["item_title", "item_body"]),
+  testimonials: new Set(["quote", "quote_author"]),
+  team: new Set(["member_name", "member_role"]),
+  benefits: new Set(["item_text"]),
+  faq: new Set(["faq_question", "faq_answer"]),
+  rates: new Set(["item_title", "rate_value"]),
+  newsletter: new Set(["heading", "body", "cta_label"]),
+  booking: new Set(["heading", "subheading", "cta_label"]),
+  cta: new Set(["cta_label", "body"]),
+  contact: new Set(["heading", "subheading"]),
+  rich_text: new Set(["heading", "body"]),
+};
+
+/** C3d: klassificatie van één instantie-pad voor de rapportage. */
+interface ContentApplicationLog {
+  appliedPaths: Set<string>;
+  appliedCount: number;
+  fixedCount: number;
+  customerSlots: string[];
+  merchantSlots: string[];
+  unrenderable: string[];
+  skippedPaths: string[];
+}
+
 interface CompositionContext {
   spec: WebsiteSpecification;
   contact: WebsiteContactContext;
@@ -115,13 +162,37 @@ function variantSettings(instance: BlueprintSectionInstance, backgroundDefault: 
   };
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** Richtext-wrap: één tekstregel → één alinea. */
+function paragraphHtml(value: string | null): string | null {
+  return value != null && value.trim().length > 0 ? `<p>${escapeHtml(value)}</p>` : null;
+}
+
 /**
  * Instantie → Shopify-template-sectie-entry (settings + blocks + block_order).
  * Volledig deterministisch: geen AI, geen toeval, geen ongeplande secties.
+ *
+ * C3d: wanneer een ContentPlan-unit bestaat voor exact dit pad
+ * ("<pageKey>/<sectionIndex>") is de unit authoritatief voor zijn slot:
+ * - generated/fixed → de unit-tekst (evidence-gedragen c.q. verbatim);
+ * - customer_slot/merchant_slot → null (bewust leeg, invulbaar voor
+ *   klant/merchant — nooit als verzonnen tekst weergegeven);
+ * - géén unit → de bestaande specification-flow (legacy, byte-identiek).
+ * De blueprint-architectuur (types, volgorde, layouts, CTA-doelen) blijft
+ * onverkort leidend; content vult alléén de bestaande slots.
  */
 function instanceToSectionEntry(
   instance: BlueprintSectionInstance,
-  ctx: CompositionContext
+  ctx: CompositionContext,
+  units: ReadonlyMap<ContentUnitKind, readonly ContentUnit[]> | null
 ): { type: string; settings: Record<string, unknown>; blocks?: Record<string, Record<string, unknown>>; block_order?: string[] } {
   const { spec, contact } = ctx;
   const ctaLink = instance.cta ? resolveCtaTarget(instance.cta.target, ctx) : null;
@@ -134,12 +205,11 @@ function instanceToSectionEntry(
         settings: {
           ...variantSettings(instance, "default"),
           eyebrow: spec.seo.localArea ?? `${spec.business.industry} in ${spec.business.city}`,
-          heading: spec.content.headline,
-          subheading: spec.content.subheadline ?? spec.content.valueProposition,
-          cta_label: instance.cta?.label ?? spec.content.ctaPrimaryText,
+          heading: resolveSlotText(units, "headline", spec.content.headline),
+          subheading: resolveSlotText(units, "subheadline", spec.content.subheadline ?? spec.content.valueProposition),
+          cta_label: resolveSlotText(units, "cta_label", instance.cta?.label ?? spec.content.ctaPrimaryText),
           cta_link: ctaLink ?? "/pages/contact",
-          cta_secondary_label: spec.content.ctaSecondaryText,
-          cta_secondary_link: "#main-content",
+          cta_secondary_label: resolveSlotText(units, "cta_secondary_label", spec.content.ctaSecondaryText),
           image_alt: firstMedia?.alt ?? null,
         },
       };
@@ -147,15 +217,18 @@ function instanceToSectionEntry(
     case "usp_band": {
       // Echte USP's alléén: trustElements.usps hebben een verplichte bron
       // (requirements|questionnaire|lead_notes). Geen USP's = lege,
-      // bewerkbare blokken; nooit verzonnen argumenten.
+      // bewerkbare blokken; nooit verzonnen argumenten. C3d: fact-locked
+      // item_label/item_hint-units zijn verbatim authoritatief.
       const usps = ctx.trust.usps;
       const planned = instance.blocks.length;
+      const labels = resolveBlockTexts(units, "item_label", planned, usps.map((u) => u.label));
+      const hints = resolveBlockTexts(units, "item_hint", planned, usps.map(() => null));
       const blocks: Record<string, Record<string, unknown>> = {};
       const order: string[] = [];
-      const count = Math.max(usps.length, planned);
+      const count = Math.max(planned, labels.length, hints.length);
       for (let i = 0; i < count; i += 1) {
         const key = `usp-${i + 1}`;
-        blocks[key] = { type: "usp", settings: { label: usps[i]?.label ?? null, description: null } };
+        blocks[key] = { type: "usp", settings: { label: labels[i] ?? null, description: hints[i] ?? null } };
         order.push(key);
       }
       return {
@@ -170,12 +243,14 @@ function instanceToSectionEntry(
       // de registry verbiedt expliciet het verzinnen van statistieken.
       const stats = ctx.trust.stats;
       const planned = instance.blocks.length;
+      const labels = resolveBlockTexts(units, "stat_label", planned, stats.map((s) => s.label));
+      const values = resolveBlockTexts(units, "stat_value", planned, stats.map((s) => s.value));
       const blocks: Record<string, Record<string, unknown>> = {};
       const order: string[] = [];
-      const count = Math.max(stats.length, planned);
+      const count = Math.max(planned, labels.length, values.length);
       for (let i = 0; i < count; i += 1) {
         const key = `stat-${i + 1}`;
-        blocks[key] = { type: "stat", settings: { label: stats[i]?.label ?? null, value: stats[i]?.value ?? null } };
+        blocks[key] = { type: "stat", settings: { label: labels[i] ?? null, value: values[i] ?? null } };
         order.push(key);
       }
       return {
@@ -188,15 +263,16 @@ function instanceToSectionEntry(
     case "services": {
       const services = spec.content.services;
       const planned = instance.blocks.length;
+      const titles = resolveBlockTexts(units, "item_title", planned, services.map((s) => s.title));
+      const bodies = resolveBlockTexts(units, "item_body", planned, services.map((s) => s.description));
       const blocks: Record<string, Record<string, unknown>> = {};
       const order: string[] = [];
-      const count = Math.max(services.length, planned);
+      const count = Math.max(planned, titles.length, bodies.length);
       for (let i = 0; i < count; i += 1) {
         const key = `service-${i + 1}`;
-        const source = services[i] ?? null;
         blocks[key] = {
           type: "service",
-          settings: { title: source?.title ?? null, description: source?.description ?? null },
+          settings: { title: titles[i] ?? null, description: bodies[i] ?? null },
         };
         order.push(key);
       }
@@ -209,25 +285,30 @@ function instanceToSectionEntry(
     }
     case "about": {
       const firstMedia = instance.media[0] ?? null;
+      const bodyRaw = resolveSlotText(units, "body", spec.content.about ?? null);
       return {
         type: SECTION_FILE_NAMES.about,
         settings: {
           ...variantSettings(instance, "surface"),
-          heading: `Over ${spec.business.businessName}`,
-          body: spec.content.about ? `<p>${escapeHtml(spec.content.about)}</p>` : null,
+          heading: resolveSlotText(units, "heading", `Over ${spec.business.businessName}`),
+          body: paragraphHtml(bodyRaw),
           image_position: "right",
-          image_alt: firstMedia?.alt ?? null,
+          image_alt: resolveSlotText(units, "alt_text", firstMedia?.alt ?? null),
         },
       };
     }
     case "process": {
+      const planned = instance.blocks.length;
+      const titles = resolveBlockTexts(units, "step_title", planned, []);
+      const bodies = resolveBlockTexts(units, "step_body", planned, []);
       const blocks: Record<string, Record<string, unknown>> = {};
       const order: string[] = [];
-      instance.blocks.forEach((_, i) => {
+      const count = Math.max(planned, titles.length, bodies.length);
+      for (let i = 0; i < count; i += 1) {
         const key = `step-${i + 1}`;
-        blocks[key] = { type: "step", settings: { title: null, description: null } };
+        blocks[key] = { type: "step", settings: { title: titles[i] ?? null, description: bodies[i] ?? null } };
         order.push(key);
-      });
+      }
       return {
         type: SECTION_FILE_NAMES.process,
         settings: { ...variantSettings(instance, "default"), heading: "Zo werken wij" },
@@ -236,16 +317,20 @@ function instanceToSectionEntry(
       };
     }
     case "gallery": {
+      const planned = instance.blocks.length;
+      const captions = resolveBlockTexts(units, "caption", planned, []);
+      const alts = resolveBlockTexts(units, "alt_text", planned, instance.blocks.map((b, i) => instance.media[i]?.alt ?? b.hint ?? null));
       const blocks: Record<string, Record<string, unknown>> = {};
       const order: string[] = [];
-      instance.blocks.forEach((block, i) => {
+      const count = Math.max(planned, captions.length, alts.length);
+      for (let i = 0; i < count; i += 1) {
         const key = `image-${i + 1}`;
         blocks[key] = {
           type: "gallery_image",
-          settings: { caption: null, alt: instance.media[i]?.alt ?? block.hint ?? null },
+          settings: { caption: captions[i] ?? null, alt: alts[i] ?? null },
         };
         order.push(key);
-      });
+      }
       return {
         type: SECTION_FILE_NAMES.gallery,
         settings: { ...variantSettings(instance, "default"), heading: "Impressie", subheading: null },
@@ -254,13 +339,17 @@ function instanceToSectionEntry(
       };
     }
     case "projects": {
+      const planned = instance.blocks.length;
+      const titles = resolveBlockTexts(units, "item_title", planned, []);
+      const bodies = resolveBlockTexts(units, "item_body", planned, []);
       const blocks: Record<string, Record<string, unknown>> = {};
       const order: string[] = [];
-      instance.blocks.forEach((_, i) => {
+      const count = Math.max(planned, titles.length, bodies.length);
+      for (let i = 0; i < count; i += 1) {
         const key = `project-${i + 1}`;
-        blocks[key] = { type: "project", settings: { title: null, description: null } };
+        blocks[key] = { type: "project", settings: { title: titles[i] ?? null, description: bodies[i] ?? null } };
         order.push(key);
-      });
+      }
       return {
         type: SECTION_FILE_NAMES.projects,
         settings: { ...variantSettings(instance, "default"), heading: "Ons werk" },
@@ -269,15 +358,22 @@ function instanceToSectionEntry(
       };
     }
     case "testimonials": {
-      // Echte uitspraken alléén (content.testimonials); auteur blijft leeg.
+      // Echte uitspraken alléén; auteur blijft leeg tenzij echt bekend.
       const quotes = spec.content.testimonials.filter((q) => q.trim().length > 0);
+      const planned = instance.blocks.length;
+      const quoteTexts = resolveBlockTexts(units, "quote", planned, quotes);
+      const authors = resolveBlockTexts(units, "quote_author", planned, []);
       const blocks: Record<string, Record<string, unknown>> = {};
       const order: string[] = [];
-      quotes.forEach((quote, i) => {
+      const count = Math.max(quoteTexts.length, authors.length);
+      for (let i = 0; i < count; i += 1) {
         const key = `testimonial-${i + 1}`;
-        blocks[key] = { type: "testimonial", settings: { quote, author: null } };
+        blocks[key] = {
+          type: "testimonial",
+          settings: { quote: quoteTexts[i] ?? null, author: authors[i] ?? null },
+        };
         order.push(key);
-      });
+      }
       return {
         type: SECTION_FILE_NAMES.testimonials,
         settings: { ...variantSettings(instance, "surface"), heading: "Wat klanten zeggen" },
@@ -285,13 +381,17 @@ function instanceToSectionEntry(
       };
     }
     case "team": {
+      const planned = instance.blocks.length;
+      const names = resolveBlockTexts(units, "member_name", planned, []);
+      const roles = resolveBlockTexts(units, "member_role", planned, []);
       const blocks: Record<string, Record<string, unknown>> = {};
       const order: string[] = [];
-      instance.blocks.forEach((_, i) => {
+      const count = Math.max(planned, names.length, roles.length);
+      for (let i = 0; i < count; i += 1) {
         const key = `member-${i + 1}`;
-        blocks[key] = { type: "member", settings: { name: null, role: null } };
+        blocks[key] = { type: "member", settings: { name: names[i] ?? null, role: roles[i] ?? null } };
         order.push(key);
-      });
+      }
       return {
         type: SECTION_FILE_NAMES.team,
         settings: { ...variantSettings(instance, "default"), heading: "Ons team" },
@@ -302,12 +402,13 @@ function instanceToSectionEntry(
     case "benefits": {
       const benefits = spec.content.benefits;
       const planned = instance.blocks.length;
+      const texts = resolveBlockTexts(units, "item_text", planned, benefits);
       const blocks: Record<string, Record<string, unknown>> = {};
       const order: string[] = [];
-      const count = Math.max(benefits.length, planned);
+      const count = Math.max(planned, texts.length);
       for (let i = 0; i < count; i += 1) {
         const key = `benefit-${i + 1}`;
-        blocks[key] = { type: "benefit", settings: { text: benefits[i] ?? null } };
+        blocks[key] = { type: "benefit", settings: { text: texts[i] ?? null } };
         order.push(key);
       }
       return {
@@ -320,17 +421,18 @@ function instanceToSectionEntry(
     case "faq": {
       const faq = spec.content.faq;
       const planned = instance.blocks.length;
+      const questions = resolveBlockTexts(units, "faq_question", planned, faq.map((f) => f.question));
+      const answersRaw = resolveBlockTexts(units, "faq_answer", planned, faq.map((f) => f.answer));
       const blocks: Record<string, Record<string, unknown>> = {};
       const order: string[] = [];
-      const count = Math.max(faq.length, planned);
+      const count = Math.max(planned, questions.length, answersRaw.length);
       for (let i = 0; i < count; i += 1) {
         const key = `question-${i + 1}`;
-        const source = faq[i] ?? null;
         blocks[key] = {
           type: "question",
           settings: {
-            question: source?.question ?? null,
-            answer: source ? `<p>${escapeHtml(source.answer)}</p>` : null,
+            question: questions[i] ?? null,
+            answer: paragraphHtml(answersRaw[i] ?? null),
           },
         };
         order.push(key);
@@ -343,13 +445,17 @@ function instanceToSectionEntry(
       };
     }
     case "rates": {
+      const planned = instance.blocks.length;
+      const services = resolveBlockTexts(units, "item_title", planned, []);
+      const prices = resolveBlockTexts(units, "rate_value", planned, []);
       const blocks: Record<string, Record<string, unknown>> = {};
       const order: string[] = [];
-      instance.blocks.forEach((_, i) => {
+      const count = Math.max(planned, services.length, prices.length);
+      for (let i = 0; i < count; i += 1) {
         const key = `rate-${i + 1}`;
-        blocks[key] = { type: "rate_item", settings: { service: null, price: null } };
+        blocks[key] = { type: "rate_item", settings: { service: services[i] ?? null, price: prices[i] ?? null } };
         order.push(key);
-      });
+      }
       return {
         type: SECTION_FILE_NAMES.rates,
         settings: { ...variantSettings(instance, "default"), heading: "Tarieven" },
@@ -362,8 +468,9 @@ function instanceToSectionEntry(
         type: SECTION_FILE_NAMES.newsletter,
         settings: {
           ...variantSettings(instance, "surface"),
-          heading: "Blijf op de hoogte",
-          subheading: null,
+          heading: resolveSlotText(units, "heading", "Blijf op de hoogte"),
+          subheading: resolveSlotText(units, "body", null),
+          button_label: resolveSlotText(units, "cta_label", null),
         },
       };
     }
@@ -372,9 +479,9 @@ function instanceToSectionEntry(
         type: SECTION_FILE_NAMES.booking,
         settings: {
           ...variantSettings(instance, "default"),
-          heading: instance.cta?.label ?? "Maak een afspraak",
-          subheading: spec.content.contactIntro,
-          cta_label: instance.cta?.label ?? spec.content.ctaPrimaryText,
+          heading: resolveSlotText(units, "heading", instance.cta?.label ?? "Maak een afspraak"),
+          subheading: resolveSlotText(units, "subheading", spec.content.contactIntro),
+          cta_label: resolveSlotText(units, "cta_label", instance.cta?.label ?? spec.content.ctaPrimaryText),
           cta_link: ctaLink ?? (ctx.contactPageSlug ? `/pages/${ctx.contactPageSlug}` : "#contact"),
         },
       };
@@ -384,9 +491,9 @@ function instanceToSectionEntry(
         type: SECTION_FILE_NAMES.cta,
         settings: {
           ...variantSettings(instance, "default"),
-          heading: instance.cta?.label ?? spec.content.ctaPrimaryText,
-          subheading: spec.content.contactIntro,
-          cta_label: instance.cta?.label ?? spec.content.ctaPrimaryText,
+          heading: resolveSlotText(units, "cta_label", instance.cta?.label ?? spec.content.ctaPrimaryText),
+          subheading: resolveSlotText(units, "body", spec.content.contactIntro),
+          cta_label: resolveSlotText(units, "cta_label", instance.cta?.label ?? spec.content.ctaPrimaryText),
           cta_link: ctaLink ?? "/pages/contact",
         },
       };
@@ -398,8 +505,8 @@ function instanceToSectionEntry(
         type: SECTION_FILE_NAMES.contact,
         settings: {
           ...variantSettings(instance, "surface"),
-          heading: "Contact",
-          intro: spec.content.contactIntro,
+          heading: resolveSlotText(units, "heading", "Contact"),
+          intro: resolveSlotText(units, "subheading", spec.content.contactIntro),
           phone: contact.phone,
           email: contact.email,
           address: [contact.address, contact.city].filter(Boolean).join(", ") || null,
@@ -408,13 +515,20 @@ function instanceToSectionEntry(
       };
     }
     case "rich_text": {
+      const planned = instance.blocks.length;
+      const headingText = resolveSlotText(units, "heading", null);
+      const bodyTexts = resolveBlockTexts(units, "body", planned, []);
+      const paragraphs: { body: string | null }[] = [];
+      if (headingText != null) paragraphs.push({ body: `<h2>${escapeHtml(headingText)}</h2>` });
+      for (const text of bodyTexts) paragraphs.push({ body: paragraphHtml(text) });
+      const count = Math.max(planned, paragraphs.length);
       const blocks: Record<string, Record<string, unknown>> = {};
       const order: string[] = [];
-      instance.blocks.forEach((_, i) => {
+      for (let i = 0; i < count; i += 1) {
         const key = `paragraph-${i + 1}`;
-        blocks[key] = { type: "paragraph", settings: { body: null } };
+        blocks[key] = { type: "paragraph", settings: { body: paragraphs[i]?.body ?? null } };
         order.push(key);
-      });
+      }
       return {
         type: SECTION_FILE_NAMES.rich_text,
         settings: { ...variantSettings(instance, "default") },
@@ -424,17 +538,44 @@ function instanceToSectionEntry(
   }
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+/**
+ * C3d: classificeert alle units op één pad voor de rapportage — één bron
+ * van waarheid voor "toegepast / wacht op klant / wacht op merchant /
+ * niet-instantieerbaar".
+ */
+function logPathApplication(
+  path: string,
+  type: BlueprintSectionType,
+  units: ReadonlyMap<string, readonly ContentUnit[]>,
+  log: ContentApplicationLog
+): void {
+  const renderable = RENDERABLE_UNIT_KINDS[type];
+  for (const [kind, list] of units) {
+    for (const unit of list) {
+      const label = `${path}/${kind}`;
+      if (unit.status === "customer_slot") {
+        log.customerSlots.push(label);
+      } else if (unit.status === "merchant_slot") {
+        log.merchantSlots.push(label);
+      } else if (!renderable.has(kind)) {
+        log.unrenderable.push(label);
+      } else if (unitRenderText(unit) != null) {
+        log.appliedPaths.add(path);
+        log.appliedCount += 1;
+        if (unit.status === "fixed") log.fixedCount += 1;
+      }
+    }
+  }
 }
 
 /** Één blueprint-pagina → Shopify JSON-template (sections + order). */
-function composePage(page: BlueprintPage, ctx: CompositionContext): ComposedTemplate {
+function composePage(
+  page: BlueprintPage,
+  ctx: CompositionContext,
+  pageContent: PageContentIndex | null,
+  pageKey: string,
+  log: ContentApplicationLog
+): ComposedTemplate {
   const isHome = isHomeKey(page.key);
   // Slug komt uit de context-map: die is al deterministisch gedupliceerd
   // (één bron van waarheid; CTA-resolutie en template-pad delen dezelfde slug).
@@ -444,7 +585,7 @@ function composePage(page: BlueprintPage, ctx: CompositionContext): ComposedTemp
   const order: string[] = [];
   const typeCounters = new Map<string, number>();
 
-  // Sectieritme (Rendering-stap 1, 2026-09-19) — een RENdERING-besluit,
+  // Sectieritme (Rendering-stap 1, 2026-09-19) — een RENDERING-besluit,
   // geen herplanning: wanneer twee aangrenzende secties allebei op de
   // neutrale "default"-achtergrond staan (het blueprint plant zelf geen
   // contrast), krijgt de tweede deterministisch het contrastvlak
@@ -453,8 +594,20 @@ function composePage(page: BlueprintPage, ctx: CompositionContext): ComposedTemp
   let rhythmAdjustments = 0;
   let previousBackground: string | null = null;
 
-  for (const instance of page.sectionInstances) {
-    const entry = instanceToSectionEntry(instance, ctx);
+  // C3d: paden met units die naar een niet-bestaande instantie verwijzen
+  // (zou C3a-consistency al uitsluiten) worden eerlijk gerapporteerd.
+  const unitsByPath = pageContent?.unitsByPath ?? null;
+  const consumedPaths = new Set<string>();
+
+  for (let index = 0; index < page.sectionInstances.length; index += 1) {
+    const instance = page.sectionInstances[index];
+    const path = `${pageKey}/${index}`;
+    const units = unitsByPath?.get(path) ?? null;
+    if (units) {
+      consumedPaths.add(path);
+      logPathApplication(path, instance.type, units, log);
+    }
+    const entry = instanceToSectionEntry(instance, ctx, units);
     const background = typeof entry.settings.background === "string" ? entry.settings.background : "default";
     if (background === "default" && previousBackground === "default") {
       entry.settings.background = "surface";
@@ -470,6 +623,12 @@ function composePage(page: BlueprintPage, ctx: CompositionContext): ComposedTemp
     order.push(key);
   }
 
+  if (unitsByPath) {
+    for (const path of unitsByPath.keys()) {
+      if (!consumedPaths.has(path)) log.skippedPaths.push(path);
+    }
+  }
+
   return {
     path: isHome ? "templates/index.json" : `templates/page.${slug}.json`,
     data: { sections, order },
@@ -480,13 +639,21 @@ function composePage(page: BlueprintPage, ctx: CompositionContext): ComposedTemp
 /**
  * Volledige blueprint → alle pagina-templates. Homepage én subpagina's komen
  * allebei uit het blueprint; de volgorde en sectiekeuze zijn exact.
+ *
+ * C3d (2026-09-20): een actueel completed ContentPlan vult per exact pad
+ * de content-slots (generated/fixed = tekst, customer/merchant_slot =
+ * bewust leeg). Zonder ContentPlan (of zonder blueprint) is de output
+ * byte-identiek aan de pre-C3d-flow: volledige backward compatibility.
  */
 export function composeBlueprintTemplates(input: {
   blueprint: WebsiteBlueprint;
   spec: WebsiteSpecification;
   contact: WebsiteContactContext;
+  /** C3d: optioneel — het actuele, geverifieerde ContentPlan. */
+  contentPlan?: ContentPlan | null;
 }): BlueprintCompositionResult {
   const { blueprint, spec, contact } = input;
+  const contentPlan = input.contentPlan ?? null;
   const notes: string[] = [];
 
   // Paginaslug-map voor CTA-resolutie (home → "/").
@@ -523,9 +690,40 @@ export function composeBlueprintTemplates(input: {
   }
 
   const ctx: CompositionContext = { spec, contact, trust: blueprint.trustElements, pageKeyToSlug, contactPageSlug };
+
+  // C3d: deterministische unit-index (puur; herbruikbaar en testbaar).
+  const contentIndex = contentPlan ? buildContentPlanIndex(contentPlan) : null;
+  const log: ContentApplicationLog = {
+    appliedPaths: new Set<string>(),
+    appliedCount: 0,
+    fixedCount: 0,
+    customerSlots: [],
+    merchantSlots: [],
+    unrenderable: [],
+    skippedPaths: [],
+  };
+
   const templates: ComposedTemplate[] = [];
   for (const page of blueprint.pages) {
-    templates.push(composePage(page, ctx));
+    const pageContent = contentIndex?.get(page.key) ?? null;
+    if (contentIndex && !pageContent) {
+      notes.push(
+        `ContentPlan dekt pagina "${page.key}" niet — de sectiecontent van deze pagina valt terug op de specificatie (niets verzonnen).`
+      );
+    }
+    templates.push(composePage(page, ctx, pageContent, page.key, log));
+  }
+
+  // C3d: paginas met pagina-SEO uit het plan eerlijk noteren (het theme
+  // kent geen per-pagina SEO-velden; handover zet ze in de Shopify-admin).
+  if (contentIndex) {
+    for (const [key, pageContent] of contentIndex) {
+      if (pageContent.seo.title != null || pageContent.seo.metaDescription != null) {
+        notes.push(
+          `Pagina-SEO voor "${key}" staat in het ContentPlan (title/metaDescription) — wordt bij de handover in de Shopify-admin gezet; het theme bevat geen per-pagina SEO-velden.`
+        );
+      }
+    }
   }
 
   // Notities (eerlijk, deterministisch — voor ZIP-rapportage/QC-inzage).
@@ -544,6 +742,33 @@ export function composeBlueprintTemplates(input: {
     notes.push(
       `Sectieritme: ${rhythmTotal} sectie(s) kreeg deterministisch het contrastvlak "surface" waar het blueprint aangrenzende "default"-secties plande (sectievolgorde en expliciete keuzes ongewijzigd).`
     );
+  }
+
+  // C3d-rapportage: alleen wanneer er daadwerkelijk een plan werd geconsumeerd.
+  if (contentPlan) {
+    notes.push(
+      `ContentPlan-consumptie: ${log.appliedCount} unit(s) toegepast op ${log.appliedPaths.size} sectie-instantie(s) (${log.fixedCount} fact-locked verbatim, ${log.appliedCount - log.fixedCount} evidence-gedragen); de blueprint-volgorde en sectiekeuze zijn exact ongewijzigd.`
+    );
+    if (log.customerSlots.length > 0) {
+      notes.push(
+        `${log.customerSlots.length} slot(s) wachten op klantcontent en zijn bewust leeg gelaten (invulbaar; nooit als verzonnen tekst weergegeven): ${log.customerSlots.slice(0, 8).join(", ")}${log.customerSlots.length > 8 ? ", …" : ""}.`
+      );
+    }
+    if (log.merchantSlots.length > 0) {
+      notes.push(
+        `${log.merchantSlots.length} slot(s) laten bewust ruimte voor de merchant (beeld/keuze in de theme editor): ${log.merchantSlots.slice(0, 8).join(", ")}${log.merchantSlots.length > 8 ? ", …" : ""}.`
+      );
+    }
+    if (log.unrenderable.length > 0) {
+      notes.push(
+        `${log.unrenderable.length} unit(s) hebben geen instantie-setting in deze sectie (themabreed geregeld via locales/defaults) en zijn niet afzonderlijk gerenderd: ${log.unrenderable.slice(0, 8).join(", ")}${log.unrenderable.length > 8 ? ", …" : ""}.`
+      );
+    }
+    if (log.skippedPaths.length > 0) {
+      notes.push(
+        `ContentPlan verwijst naar ${log.skippedPaths.length} niet-bestaand sectie-pad — genegeerd, de blueprint-architectuur is leidend: ${log.skippedPaths.slice(0, 5).join(", ")}.`
+      );
+    }
   }
 
   return { templates, notes };

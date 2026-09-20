@@ -13,7 +13,7 @@ import {
   type ContentSourceInput,
   type QuestionnaireSourceInput,
 } from "./content-source";
-import { validateContentPlanConsistency } from "./content-plan";
+import { validateContentPlanConsistency, contentPlanSchema } from "./content-plan";
 import type { ContentPlan } from "./content-plan";
 import {
   finalizeRawContentPlan,
@@ -67,6 +67,41 @@ export class ContentPlanUpToDateError extends ContentPlanError {
     );
     this.name = "ContentPlanUpToDateError";
   }
+}
+
+/**
+ * C3d: het completed ContentPlan is verouderd — de bronnen (lead, notes,
+ * questionnaire, requirements, Design Plan) zijn gewijzigd sinds de laatste
+ * pass. Consumenten (theme-generatie) mogen een stale plan NOOIT stil
+ * gebruiken; dit is een expliciete, fail-loud weigering.
+ */
+export class ContentPlanStaleError extends ContentPlanError {
+  constructor(public readonly existing: ContentPlanRecord) {
+    super(
+      `ContentPlan v${existing.version} is verouderd (source-fingerprint wijkt af van de actuele bronnen) — genereer het ContentPlan opnieuw op de projectdetailpagina voordat de websitecontent wordt opgebouwd.`
+    );
+    this.name = "ContentPlanStaleError";
+  }
+}
+
+/**
+ * C3d (puur, apart testbaar): beslist of een completed record consumeerbaar
+ * is. null = geen completed plan (legacy-flow van de aanroeper), een
+ * actueel plan = parsen en teruggeven, stale = ContentPlanStaleError.
+ */
+export function resolveConsumablePlan(
+  records: ContentPlanRecord[],
+  currentFingerprint: string
+): ContentPlan | null {
+  const latestCompleted =
+    records
+      .filter((r) => r.status === "completed" && r.plan !== null)
+      .sort((a, b) => b.version - a.version)[0] ?? null;
+  if (!latestCompleted) return null;
+  if (latestCompleted.sourceFingerprint !== currentFingerprint) {
+    throw new ContentPlanStaleError(latestCompleted);
+  }
+  return contentPlanSchema.parse(latestCompleted.plan);
 }
 
 /** Deterministische stale-check (puur, apart testbaar). */
@@ -136,6 +171,60 @@ export class ContentPlanService {
 
   async listByProject(projectId: string): Promise<ContentPlanRecord[]> {
     return getContentPlanRepository().listByProject(projectId);
+  }
+
+  /**
+   * C3d: het actuele, consumeerbare ContentPlan voor een Design Plan — de
+   * EENige lees-entree voor consumenten (theme-generatie). Her-gebruikt
+   * exact dezelfde source-bundel als generateContentPlan, dus de
+   * stale-beslissing kan nooit divergeren van de generatiekant.
+   *
+   * - Geen completed plan → null (aanroeper valt terug op de legacy-flow,
+   *   byte-identiek aan vóór C3d).
+   * - Completed maar verouderd → ContentPlanStaleError (fail-loud: nooit
+   *   stilletjes afwijkende content leveren van wat de owner zag).
+   * - Completed én actueel → het geparsede, gevalideerde plan.
+   */
+  async getConsumablePlan(designPlanId: string): Promise<ContentPlan | null> {
+    const records = await getContentPlanRepository().listByDesignPlan(designPlanId);
+
+    // Zonder completed plan is er niets te consumeren (legacy-flow).
+    const hasCompleted = records.some((r) => r.status === "completed" && r.plan !== null);
+    if (!hasCompleted) return null;
+
+    // Zelfde bundelbouw als generateContentPlan (stap 1-3) — geen duplicatie
+    // van beslislogica, wél van data-lading: de fingerprint moet identiek
+    // berekend worden, anders is de stale-check zinloos.
+    const designPlan = await getDesignPlanRepository().getById(designPlanId);
+    if (!designPlan) throw new ContentPlanError("Design Plan niet gevonden");
+    const project = await getProjectRepository().getById(designPlan.projectId);
+    if (!project) throw new ContentPlanError("Project niet gevonden");
+    const lead = await getLeadRepository().get(designPlan.leadId);
+    if (!lead) throw new ContentPlanError("Lead niet gevonden");
+
+    const questionnaires = await findQuestionnairesByLead(lead.id);
+    const questionnaire = await buildQuestionnaireSource(questionnaires);
+    const bundle = assembleContentSourceBundle({
+      lead: {
+        businessName: lead.businessName,
+        industry: lead.industry,
+        address: lead.address,
+        city: lead.city,
+        province: lead.province,
+        phone: lead.phone,
+        email: lead.email,
+        website: lead.website,
+        websiteStatus: lead.websiteStatus,
+        googleRating: lead.googleRating,
+        reviewCount: lead.reviewCount,
+      },
+      qualificationNotes: lead.notes ?? [],
+      questionnaire,
+      requirements: project.requirements,
+      designPlan: designPlan.plan!,
+    } satisfies ContentSourceInput);
+
+    return resolveConsumablePlan(records, bundle.fingerprint);
   }
 
   /**

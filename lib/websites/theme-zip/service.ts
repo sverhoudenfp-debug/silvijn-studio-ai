@@ -6,6 +6,9 @@ import { getLeadRepository } from "@/lib/repositories/lead-repository";
 import { getProjectRepository } from "@/lib/projects/repository";
 import { getGeneratedWebsiteRepository } from "../repository";
 import { getDesignPlanRepository } from "../design-plan-repository";
+import { ContentPlanService, ContentPlanStaleError } from "../content/content-plan-service";
+import { contentPlanTrustedClaims } from "../content/content-plan-consumption";
+import type { ContentPlan } from "../content/content-plan";
 import { validateDesignPlanConsistency, type DesignPlan, type DesignPlanRecord } from "../design-plan";
 import type { ProjectRequirements } from "@/lib/projects/types";
 import type { GeneratedWebsite } from "../types";
@@ -133,6 +136,26 @@ export class ThemeZipService {
     if (!project) throw new ThemeZipGenerationError("Project niet gevonden");
     const designPlan = await this.requireCompletedDesignPlan(website.projectId, project.requirements);
 
+    // ---- 3a. C3d: ACTUEEL CONTENTPLAN (optioneel — géén plan = legacy-flow).
+    //      Een completed maar verouderd plan is een expliciete, fail-loud
+    //      weigering: nooit stilletjes content leveren die afwijkt van wat
+    //      de owner in het ContentPlan-paneel zag. Alleen een actueel plan
+    //      (source-fingerprint identiek aan de bronnen) wordt geconsumeerd;
+    //      het plan vult uitsluitend bestaande blueprint-slots per exact
+    //      pad — secties worden nooit toegevoegd, verwijderd of herordend.
+    let contentPlan: ContentPlan | null = null;
+    const contentPlanService = new ContentPlanService();
+    try {
+      contentPlan = await contentPlanService.getConsumablePlan(designPlan.id);
+    } catch (error) {
+      if (error instanceof ContentPlanStaleError) {
+        throw new ThemeZipGenerationError(
+          `ContentPlan v${error.existing.version} is verouderd — de bronnen zijn gewijzigd sinds de laatste content-pass. Genereer het ContentPlan opnieuw op de projectdetailpagina voordat het theme-ZIP wordt opgebouwd (geen verzonnen of afwijkende content leveren).`
+        );
+      }
+      throw error;
+    }
+
     // ---- 4. Echte contactcontext (nooit door de AI verzonnen)
     const lead = await getLeadRepository().get(website.leadId);
     if (!lead) throw new ThemeZipGenerationError("Lead niet gevonden");
@@ -151,6 +174,7 @@ export class ThemeZipService {
       specification: website.specification,
       designPlan: designPlan.plan,
       contact,
+      contentPlan,
     });
     const zipBytes = await createThemeZip(built.files);
     // Fase C: trustElements uit het blueprint zijn bewezen echte claims
@@ -163,6 +187,13 @@ export class ThemeZipService {
           ...designPlan.plan.blueprint.trustElements.badges.map((b) => b.label),
         ]
       : [];
+    // C3d: fact-locked ContentPlan-units zijn verbatim brondata (met
+    // sourceOrigin) — dezelfde eerlijke status als trustElements: zij
+    // mogen de fabricatie-scan passeren. AI-geformuleerde copy (generated)
+    // blijft ONtrusting: de scan beoordeelt die gewoon.
+    if (contentPlan) {
+      trustedClaims.push(...contentPlanTrustedClaims(contentPlan));
+    }
     const validation = validateThemeFiles(built.files, { trustedClaims });
 
     if (!validation.passed) {
@@ -224,7 +255,7 @@ export class ThemeZipService {
       leadId: website.leadId,
       type: "theme_zip_generation",
       status: "completed",
-      message: `Theme-ZIP gegenereerd en gevalideerd voor "${website.businessName}" (v${version}, ${validation.fileCount} bestanden, intern artefact — geen levering)`,
+      message: `Theme-ZIP gegenereerd en gevalideerd voor "${website.businessName}" (v${version}, ${validation.fileCount} bestanden, intern artefact — geen levering)${contentPlan ? ` — content uit ContentPlan op ${built.notes.length} compositie-notitie(s), ${contentPlanTrustedClaims(contentPlan).length} fact-locked claim(s) vertrouwd richting validatie` : " — geen ContentPlan, content uit de specification (legacy-flow)"}`,
       metadata: {
         websiteId: website.id,
         projectId: website.projectId,
@@ -232,6 +263,7 @@ export class ThemeZipService {
         sizeBytes: zipBytes.byteLength,
         fileCount: validation.fileCount,
         checksumSha256: artifact.checksumSha256,
+        ...(contentPlan ? { contentPlanConsumed: true } : { contentPlanConsumed: false }),
       },
     });
     return artifact;

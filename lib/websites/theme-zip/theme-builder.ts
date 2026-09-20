@@ -10,6 +10,7 @@ import {
 } from "./media-slots";
 import { buildGenericPlaceholderSvg, buildMediaPlaceholderSvgs } from "./placeholders";
 import { composeBlueprintTemplates, slugifyPageKey } from "./blueprint-composition";
+import type { ContentPlan } from "../content/content-plan";
 import { BLUEPRINT_SECTION_REGISTRY, type BlueprintSectionType } from "../blueprint/section-registry";
 import type { WebsiteContactContext } from "../generator";
 import type { WebsiteSpecification } from "../types";
@@ -3320,6 +3321,15 @@ export interface BuildThemeInput {
   specification: WebsiteSpecification;
   designPlan: DesignPlan;
   contact: WebsiteContactContext;
+  /**
+   * C3d (2026-09-20): het actuele, geverifieerde ContentPlan (optioneel).
+   * Met plan vullen de units per exact pad ("<pageKey>/<sectionIndex>")
+   * de content-slots van de blueprint-compositie; zonder plan is de output
+   * byte-identiek aan de pre-C3d-flow (volledige backward compatibility).
+   * De aanroeper (ThemeZipService) heeft de stale-check al gedaan — hier
+   * wordt geen plan meer geaccepteerd dat niet consumeerbaar is.
+   */
+  contentPlan?: ContentPlan | null;
 }
 
 export interface BuiltTheme {
@@ -3435,7 +3445,7 @@ export function buildShopifyTheme(input: BuildThemeInput): BuiltTheme {
   //     bestaande hardcoded homepage-compositie + contactpagina + lege
   //     subpagina-shells byte-voor-byte gehandhaafd (backward compat).
   if (plan.blueprint) {
-    const composition = composeBlueprintTemplates({ blueprint: plan.blueprint, spec, contact });
+    const composition = composeBlueprintTemplates({ blueprint: plan.blueprint, spec, contact, contentPlan: input.contentPlan ?? null });
     for (const template of composition.templates) {
       files.push(jsonFile(template.path, template.data));
     }

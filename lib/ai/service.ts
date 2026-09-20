@@ -648,12 +648,13 @@ export class AIService {
           leadId: leadId ?? null,
           system: CONTENT_GENERATION_SYSTEM,
           prompt: buildContentPlanPrompt(input),
-          // Content-units zijn compact t.o.v. het Design Plan (realistisch
-          // ~50-100 units x ~40 tokens output + thinking); 10000 houdt
-          // royaal headroom onder de SDK-grens (21333). (12000/16000 zijn
-          // bewust niet gebruikt: de budget-guardian in de tests bewaakt die
-          // historische designplan-budgets op source-niveau.)
-          maxTokens: 10000,
+          // LIVE-LES 2026-09-20 (fixture E2E, run v1): 10000 was te krap —
+          // thinking verbruikt output-tokens en de rijke C1/C2-questionnaire-
+          // bundel + volledige pad-contract lieten de output afbreken
+          // (max_tokens 10000 bereikt, alle retries). Zelfde klasse als de
+          // designplanning-call: 20000 (bewezen voldoende, onder de SDK-grens
+          // 21333; de budget-guardian verbant 12000/16000/24000).
+          maxTokens: 20000,
           temperature: 0.4,
         },
         rawContentPlanOutputSchema

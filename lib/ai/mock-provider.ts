@@ -570,6 +570,85 @@ function buildMockQuestionnaireCompletion(prompt: string): string {
   return JSON.stringify(output);
 }
 
+/**
+ * Deterministische mock voor de C3b-content-pass: leest de machine-contract-
+ * regels (BRON/SECTIE) uit de prompt en vult coverage-compleet — fact-locked
+ * als exacte bronovername, commerciële copy als generated met evidence.
+ * Nooit fabricatie: elke tekst stamt uit een BRON-regel.
+ */
+export function buildMockContentPlan(prompt: string): string {
+  const sources: Array<{ origin: string; key: string; text: string }> = [];
+  for (const line of prompt.split("\n")) {
+    const match = line.match(/^BRON \[(.+?):(.+?)\] (.+)$/);
+    if (match) sources.push({ origin: match[1], key: match[2], text: match[3] });
+  }
+
+  const pages: Array<{ key: string; seo: null; units: unknown[] }> = [];
+  let currentPage: { key: string; seo: null; units: unknown[] } | null = null;
+  let sourceIndex = 0;
+  const nextSource = () => sources[sourceIndex++ % sources.length] ?? null;
+
+  for (const line of prompt.split("\n")) {
+    const pageMatch = line.match(/^PAGINA ([\w-]+) /);
+    if (pageMatch) {
+      currentPage = { key: pageMatch[1], seo: null, units: [] };
+      pages.push(currentPage);
+      continue;
+    }
+    const sectionMatch = line.match(/^SECTIE ([\w-]+\/\d+) (\S+) — verplicht: ([^;]*);/);
+    if (!sectionMatch || !currentPage) continue;
+    const required = sectionMatch[3]
+      .split(",")
+      .map((kind) => kind.trim())
+      .filter((kind) => kind.length > 0 && kind !== "(geen)");
+
+    const factLockedPart = line.match(/fact-locked: ([^;]+)/)?.[1] ?? "(geen)";
+    const factLockedKinds = new Set(
+      factLockedPart
+        .split(",")
+        .map((kind) => kind.trim())
+        .filter((kind) => kind.length > 0 && kind !== "(geen)")
+    );
+
+    for (const kind of required) {
+      const source = nextSource();
+      if (source && factLockedKinds.has(kind)) {
+        currentPage.units.push({
+          path: sectionMatch[1],
+          kind,
+          status: "fixed",
+          text: source.text,
+          evidence: [],
+          sourceOrigin: source.origin,
+          instruction: null,
+        });
+      } else if (source) {
+        currentPage.units.push({
+          path: sectionMatch[1],
+          kind,
+          status: "generated",
+          text: `Mock-copy voor ${kind} (uit bron ${source.key}).`,
+          evidence: [source.text],
+          sourceOrigin: null,
+          instruction: null,
+        });
+      } else {
+        currentPage.units.push({
+          path: sectionMatch[1],
+          kind,
+          status: "customer_slot",
+          text: null,
+          evidence: [],
+          sourceOrigin: null,
+          instruction: `Lever de inhoud voor ${kind}: wat moet hier komen te staan, uit jouw eigen woorden.`,
+        });
+      }
+    }
+  }
+
+  return JSON.stringify({ pages, missingInformation: [] });
+}
+
 export class MockAIProvider implements AIProvider {
   readonly id = "mock";
   readonly mode = "mock" as const;
@@ -598,6 +677,8 @@ async generateText(request: AIProviderRequest): Promise<AIProviderResult> {
                 ? buildMockWebsiteSpecification(request.prompt)
               : request.task === "design_planning"
                 ? buildMockDesignPlan(request.prompt)
+              : request.task === "content_generation"
+                ? buildMockContentPlan(request.prompt)
               : request.task === "website_quality_analysis"
                 ? buildMockQualityAnalysis(request.prompt)
                 : request.task === "questionnaire_generation"

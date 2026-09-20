@@ -55,6 +55,15 @@ export const AI_AGENTS: Record<AgentType, AgentDefinition> = {
     defaultTier: "balanced",
     defaultTask: "generate_structured",
   },
+  content_generation: {
+    id: "content_generation",
+    name: "Content Generation Agent",
+    description:
+      "Vult het interne ContentPlan per blueprint-sectie met commerciële copy — uitsluitend evidence-gedragen; fact-locked bedrijfsfeiten zijn verbatim-deterministisch (C3b).",
+    status: "implemented",
+    defaultTier: "balanced",
+    defaultTask: "content_generation",
+  },
   outreach: {
     id: "outreach",
     name: "Outreach Agent",

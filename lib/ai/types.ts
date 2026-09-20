@@ -19,6 +19,7 @@ export type AgentType =
   | "design_planning"
   | "website_quality_control"
   | "quality_control"
+  | "content_generation"
   | "questionnaire";
 
 export type AITaskType =
@@ -30,6 +31,7 @@ export type AITaskType =
   | "website_planning"
   | "design_planning"
   | "website_quality_analysis"
+  | "content_generation"
   | "lead_score"
   | "classify_lead"
   | "questionnaire_generation"

@@ -13,6 +13,7 @@ import { getDownloadableArtifactForWebsite } from "@/lib/websites/theme-zip/down
 import { findQuestionnairesByLead } from "@/lib/questionnaire/service";
 import { QuestionnaireSection } from "@/components/leads/questionnaire-section";
 import { DesignPlanService } from "@/lib/websites/design-plan-service";
+import { ContentPlanService } from "@/lib/websites/content/content-plan-service";
 import { evaluateRequirementsCompleteness } from "@/lib/projects/completeness";
 
 export async function generateMetadata(props: PageProps<"/projects/[id]">) {
@@ -33,12 +34,13 @@ export default async function ProjectDetailPage(props: PageProps<"/projects/[id]
   const project = await getProjectRepository().getById(id);
   if (!project) notFound();
 
-  const [lead, interactions, websites, questionnaires, designPlans] = await Promise.all([
+  const [lead, interactions, websites, questionnaires, designPlans, contentPlans] = await Promise.all([
     getLeadRepository().get(project.leadId),
     getSalesInteractionRepository().listByLead(project.leadId),
     getGeneratedWebsiteRepository().listByProject(project.id),
     findQuestionnairesByLead(project.leadId),
     new DesignPlanService().listByProject(project.id),
+    new ContentPlanService().listByProject(project.id),
   ]);
   const completeness = evaluateRequirementsCompleteness(project.requirements, questionnaires.map((q) => ({
     status: q.status,
@@ -74,6 +76,7 @@ export default async function ProjectDetailPage(props: PageProps<"/projects/[id]
       latestQc={latestQc}
       latestZipArtifact={latestZipArtifact}
       designPlans={designPlans}
+      contentPlans={contentPlans}
       completeness={completeness}
       latestQualification={
         latestQualification

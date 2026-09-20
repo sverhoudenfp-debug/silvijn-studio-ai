@@ -54,6 +54,12 @@ import type { ProjectRequirements } from "@/lib/projects/types";
 import type { WebsiteSpecification } from "@/lib/websites/types";
 import { designPlanSchema, type DesignPlan } from "@/lib/websites/design-plan";
 import { buildBlueprintSectionContract } from "@/lib/websites/blueprint/section-registry";
+import {
+  CONTENT_GENERATION_SYSTEM,
+  buildContentPlanPrompt,
+  type ContentPlanPromptInput,
+} from "@/lib/websites/content/content-plan-prompt";
+import { rawContentPlanOutputSchema, type RawContentPlanOutput } from "@/lib/websites/content/content-plan-finalizer";
 import { buildArchetypeGuidance, selectBlueprintArchetype } from "@/lib/websites/blueprint/archetypes";
 import type { QCAnalysis } from "@/lib/qc/ai-types";
 import {
@@ -168,6 +174,8 @@ export class AIService {
               ? "website_planning"
             : call.agent === "design_planning"
               ? "design_planning"
+            : call.agent === "content_generation"
+              ? "content_generation"
               : call.agent === "website_quality_control"
                 ? "website_quality_analysis"
                 : call.agent === "questionnaire"
@@ -608,6 +616,70 @@ export class AIService {
         type: "design_planning",
         status: "failed",
         message: `Designplanning mislukt voor ${input.businessName}`,
+        metadata: { reason: userFacingAIMessage(error) },
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Content Generation Agent (C3b) — VULT het interne ContentPlan per
+   * blueprint-sectie met commerciële copy. Één AI-call per ContentPlan; de
+   * deterministische finalizer (content-plan-finalizer) is de strenge poort
+   * daarna: fact-locked verbatim uit bronnen, evidence verplicht,
+   * copywriting=false → customer_slot, coverage-garantie.
+   */
+  async generateContentPlan(
+    input: ContentPlanPromptInput,
+    leadId?: string | null
+  ): Promise<AIServiceResult<RawContentPlanOutput>> {
+    await this.activityRepository.log({
+      leadId: leadId ?? null,
+      type: "content_generation",
+      status: "started",
+      message: `Contentpass gestart voor ${input.businessName} (${input.blueprint.pages.length} pagina's, copywriting=${input.copywriting ? "ja" : "nee"})`,
+    });
+
+    try {
+      const result = await this.generateStructured<RawContentPlanOutput>(
+        {
+          agent: "content_generation",
+          tier: "balanced",
+          leadId: leadId ?? null,
+          system: CONTENT_GENERATION_SYSTEM,
+          prompt: buildContentPlanPrompt(input),
+          // Content-units zijn compact t.o.v. het Design Plan (realistisch
+          // ~50-100 units x ~40 tokens output + thinking); 10000 houdt
+          // royaal headroom onder de SDK-grens (21333). (12000/16000 zijn
+          // bewust niet gebruikt: de budget-guardian in de tests bewaakt die
+          // historische designplan-budgets op source-niveau.)
+          maxTokens: 10000,
+          temperature: 0.4,
+        },
+        rawContentPlanOutputSchema
+      );
+
+      await this.activityRepository.log({
+        leadId: leadId ?? null,
+        type: "content_generation",
+        status: "completed",
+        message: `Contentpass voltooid voor ${input.businessName} (${result.data.pages.reduce((sum, page) => sum + page.units.length, 0)} units)`,
+        metadata: {
+          model: result.model,
+          mode: result.mode,
+          durationMs: result.durationMs,
+          cost: result.estimatedCost,
+          tokens: result.usage,
+        },
+      });
+
+      return result;
+    } catch (error) {
+      await this.activityRepository.log({
+        leadId: leadId ?? null,
+        type: "content_generation",
+        status: "failed",
+        message: `Contentpass mislukt voor ${input.businessName}`,
         metadata: { reason: userFacingAIMessage(error) },
       });
       throw error;

@@ -20,6 +20,8 @@ import type { PriceIndication } from "@/lib/pricing/types";
 import { WebsiteGenerationSection } from "@/components/projects/website-generation-section";
 import type { DownloadableArtifactSummary } from "@/lib/websites/theme-zip/download";
 import { DesignPlanSection } from "@/components/projects/design-plan-section";
+import { ContentPlanSection } from "@/components/projects/content-plan-section";
+import type { ContentPlanRecord } from "@/lib/websites/content/content-plan-repository";
 import { RequirementsCompletenessSection } from "@/components/projects/requirements-completeness-section";
 import type { DesignPlanRecord } from "@/lib/websites/design-plan";
 import type { CompletenessEvaluation } from "@/lib/projects/completeness";
@@ -71,6 +73,7 @@ export function ProjectDetail({
   latestQc,
   latestZipArtifact,
   designPlans,
+  contentPlans,
   completeness,
 }: {
   project: Project;
@@ -80,6 +83,7 @@ export function ProjectDetail({
   latestQc: QualityControl | null;
   latestZipArtifact: DownloadableArtifactSummary | null;
   designPlans: DesignPlanRecord[];
+  contentPlans: ContentPlanRecord[];
   completeness: CompletenessEvaluation;
 }) {
   const [form, setForm] = useState<RequirementsFormState>(toFormState(project.requirements));
@@ -486,6 +490,12 @@ export function ProjectDetail({
         projectId={project.id}
         projectStatus={project.status}
         plans={designPlans}
+      />
+      <ContentPlanSection
+        projectId={project.id}
+        projectStatus={project.status}
+        designPlans={designPlans}
+        contentPlans={contentPlans}
       />
 
       {/* ===== WEBSITE GENERATION ===== */}

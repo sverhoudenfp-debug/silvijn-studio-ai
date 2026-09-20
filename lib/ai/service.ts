@@ -85,8 +85,8 @@ export interface AIServiceCall {
   system: string;
   prompt: string;
   maxTokens?: number;
-  /** Expliciete thinking-cap (provider-capability; geen temperature samen met thinking). */
-  thinkingBudget?: number;
+  /** Expliciete reasoning-cap (provider-capability; geen temperature samen met effort). */
+  thinkingEffort?: "low" | "medium" | "high";
   temperature?: number;
   leadId?: string | null;
 }
@@ -196,8 +196,8 @@ export class AIService {
             system: call.system,
             prompt: call.prompt,
             maxTokens: call.maxTokens ?? 1500,
-            temperature: call.thinkingBudget !== undefined ? undefined : (call.temperature ?? 0.4),
-            thinkingBudget: call.thinkingBudget,
+            temperature: call.thinkingEffort !== undefined ? undefined : (call.temperature ?? 0.4),
+            thinkingEffort: call.thinkingEffort,
           });
           let parsed: unknown;
           try {
@@ -658,13 +658,15 @@ export class AIService {
           // designplanning-call: 20000 (bewezen voldoende, onder de SDK-grens
           // 21333; de budget-guardian verbant 12000/16000/24000).
           maxTokens: 20000,
-          // LIVE-LES 2026-09-20 (fixture E2E, run v3): zónder expliciete
-          // thinking-cap bleek sonnet-5 de volledige 20000 aan redeneren te
-          // besteden — max_tokens bereikt vóór enige JSON, op elke retry.
-          // budget_tokens 6000 capt het redeneren; ≥ 14000 blijft voor de
-          // eigenlijke units-output. Samen met thinking wordt géén
-          // temperature verstuurd (Anthropic vereist dan 1).
-          thinkingBudget: 6000,
+          // LIVE-LES 2026-09-20 (fixture E2E, runs v1-v3): zónder expliciete
+          // reasoning-cap besteedt sonnet-5 de VOLLEDIGE max_tokens (zowel
+          // 10000 als 20000) aan adaptive thinking — max_tokens bereikt
+          // vóór enige JSON, op elke retry. API-gegeven: dit model regelt
+          // thinking via output_config.effort (thinking.type enabled +
+          // budget_tokens wordt afgewezen; temperature is deprecated zodra
+          // effort gezet is). "low" is de juiste inspanning voor een
+          // invultaak uit gevalideerde brondata.
+          thinkingEffort: "low",
         },
         rawContentPlanOutputSchema
       );

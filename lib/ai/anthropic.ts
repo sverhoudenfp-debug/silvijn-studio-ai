@@ -87,13 +87,14 @@ export class AnthropicProvider implements AIProvider {
       if (request.temperature !== undefined && modelSupportsTemperature(request.model)) {
         body.temperature = request.temperature;
       }
-      // Expliciete thinking-cap (Anthropic: thinking.budget_tokens, minimaal
-      // 1024). Bij expliciet thinking mag de API geen custom temperature
-      // (vereist 1) — de service laat temperature dan al weg.
-      if (request.thinkingBudget !== undefined) {
-        body.thinking = {
-          type: "enabled",
-          budget_tokens: Math.max(1024, request.thinkingBudget),
+      // Expliciete reasoning-cap. LIVE-API-LES 2026-09-20: dit model
+      // ondersteunt géén thinking.type "enabled" + budget_tokens; de API
+      // schrijft zelf voor: "Use thinking.type.adaptive and
+      // output_config.effort to control thinking behavior". Temperature is
+      // deprecated zodra effort gezet is — de service laat hem dan al weg.
+      if (request.thinkingEffort !== undefined) {
+        (body as { output_config?: { effort: string } }).output_config = {
+          effort: request.thinkingEffort,
         };
       }
       // Echte abort: het request stopt bij de limiet in plaats van af te

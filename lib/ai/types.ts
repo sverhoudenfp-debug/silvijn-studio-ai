@@ -53,13 +53,14 @@ export interface AIProviderRequest {
   /** Optioneel: alleen meesturen als het model sampling ondersteunt (zie config). */
   temperature?: number;
   /**
-   * Optioneel: expliciete thinking-cap (Anthropic budget_tokens, minimaal 1024).
-   * Zonder cap mag een thinking-model de VOLLEDIGE max_tokens aan redeneren
-   * besteden, waardoor de eigenlijke output afbreekt (live-les contentpass
-   * 2026-09-20: max_tokens 20000 bereikt vóór enige JSON). Bij een gezette
-   * cap stuurt de provider géén temperature (Anthropic vereist dan 1).
+   * Optioneel: expliciete reasoning-cap via output_config.effort
+   * (low/medium/high). Zonder cap mag een adaptive-thinking-model de
+   * VOLLEDIGE max_tokens aan redeneren besteden, waardoor de eigenlijke
+   * output afbreekt (live-les contentpass 2026-09-20: max_tokens 20000
+   * bereikt vóór enige JSON). Bij een gezette cap stuurt de provider
+   * géén temperature (deprecated zodra effort gezet is).
    */
-  thinkingBudget?: number;
+  thinkingEffort?: "low" | "medium" | "high";
 }
 
 export interface AIProviderResult {

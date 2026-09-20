@@ -870,3 +870,21 @@ test("C3b: generated units zonder evidence vallen daarna nog steeds door de fina
   const bare = result.plan.pages.flatMap((p) => p.units).find((u) => u.status === "generated" && u.evidence.length === 0);
   assert.equal(bare, undefined, "geen generated unit zonder evidence in het eindplan");
 });
+
+
+test("C3b: gehallucineerd slot-kind buiten het registry wordt eerlijk verwijderd", () => {
+  const blueprint = makeBlueprint({ withTrust: true });
+  const bundle = makeBundle({ blueprint });
+  const pages = validRaw(bundle);
+  // AI verzint een cta_label op de services-sectie (home/2) — bestaat daar niet.
+  pages[0].units.push(rawUnit("home/2", "cta_label", "generated", { text: "Vraag offerte aan", evidence: [itemOf(bundle, "lead", "phone").text] }));
+  const result = finalize(rawPlan(pages), bundle, { blueprint });
+
+  const phantom = result.plan.pages[0].units.find((u) => u.path === "home/2" && u.kind === "cta_label");
+  assert.equal(phantom, undefined, "het gehallucineerde slot staat niet meer in het plan");
+  assert.ok(
+    result.corrections.some((c) => c.includes("bestaat daar niet") && c.includes("home/2")),
+    "de verwijdering staat als correctie gelogd"
+  );
+  checkC3aConsistency(result, bundle, blueprint);
+});

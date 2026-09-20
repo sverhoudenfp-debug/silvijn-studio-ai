@@ -232,8 +232,13 @@ export function finalizeRawContentPlan(input: {
       const slots = contentSlotsForSection(type);
       const slot = slots.find((s) => s.kind === rawUnit.kind);
       if (!slot) {
-        errors.push(
-          `AI gebruikte slot-kind "${rawUnit.kind}" bij sectietype "${type}" (pad "${rawUnit.path}") — dit slot bestaat daar niet.`
+        // LIVE-LES 2026-09-20 (fixture E2E, STAP-2-run): de AI hallucineerde
+        // soms een slot-kind buiten het gesloten registry (bijv. cta_label op
+        // services). Eerlijke reparatie: unit verwijderen met correctielog —
+        // de coverage-check dwingt verplichte kinds alsnog af, dus hierdoor
+        // ontstaat nooit een ongevuld verplicht slot.
+        corrections.push(
+          `AI gebruikte slot-kind "${rawUnit.kind}" bij sectietype "${type}" (pad "${rawUnit.path}") — dit slot bestaat daar niet; unit verwijderd.`
         );
         continue;
       }

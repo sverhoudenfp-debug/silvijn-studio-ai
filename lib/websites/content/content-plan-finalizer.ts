@@ -414,7 +414,12 @@ function finalizeUnit(
       return null;
     }
     if (evidenceOnly) {
-      ctx.errors.push(`merchant_slot op evidence_only-sectie ${where} — deze instantie bestaat alleen met echte data.`);
+      // LIVE-LES 2026-09-20 (fixture E2E, content_plans v4): de AI volgde de
+      // "geen bron -> customer_slot"-regel ook op evidence_only-secties.
+      // Eerlijke reparatie: unit weg (de instantie bestaat alleen met echte
+      // data), correctie gelogd; verplichte kinds vult de trust-fill of de
+      // coverage-check eerlijk aan.
+      ctx.corrections.push(`merchant_slot op evidence_only-sectie ${where} verwijderd — deze instantie bestaat alleen met echte data.`);
       return null;
     }
     return { path, kind: slot.kind, status: "merchant_slot", text: null, evidence: [], sourceOrigin: null, instruction: null };
@@ -423,7 +428,10 @@ function finalizeUnit(
   // --- status: customer_slot ---
   if (rawUnit.status === "customer_slot") {
     if (evidenceOnly) {
-      ctx.errors.push(`customer_slot op evidence_only-sectie ${where} — deze instantie bestaat alleen met echte data.`);
+      // Zie merchant_slot hierboven: eerlijke drop i.p.v. hard faal — de AI
+      // volgde de algemene geen-bron-regel; verplichte echte data vult de
+      // deterministische trust-fill aan of de coverage-check faalt eerlijk.
+      ctx.corrections.push(`customer_slot op evidence_only-sectie ${where} verwijderd — deze instantie bestaat alleen met echte data.`);
       return null;
     }
     return {

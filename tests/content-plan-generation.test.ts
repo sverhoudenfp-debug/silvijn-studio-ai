@@ -14,7 +14,7 @@ import {
 } from "@/lib/websites/content/content-plan-finalizer";
 import { validateContentPlanConsistency } from "@/lib/websites/content/content-plan";
 import { contentSlotsForSection } from "@/lib/websites/content/content-slots";
-import { buildContentPlanPrompt } from "@/lib/websites/content/content-plan-prompt";
+import { buildContentPlanPrompt, CONTENT_GENERATION_SYSTEM } from "@/lib/websites/content/content-plan-prompt";
 import {
   isContentStale,
   nextContentPlanVersion,
@@ -767,4 +767,63 @@ test("budget-guardian: provider zet output_config.effort bij een reasoning-cap",
   const block = anthropicSource.slice(start, start + 400);
   assert.match(block, /output_config/, "reasoning-cap loopt via output_config.effort (API-voorschrift: thinking.type enabled + budget_tokens wordt afgewezen voor dit model)");
   assert.match(block, /effort: request\.thinkingEffort/, "effort-waarde passeert onveranderd");
+});
+
+
+// ------------------------------------------------------------------
+// LIVE-LES 2026-09-20 (fixture E2E, content_plans v4): de AI volgde de
+// "geen bron -> customer_slot"-regel óók op een evidence_only-sectie
+// (usp_band home/2, kind item_hint). Eerlijke reparatie: phantom-slot
+// verwijderen met correctielog i.p.v. hard faal; verplichte echte data
+// vult de trust-fill aan. De prompt krijgt de expliciete uitzondering.
+// ------------------------------------------------------------------
+
+test("C3b: customer_slot op evidence_only-sectie wordt eerlijk verwijderd i.p.v. hard faal", () => {
+  const blueprint = makeBlueprint({ withTrust: true });
+  const bundle = makeBundle({ blueprint });
+  // AI dekt usp_band grotendeels NIET zelf, maar zet WEL een phantom-klantslot.
+  const pages = genericUnitsFor(bundle, blueprint).map((page) => ({
+    ...page,
+    units: page.units.filter((u) => !u.path.startsWith("home/2")),
+  }));
+  pages[0].units.push(rawUnit("home/2", "item_hint", "customer_slot", { instruction: "Lever zelf een korte USP-toelichting aan." }));
+  const result = finalize(rawPlan(pages), bundle, { blueprint });
+
+  const phantom = result.plan.pages[0].units.find((u) => u.path === "home/2" && u.kind === "item_hint" && u.status === "customer_slot");
+  assert.equal(phantom, undefined, "phantom-klantslot staat niet meer in het plan");
+  assert.ok(
+    result.corrections.some((c) => c.includes("customer_slot op evidence_only-sectie") && c.includes("home/2")),
+    "de verwijdering staat als correctie gelogd"
+  );
+  // Verplichte echte data is alsnog deterministisch trust-gevuld.
+  const label = result.plan.pages[0].units.find((u) => u.path === "home/2" && u.kind === "item_label");
+  assert.equal(label?.status, "generated");
+  checkC3aConsistency(result, bundle, blueprint);
+});
+
+test("C3b: merchant_slot op evidence_only-sectie wordt eerlijk verwijderd i.p.v. hard faal", () => {
+  const blueprint = makeBlueprint({ withTrust: true });
+  const bundle = makeBundle({ blueprint });
+  const pages = genericUnitsFor(bundle, blueprint).map((page) => ({
+    ...page,
+    units: page.units.filter((u) => !u.path.startsWith("home/2")),
+  }));
+  pages[0].units.push(rawUnit("home/2", "item_hint", "merchant_slot", {}));
+  const result = finalize(rawPlan(pages), bundle, { blueprint });
+
+  const phantom = result.plan.pages[0].units.find((u) => u.path === "home/2" && u.kind === "item_hint" && u.status === "merchant_slot");
+  assert.equal(phantom, undefined, "phantom-merchantslot staat niet meer in het plan");
+  // item_hint is geen beeldslot: de niet-beeldslot-guard haalt hem eerder weg
+  // dan de evidence_only-guard — beide verwijderingen zijn eerlijk gelogd.
+  assert.ok(
+    result.corrections.some((c) => c.includes("merchant_slot") && c.includes("home/2") && c.includes("verwijderd")),
+    "de verwijdering staat als correctie gelogd"
+  );
+  checkC3aConsistency(result, bundle, blueprint);
+});
+
+test("C3b: systeemprompt verbiedt customer/merchant_slot expliciet op evidence_only-secties", () => {
+  const system = CONTENT_GENERATION_SYSTEM;
+  assert.match(system, /UITZONDERING evidence_only-secties[\s\S]*VERBODEN/, "de uitzondering op de geen-bron-regel staat expliciet in het contract");
+  assert.match(system, /laat de unit weg en vermeld het in missingInformation/, "het eerlijke alternatief staat erbij");
 });

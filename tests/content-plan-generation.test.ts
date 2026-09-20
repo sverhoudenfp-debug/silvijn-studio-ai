@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -724,4 +725,45 @@ test("C3b: CTA-label coverage valt terug op het echte conversiedoel", () => {
   assert.equal(cta.text, "Gratis adviesgesprek aanvragen");
   assert.equal(cta.sourceOrigin, "blueprint");
   checkC3aConsistency(result, bundle);
+});
+
+
+// ------------------------------------------------------------------
+// LIVE-LES 2026-09-20 (fixture E2E, content_plans v1-v3): zonder expliciete
+// thinking-cap besteedde sonnet-5 de VOLLEDIGE max_tokens (zowel 10000 als
+// 20000) aan redeneren — max_tokens bereikt vóór enige JSON, op elke retry.
+// Deze source-contract-tests bewaken de thinking-cap op de contentcall en
+// de provider-afspraken (budget >= 1024, géén temperature samen met thinking).
+// ------------------------------------------------------------------
+
+test("budget-guardian: contentcall heeft een expliciete thinking-cap (6000) en géén temperature", () => {
+  const serviceSource = readFileSync(new URL("../lib/ai/service.ts", import.meta.url), "utf-8");
+  const start = serviceSource.indexOf("async generateContentPlan");
+  const end = serviceSource.indexOf("rawContentPlanOutputSchema", start);
+  assert.ok(start !== -1 && end > start, "generateContentPlan moet in service.ts staan");
+  const block = serviceSource.slice(start, end);
+  assert.match(block, /maxTokens: 20000/, "budget blijft 20000 (onder de SDK-grens 21333)");
+  assert.match(block, /thinkingBudget: 6000/, "thinking-cap 6000: zonder cap eet sonnet-5 het volledige budget aan redeneren (live-incident v1-v3)");
+  assert.doesNotMatch(block, /temperature:/, "géén temperature in de contentcall (Anthropic vereist 1 bij expliciet thinking; de service laat hem weg)");
+});
+
+test("budget-guardian: thinkingBudget passeert naar de provider en onderdrukt temperature", () => {
+  const serviceSource = readFileSync(new URL("../lib/ai/service.ts", import.meta.url), "utf-8");
+  const start = serviceSource.indexOf("const providerResult = await this.provider.generateText");
+  const block = serviceSource.slice(start, serviceSource.indexOf("});", start));
+  assert.match(block, /thinkingBudget: call.thinkingBudget/, "thinkingBudget passeert 1-op-1 naar de provider");
+  assert.match(
+    block,
+    /call.thinkingBudget !== undefined \? undefined : \(call.temperature \?\? 0\.4\)/,
+    "bij een thinking-cap wordt géén temperature verstuurd; andere calls houden hun bestaande 0.4-default"
+  );
+});
+
+test("budget-guardian: provider zet thinking.budget_tokens bij een thinking-cap", () => {
+  const anthropicSource = readFileSync(new URL("../lib/ai/anthropic.ts", import.meta.url), "utf-8");
+  const start = anthropicSource.indexOf("request.thinkingBudget !== undefined");
+  assert.ok(start !== -1, "anthropic.ts moet thinkingBudget afhandelen");
+  const block = anthropicSource.slice(start, start + 400);
+  assert.match(block, /type: "enabled"/, "expliciet thinking wordt enabled");
+  assert.match(block, /budget_tokens: Math\.max\(1024, request\.thinkingBudget\)/, "budget volgt de Anthropic-API-eis: minimaal 1024");
 });

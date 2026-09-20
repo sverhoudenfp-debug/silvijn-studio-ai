@@ -87,6 +87,15 @@ export class AnthropicProvider implements AIProvider {
       if (request.temperature !== undefined && modelSupportsTemperature(request.model)) {
         body.temperature = request.temperature;
       }
+      // Expliciete thinking-cap (Anthropic: thinking.budget_tokens, minimaal
+      // 1024). Bij expliciet thinking mag de API geen custom temperature
+      // (vereist 1) — de service laat temperature dan al weg.
+      if (request.thinkingBudget !== undefined) {
+        body.thinking = {
+          type: "enabled",
+          budget_tokens: Math.max(1024, request.thinkingBudget),
+        };
+      }
       // Echte abort: het request stopt bij de limiet in plaats van af te
       // wachten en het antwoord nú achteraf weg te gooien (betaalde tokens).
       const response = await this.client.messages.create(body, {

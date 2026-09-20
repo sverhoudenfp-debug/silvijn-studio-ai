@@ -85,6 +85,8 @@ export interface AIServiceCall {
   system: string;
   prompt: string;
   maxTokens?: number;
+  /** Expliciete thinking-cap (provider-capability; geen temperature samen met thinking). */
+  thinkingBudget?: number;
   temperature?: number;
   leadId?: string | null;
 }
@@ -194,7 +196,8 @@ export class AIService {
             system: call.system,
             prompt: call.prompt,
             maxTokens: call.maxTokens ?? 1500,
-            temperature: call.temperature ?? 0.4,
+            temperature: call.thinkingBudget !== undefined ? undefined : (call.temperature ?? 0.4),
+            thinkingBudget: call.thinkingBudget,
           });
           let parsed: unknown;
           try {
@@ -655,7 +658,13 @@ export class AIService {
           // designplanning-call: 20000 (bewezen voldoende, onder de SDK-grens
           // 21333; de budget-guardian verbant 12000/16000/24000).
           maxTokens: 20000,
-          temperature: 0.4,
+          // LIVE-LES 2026-09-20 (fixture E2E, run v3): zónder expliciete
+          // thinking-cap bleek sonnet-5 de volledige 20000 aan redeneren te
+          // besteden — max_tokens bereikt vóór enige JSON, op elke retry.
+          // budget_tokens 6000 capt het redeneren; ≥ 14000 blijft voor de
+          // eigenlijke units-output. Samen met thinking wordt géén
+          // temperature verstuurd (Anthropic vereist dan 1).
+          thinkingBudget: 6000,
         },
         rawContentPlanOutputSchema
       );

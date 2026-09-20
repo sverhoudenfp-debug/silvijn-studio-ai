@@ -285,3 +285,32 @@ test("design plan service: geen startTransition en geen klantzichtbare publicati
   const serviceImports = service.split("\n").filter((line) => line.startsWith("import")).join("\n");
   assert.doesNotMatch(serviceImports, /generator|shopify|build-service/i);
 });
+
+// ---------------------------------------------------------------------------
+// E2E-bugfix: klant-aangeleverd klantbewijs vs. fabricatie-scan
+// ---------------------------------------------------------------------------
+
+test("design plan: review-claim uit klant-questionnaire is géén fabricatie (exact echoën mag)", async () => {
+  const plan = await buildValidPlan(3);
+  // Klant heeft zélf reviews opgegeven in de questionnaire; het plan echoöt die.
+  plan.goals.primaryGoal = "Wij hebben drie Google-reviews met een gemiddelde van 4,8 sterren en één referentieproject.";
+
+  const trusted = ["Wij hebben drie Google-reviews met een gemiddelde van 4,8 sterren en één referentieproject (website van bakkerij De Gouden Korst)."];
+  const withTrust = validateDesignPlanConsistency(plan, { ...COMPLETE_REQUIREMENTS, numberOfPages: 3 }, trusted);
+  assert.equal(withTrust.passed, true, "exact klantbewijs moet door de scan komen");
+
+  // Zonder trusted claims blijft de scan even streng als voorheen.
+  const withoutTrust = validateDesignPlanConsistency(plan, { ...COMPLETE_REQUIREMENTS, numberOfPages: 3 });
+  assert.equal(withoutTrust.passed, false);
+  assert.ok(withoutTrust.errors.some((e) => e.includes("review-claim")));
+});
+
+test("design plan: aangepast/opgeblazen klantbewijs blijft fabricatie (anti-inflatie)", async () => {
+  const plan = await buildValidPlan(3);
+  // De AI blaast het klantbewijs op: 4,8 werd 9,9 — nooit toegestaan.
+  plan.goals.primaryGoal = "Wij hebben een gemiddelde van 9,9 sterren uit 500 reviews.";
+  const trusted = ["Wij hebben drie Google-reviews met een gemiddelde van 4,8 sterren en één referentieproject."];
+  const result = validateDesignPlanConsistency(plan, { ...COMPLETE_REQUIREMENTS, numberOfPages: 3 }, trusted);
+  assert.equal(result.passed, false);
+  assert.ok(result.errors.some((e) => e.includes("review-claim")), "afwijkende getallen moeten blokkeren");
+});

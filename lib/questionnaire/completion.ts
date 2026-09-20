@@ -31,6 +31,30 @@ export interface CompletionDecision {
   missingInformation: string[];
 }
 
+/**
+ * E2E-bugfix (2026-09-20): bij COMPLETE/ATTENTION wiste de service de definities
+ * van de gestelde follow-upvragen, waardoor ronde-2-antwoorden op nieuwe
+ * follow-up-vraag-id's permanent onzichtbaar bleven — voor de Design
+ * Planning-consumptie (buildQuestionnaireAnswerLines loopt over de
+ * vraagdefinities) én voor de dashboard-labels van ronde-2-responses. De
+ * definities van gestelde follow-upvragen blijven daarom behouden; de
+ * completionStatus blijft de enige poort voor verdere submissions (het
+ * publieke formulier toont follow-ups uitsluitend bij QUESTIONNAIRE_FOLLOW_UP).
+ */
+export function followUpsAfterDecision(
+  decision: CompletionDecision,
+  existingFollowUpQuestions: unknown[]
+): unknown[] {
+  if (decision.followUpQuestions.length > 0) return decision.followUpQuestions;
+  if (
+    decision.status === "QUESTIONNAIRE_COMPLETE" ||
+    decision.status === "QUESTIONNAIRE_ATTENTION"
+  ) {
+    return existingFollowUpQuestions;
+  }
+  return decision.followUpQuestions;
+}
+
 /** Volgorde waarin ontbrekende dimensies worden nagevraagd (max 3 per ronde). */
 const DIMENSION_FOLLOW_UP_TOPICS: Partial<Record<ContentDimensionKey, string>> = {
   offering: "core_aanbod",

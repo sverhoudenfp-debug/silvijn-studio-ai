@@ -64,3 +64,43 @@ export function buildQuestionnaireAnswerLines(
 
   return lines;
 }
+
+export interface CompletionSummaries {
+  /** Genummerde vraaglijst voor de AI (ronde 1: kernvragen; ronde 2: alles). */
+  questionsSummary: string;
+  /** Antwoordregels uit álle ontvangen rondes (nieuwste antwoord wint). */
+  answersSummary: string;
+}
+
+/**
+ * Bouwt de completionsamenvatting voor de AI-beoordeling.
+ *
+ * Ronde 2-beoordeling (E2E-bugfix 2026-09-20): de ronde-1-antwoorden zijn
+ * ALLEREERST ontvangen data — een ronde-2-beoordeling die ze niet ziet
+ * concludeerde ten onrechte dat kernvragen "nog nooit beantwoord" waren en
+ * degradeerde complete questionnaires naar QUESTIONNAIRE_ATTENTION met een
+ * feitelijk onjuiste analyse. Daarom geldt nu:
+ * - ronde 1: alleen de vragen van ronde 1 (er bestaat nog geen ronde 2);
+ * - ronde 2: ALLE vragen (kern + follow-up) met antwoorden uit beide rondes,
+ *   via exact dezelfde regels als de Design Plan-consumptie
+ *   (buildQuestionnaireAnswerLines: nieuwste niet-lege antwoord wint,
+ *   uploads zichtbaar als aantallen).
+ */
+export function buildCompletionSummaries(
+  questions: QuestionnaireQuestion[],
+  followUpQuestions: QuestionnaireQuestion[],
+  responses: QuestionnaireResponseLike[],
+  round: 1 | 2
+): CompletionSummaries {
+  const includeFollowUps = round === 2 && followUpQuestions.length > 0;
+  const allQuestions = includeFollowUps ? [...questions, ...followUpQuestions] : questions;
+  const lines = buildQuestionnaireAnswerLines(
+    questions,
+    includeFollowUps ? followUpQuestions : [],
+    responses
+  );
+  return {
+    questionsSummary: allQuestions.map((q, i) => `${i + 1}. ${q.label}`).join("\n"),
+    answersSummary: lines.map((line) => `- ${line.label}: ${line.value}`).join("\n"),
+  };
+}

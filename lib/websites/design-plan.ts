@@ -183,7 +183,8 @@ export interface DesignPlanRecord {
  */
 export function validateDesignPlanConsistency(
   plan: DesignPlan,
-  requirements: ProjectRequirements
+  requirements: ProjectRequirements,
+  trustedClaims?: readonly string[]
 ): { passed: boolean; errors: string[] } {
   const errors: string[] = [];
 
@@ -209,7 +210,12 @@ export function validateDesignPlanConsistency(
   //    reviewclaims, openingstijden, secrets, AI-vermeldingen, interne info)
   //    gelden óók voor het interne plan — het plan is de bron voor de latere
   //    websitegeneratie en mag geen ongefundeerde feiten bevatten.
-  const fabricationIssues = scanTextForFabricationPatterns(JSON.stringify(plan));
+  // E2E-bugfix (2026-09-20): klant-aangeleverde questionnaire-antwoorden zijn
+  // bewezen echte claims (zelfde contract als blueprint-trustElements, Fase C):
+  // een match die VERBATIM in die antwoorden staat is geen fabricatie. De AI
+  // mag klantbewijs dus alleen exact echoën — afwijkende getallen, opgeblazen
+  // varianten of eigen formuleringen blijven geblokkeerd.
+  const fabricationIssues = scanTextForFabricationPatterns(JSON.stringify(plan), trustedClaims);
   if (fabricationIssues.length > 0) {
     errors.push(
       ...fabricationIssues.map((issue) => `Fabricatie-patroon "${issue.rule}" gevonden: ${issue.reason}`)

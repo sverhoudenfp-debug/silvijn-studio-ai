@@ -33,7 +33,7 @@ const serviceSource = readFileSync(path.join(root, "lib/ai/service.ts"), "utf8")
  *    ai-questionnaire-completion.test.ts; hier opnieuw bewaakt voor de
  *    designplanning-request-vorm);
  * b. service: de designplanning-call heeft een thinking-proof tokenbudget
- *    (12000, sinds Fase A+B 16000 voor het blueprint), niet het fatale 4000;
+ *    (12000, sinds Fase A+B 16000, sinds de C1/C2-doorvoer 20000), niet het fatale 4000;
  * c. prompt-contract: de user-prompt bevat het expliciete, volledige
  *    JSON-veldcontract (DESIGN_PLANNING_JSON_CONTRACT) en verbiedt eigen
  *    veldnamen — het strikte schema-contract blijft in de prompt staan;
@@ -101,15 +101,15 @@ test("provider: stop_reason=end_turn met volledige JSON komt ongewijzigd door (b
   assert.equal(result.mode, "live");
 });
 
-test("service-contract: designplanning-call heeft een thinking-proof tokenbudget (16000, sinds het blueprint), niet het fatale 4000", () => {
+test("service-contract: designplanning-call heeft een thinking-proof tokenbudget (20000, sinds de C1/C2-questionnaredoorvoer), niet het fatale 4000", () => {
   const start = serviceSource.indexOf("async generateDesignPlan");
   const end = serviceSource.indexOf("designPlanSchema", start);
   assert.ok(start !== -1 && end > start, "generateDesignPlan moet in service.ts staan");
   const block = serviceSource.slice(start, end);
   assert.match(
     block,
-    /maxTokens: 16000/,
-    "budget moet 16000 zijn (Fase A+B: v1-plan ~4900 total tokens + rijke input ~10k + blueprint-sectie-instanties; terug naar 12000 of lager riskeert opnieuw stop_reason=max_tokens)"
+    /maxTokens: 20000/,
+    "budget moet 20000 zijn (E2E 2026-09-20: ronde-1+2-antwoorden in de prompt + thinking + plan + blueprint overschreden 16000; 24000+ is SDK-onmogelijk non-streaming, zie provider-comment)"
   );
   assert.doesNotMatch(block, /maxTokens: 4000/, "het oude, fatale 4000-budget mag niet terugkeren");
   assert.doesNotMatch(block, /maxTokens: 12000/, "het pre-blueprint budget is achterhaald: blueprint-instanties kosten structureel extra output-tokens");
@@ -204,4 +204,20 @@ test("schema-contract: een volledig, geldig Design Plan doorstaat de Zod-validat
 test("schema-contract: truncatie-achtige incomplete output wordt door het schema geweigerd", () => {
   const truncated = { goals: { primaryGoal: "Nieuwe klanten aantrek" } };
   assert.equal(designPlanSchema.safeParse(truncated).success, false, "het schema blijft de autoriteit: afgekapte output faalt de validatie");
+});
+
+test("SDK-grens: designplanning-budget blijft onder de non-streaming limiet (21333) van de Anthropic SDK", () => {
+  // E2E-les 2026-09-20: calculateNonstreamingTimeout gooit een kale
+  // AnthropicError ("Streaming is required...") zodra maxTokens > 128000/6.
+  // De provider draait non-streaming, dus het budget moet onder de grens
+  // blijven. 20000 heeft +25% headroom boven het oude 16000 en past ruim.
+  const SDK_NONSTREAMING_LIMIT = Math.floor(128000 / 6);
+  const start = serviceSource.indexOf("async generateDesignPlan");
+  const end = serviceSource.indexOf("designPlanSchema", start);
+  const block = serviceSource.slice(start, end);
+  const match = block.match(/maxTokens: (\d+),/);
+  assert.ok(match, "designplanning maxTokens moet aantoonbaar in de generateDesignPlan-call staan");
+  const budget = Number.parseInt(match[1], 10);
+  assert.ok(budget <= SDK_NONSTREAMING_LIMIT, `budget ${budget} moet <= ${SDK_NONSTREAMING_LIMIT} blijven zonder streaming`);
+  assert.ok(budget > 16000, "budget moet boven het bewezen te krappe 16000 blijven");
 });

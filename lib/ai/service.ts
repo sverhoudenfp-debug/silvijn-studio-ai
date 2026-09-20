@@ -572,10 +572,16 @@ export class AIService {
           // Website Blueprint v2: per pagina sectie-instanties met layouts,
           // blokken, media en CTA's (tot 10 pagina's x 12 instanties) —
           // structureel extra output boven op het v1-plan. Budget 16000
-          // houdt headroom voor denken + v1 + blueprint zonder extreme
-          // waarden. Verlaag dit budget niet terug: 4000 was fataal en
-          // 12000 is achterhaald sinds het blueprint verplicht is.
-          maxTokens: 16000,
+          // houdt headroom voor denken + v1 + blueprint. E2E 2026-09-20:
+          // met de C1/C2-questionnaire-antwoorden (beide rondes) in de
+          // prompt bleek 16000 in de rijkste case te krap
+          // (stop_reason=max_tokens). 24000 is géén optie: de Anthropic SDK
+          // weigert non-streaming requests met een geschatte tijd >10 min
+          // (SDK-grens 128000/6 = 21333 tokens, kale AnthropicError
+          // "Streaming is required..."). Budget 20000: +25% boven 16000,
+          // veilig onder de SDK-grens. Verlaag niet terug en verhoog niet
+          // boven 21333 zonder streaming in de provider.
+          maxTokens: 20000,
           temperature: 0.4,
         },
         designPlanSchema

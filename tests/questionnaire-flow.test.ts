@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { decideCompletion } from "../lib/questionnaire/completion";
+import * as completionModule from "../lib/questionnaire/completion";
+import * as summaryModule from "../lib/questionnaire/summary";
 import {
   generatedQuestionsSchema,
   questionnaireSlugSchema,
@@ -151,4 +153,57 @@ test("AI context reuses real sources and never invents facts (prompt rules)", ()
 test("questionnaire ids are validated as UUIDs where flows reference stored rows", () => {
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
   assert.ok(uuid.test(id));
+});
+
+test("E2E-regressie (2026-09-20): follow-up-definities blijven behouden na COMPLETE/ATTENTION", () => {
+  const { followUpsAfterDecision } = completionModule;
+  const asked: QuestionnaireQuestion[] = [
+    { id: "fu-proof", label: "Heb je reviews die we mogen tonen?", type: "textarea" },
+    { id: "fu-deadline", label: "Gewenste opleverdatum?", type: "text" },
+  ];
+  // COMPLETE na ronde 2: definities van gestelde follow-ups blijven staan
+  // (ronde-2-antwoorden blijven consumeerbaar voor Design Planning + dashboard).
+  const complete = followUpsAfterDecision(
+    { status: "QUESTIONNAIRE_COMPLETE", followUpQuestions: [], missingInformation: [] },
+    asked
+  );
+  assert.deepEqual(complete, asked);
+  // ATTENTION: idem — antwoorden zijn ontvangen en mogen niet onzichtbaar worden.
+  const attention = followUpsAfterDecision(
+    { status: "QUESTIONNAIRE_ATTENTION", followUpQuestions: [], missingInformation: [] },
+    asked
+  );
+  assert.deepEqual(attention, asked);
+  // FOLLOW_UP met nieuwe vragen: de nieuwe vragen winnen (nooit gemengd).
+  const fresh = [{ id: "fu-2", label: "Nieuwe vraag", type: "textarea" }];
+  const followUp = followUpsAfterDecision(
+    { status: "QUESTIONNAIRE_FOLLOW_UP", followUpQuestions: fresh, missingInformation: [] },
+    asked
+  );
+  assert.deepEqual(followUp, fresh);
+  // Zonder bestaande follow-ups verandert er niets (ronde-1 COMPLETE).
+  const empty = followUpsAfterDecision(
+    { status: "QUESTIONNAIRE_COMPLETE", followUpQuestions: [], missingInformation: [] },
+    []
+  );
+  assert.deepEqual(empty, []);
+
+  // Consumptie-proof: met behouden definities stromen ronde-2-antwoorden
+  // door naar de Design Planning-regels (nieuwste antwoord wint per vraag-id).
+  const { buildQuestionnaireAnswerLines } = summaryModule;
+  const lines = buildQuestionnaireAnswerLines(
+    [{ id: "q1", label: "Wat bied je aan?", type: "textarea" }],
+    asked,
+    [
+      { round: 1, answers: { q1: "Maatwerkwebsites" }, uploads: [] },
+      { round: 2, answers: { "fu-proof": "Klantreviews + referentieproject", "fu-deadline": "Binnen 2 maanden" }, uploads: [] },
+    ]
+  );
+  const labels = lines.map((l: { label: string }) => l.label);
+  assert.ok(labels.includes("Wat bied je aan?"));
+  assert.ok(labels.includes("Heb je reviews die we mogen tonen?"), "ronde-2 bewijsantwoord moet een eigen regel krijgen");
+  assert.ok(labels.includes("Gewenste opleverdatum?"), "ronde-2 deadline-antwoord moet een eigen regel krijgen");
+  const proofLine = lines.find((l: { label: string }) => l.label === "Heb je reviews die we mogen tonen?");
+  assert.ok(proofLine, "bewijsregel moet bestaan");
+  assert.equal(proofLine.value, "Klantreviews + referentieproject");
 });

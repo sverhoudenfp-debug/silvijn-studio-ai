@@ -56,10 +56,12 @@ test("budget-guardian: AI-QC-call heeft thinking-proof budget (6000), niet het f
 });
 
 test("budget-guardian: eerdere budget-fixes blijven intact (alleen verzwaren, niets afzwakken)", () => {
-  // Fase A+B (2026-09-19): designplanning is verzwaard van 12000 naar
-  // 16000 — het verplichte Website Blueprint v2 voegt per pagina
-  // sectie-instanties toe (10 pagina's x 12 instanties) boven op het v1-plan.
-  assert.match(serviceSource, /maxTokens: 16000/, "designplanning houdt 16000 (blauwdruk-headroom)");
+  // Fase A+B (2026-09-19): designplanning verzwaard 12000 -> 16000
+  // (Website Blueprint v2). E2E 2026-09-20: met de C1/C2-questionnaire-
+  // antwoorden (beide rondes) in de prompt bleek 16000 krap, nu 20000 (24000+ weigert de SDK non-streaming: grens 21333).
+  assert.match(serviceSource, /maxTokens: 20000/, "designplanning houdt 20000 (blauwdruk + questionnaire-doorvoer headroom, onder de SDK-grens 21333)");
+  assert.doesNotMatch(serviceSource, /maxTokens: 16000/, "het pre-questionnaire 16000-budget is achterhaald");
+  assert.doesNotMatch(serviceSource, /maxTokens: 24000/, "24000+ is SDK-onmogelijk non-streaming (grens 21333)");
   assert.doesNotMatch(serviceSource, /maxTokens: 12000/, "het pre-blueprint 12000-budget is achterhaald");
   const qcStart = serviceSource.indexOf("async generateWebsiteQualityAnalysis");
   const qcBlock = serviceSource.slice(qcStart, serviceSource.indexOf("QCAnalysisSchema", qcStart));

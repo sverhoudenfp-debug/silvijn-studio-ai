@@ -384,13 +384,14 @@ test("AI-wiring: designplanning-prompt bevat het blueprint-veld, de registry-cat
   assert.ok(block.includes("buildBlueprintSectionContract()"), "prompt moet de registry-catalogus opnemen");
 });
 
-test("AI-wiring: designplanning-service gebruikt het thinking-proof blueprint-budget (16000)", () => {
+test("AI-wiring: designplanning-service gebruikt het thinking-proof blueprint-budget (20000, sinds de C1/C2-questionnaredoorvoer)", () => {
   const start = SERVICE_SOURCE.indexOf("async generateDesignPlan");
   const end = SERVICE_SOURCE.indexOf("designPlanSchema", start);
   const block = SERVICE_SOURCE.slice(start, end);
-  assert.match(block, /maxTokens: 16000/);
+  assert.match(block, /maxTokens: 20000/);
   assert.doesNotMatch(block, /maxTokens: 4000/);
   assert.doesNotMatch(block, /maxTokens: 12000/);
+  assert.doesNotMatch(block, /maxTokens: 16000/, "het pre-questionnaire 16000-budget faalde live (E2E 2026-09-20)");
 });
 
 test("mock: mock-designplan bevat een registry-conform, schema-geldig blueprint (1 en 3 pagina's)", () => {

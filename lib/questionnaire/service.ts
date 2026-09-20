@@ -3,7 +3,8 @@ import { AIService } from "@/lib/ai/service";
 import { getLeadRepository, type LeadRepository } from "@/lib/repositories/lead-repository";
 import { getProjectRepository, type ProjectRepository } from "@/lib/projects/repository";
 import { buildQuestionnaireContext, QuestionnaireContextError } from "./context";
-import { decideCompletion } from "./completion";
+import { decideCompletion, followUpsAfterDecision } from "./completion";
+import { buildCompletionSummaries } from "./summary";
 import { ensureDesignCoreQuestions } from "./design-core";
 import { getQuestionnaireRepository, type Questionnaire, type QuestionnaireResponse, type QuestionnaireUpload } from "./repository";
 import {
@@ -145,7 +146,7 @@ export async function submitQuestionnaireResponse(
           assessedAt: new Date().toISOString(),
           round,
         },
-        followUpQuestions: [],
+        followUpQuestions: questionnaire.followUpQuestions as QuestionnaireQuestion[],
       })
       .catch(() => undefined);
   }
@@ -174,23 +175,19 @@ async function runCompletionAssessment(questionnaire: Questionnaire, round: 1 | 
   const context = await buildQuestionnaireContext(questionnaire.leadId, questionnaire.projectId);
   const responses = await repository.listResponses(questionnaire.id);
 
-  const questionsForRound = round === 1 ? questionnaire.questions : questionnaire.followUpQuestions;
-  const answersSummary = questionsForRound
-    .map((question) => {
-      const latest = [...responses].reverse().find((r) => r.round === round && question.id in r.answers);
-      const uploadNote = latest?.uploads.filter((u) => u.questionId === question.id) ?? [];
-      const value = latest?.answers[question.id] ?? "(niet ingevuld)";
-      const uploadText = uploadNote.length > 0 ? ` [${uploadNote.length} bestand(en) geüpload]` : "";
-      return `- ${question.label}: ${value}${uploadText}`;
-    })
-    .join("\n");
+  // E2E-bugfix (2026-09-20): ronde 2 beoordeelt over álle rondes — zonder
+  // de ronde-1-antwoorden concludeerde de AI ten onrechte dat kernvragen
+  // nooit beantwoord waren en degradeerde complete questionnaires naar
+  // QUESTIONNAIRE_ATTENTION met een feitelijk onjuiste analyse.
+  const summaries = buildCompletionSummaries(questionnaire.questions, questionnaire.followUpQuestions, responses, round);
+  const answersSummary = summaries.answersSummary;
 
   const result = await new AIService().analyzeQuestionnaireCompletion(
     {
       businessName: lead?.businessName ?? context.businessName,
       round,
       contextSummary: context.summary,
-      questionsSummary: questionsForRound.map((q, i) => `${i + 1}. ${q.label}`).join("\n"),
+      questionsSummary: summaries.questionsSummary,
       answersSummary,
     },
     questionnaire.leadId
@@ -208,6 +205,12 @@ async function runCompletionAssessment(questionnaire: Questionnaire, round: 1 | 
 
   await repository.saveCompletion(questionnaire.id, {
     status: decision.status,
+    // E2E-bugfix (2026-09-20): definities van gestelde follow-upvragen behouden,
+    // zodat ronde-2-antwoorden consumeerbaar blijven (Design Planning + dashboard).
+    followUpQuestions: followUpsAfterDecision(
+      decision,
+      questionnaire.followUpQuestions
+    ) as QuestionnaireQuestion[],
     analysis: {
       summary: result.data.summary,
       resolvedInformation: result.data.resolvedInformation,
@@ -220,7 +223,6 @@ async function runCompletionAssessment(questionnaire: Questionnaire, round: 1 | 
       mode: result.mode,
       round,
     },
-    followUpQuestions: decision.followUpQuestions as QuestionnaireQuestion[],
   });
 }
 

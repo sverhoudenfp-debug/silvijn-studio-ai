@@ -49,7 +49,14 @@ function mapAnthropicError(error: unknown, timeoutMsLabel: string): Error {
     if (status >= 500) return new AIProviderError(`Anthropic-serverfout (status ${status}${typeSuffix})`);
     return new AIProviderError(`Anthropic-APIfout (status ${status}${typeSuffix})`);
   }
-  return new AIProviderError("Onbekende Anthropic-fout");
+  // E2E-les 2026-09-20: een onverwachte foutklasse verdween volledig in deze
+  // generieke boodschap. De constructor-naam (+ evt. status) is veilig te
+  // loggen (geen payload) en maakt de echte oorzaak zichtbaar zonder secrets.
+  const errorName = (error as { constructor?: { name?: string } })?.constructor?.name ?? "onbekend";
+  const status = (error as { status?: number })?.status;
+  return new AIProviderError(
+    `Onbekende Anthropic-fout (${errorName}${status != null ? `, status ${status}` : ""})`
+  );
 }
 
 export class AnthropicProvider implements AIProvider {

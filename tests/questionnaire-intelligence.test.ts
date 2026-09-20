@@ -8,7 +8,7 @@ import {
   MAX_GENERATED_QUESTIONS,
 } from "@/lib/questionnaire/design-core";
 import { decideCompletion } from "@/lib/questionnaire/completion";
-import { buildQuestionnaireAnswerLines } from "@/lib/questionnaire/summary";
+import { buildCompletionSummaries, buildQuestionnaireAnswerLines } from "@/lib/questionnaire/summary";
 import { QuestionnaireCompletionSchema } from "@/lib/ai/schemas";
 import type { QuestionnaireQuestion } from "@/lib/questionnaire/validation";
 import type { QuestionnaireResponseLike } from "@/lib/questionnaire/summary";
@@ -270,4 +270,31 @@ test("mock-contract: ronde-2-mock is eerlijk rijk (afgezegd waar geen data), ron
   assert.equal(round2.sufficient, true);
   assert.match(round2.contentDimensions.proof, /^NIET_BESCHIKBAAR/);
   assert.equal(assessContentRichness(round2.contentDimensions).complete, true, "ronde 2 eerlijk rijk");
+});
+
+// ---------------------------------------------------------------------------
+// E2E-bugfix: ronde-2-completion ziet ronde-1-antwoorden
+// ---------------------------------------------------------------------------
+
+test("bugfix regressie: ronde-2-beoordeling krijgt de ronde-1-antwoorden te zien", () => {
+  const questions: QuestionnaireQuestion[] = [
+    q("kern_aanbod", "Wat bied je concreet aan?", "textarea"),
+    q("kern_usp", "Waarom zouden klanten voor jullie kiezen?", "textarea"),
+  ];
+  const followUps: QuestionnaireQuestion[] = [q("f_media", "Welke foto's zijn beschikbaar?")];
+  const responses: QuestionnaireResponseLike[] = [
+    { round: 1, answers: { kern_aanbod: "Webdesign en onderhoud", kern_usp: "Snel en persoonlijk" }, uploads: [] },
+    { round: 2, answers: { f_media: "Eén sfeerfoto van het atelier" }, uploads: [] },
+  ];
+  const round2 = buildCompletionSummaries(questions, followUps, responses, 2);
+  // ALLE antwoorden moeten zichtbaar zijn — dit was de E2E-bug.
+  assert.match(round2.answersSummary, /Wat bied je concreet aan\?: Webdesign en onderhoud/);
+  assert.match(round2.answersSummary, /Waarom zouden klanten voor jullie kiezen\?: Snel en persoonlijk/);
+  assert.match(round2.answersSummary, /foto's zijn beschikbaar\?: Eén sfeerfoto van het atelier/);
+  // De vragenlijst bevat beide rondes.
+  assert.equal(round2.questionsSummary.split("\n").length, 3);
+  // Ronde 1 blijft ongewijzigd gedrag: alleen kernvragen.
+  const round1 = buildCompletionSummaries(questions, [], [responses[0]], 1);
+  assert.equal(round1.questionsSummary.split("\n").length, 2);
+  assert.match(round1.answersSummary, /Webdesign en onderhoud/);
 });

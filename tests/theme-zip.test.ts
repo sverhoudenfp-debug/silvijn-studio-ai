@@ -852,3 +852,106 @@ test("theme-zip: design-plan-consistentie met requirements geldt ook voor het ZI
   const result = validateDesignPlanConsistency(inconsistentPlan, REQUIREMENTS);
   assert.equal(result.passed, false, "scope-wijziging (paginantal) moet blokkeren");
 });
+
+/** ===== Regressie: Shopify-template-ID's (2026-09-20, live import-bewijs) =====
+ * Shopify laat templatebestanden met hyfen in section-/blok-ID's bij ZIP-import
+ * STIL vallen (index.json + page.diensten.json verdwenen uit "Edit code").
+ * Docs: ID's "accept only alphanumeric characters"; underscores zijn bewezen
+ * veilig (Dawn: image_banner; de theme-editor genereert zelf underscores).
+ * Het section-TYPE blijft kebab (bestandsnaam), alleen de ID's niet.
+ */
+function templateJsonOf(files: ThemeFile[], path: string): { sections: Record<string, Record<string, unknown>>; order: string[] } {
+  const file = files.find((f) => f.path === path);
+  assert.ok(file, `${path} ontbreekt`);
+  return JSON.parse(file.content) as { sections: Record<string, Record<string, unknown>>; order: string[] };
+}
+
+test("theme-zip: alle template-/group-ID's zijn alfanumeriek (geen hyfens)", () => {
+  const files = builtTheme();
+  const idRe = /^[a-zA-Z0-9_]+$/;
+  for (const file of files) {
+    const isGroup = file.path.startsWith("sections/") && file.path.endsWith("-group.json");
+    if (!isGroup && !file.path.startsWith("templates/")) continue;
+    if (!file.path.endsWith(".json")) continue;
+    const data = JSON.parse(file.content) as {
+      sections?: Record<string, { blocks?: Record<string, unknown> }>;
+    };
+    for (const [sectionId, section] of Object.entries(data.sections ?? {})) {
+      assert.ok(idRe.test(sectionId), `section-ID "${sectionId}" in ${file.path} bevat niet-alfanumerieke tekens`);
+      for (const blockId of Object.keys(section.blocks ?? {})) {
+        assert.ok(idRe.test(blockId), `blok-ID "${blockId}" in ${file.path} bevat niet-alfanumerieke tekens`);
+      }
+    }
+  }
+  // Legacy-homepage: service-blokken nu met underscore.
+  const index = templateJsonOf(files, "templates/index.json");
+  assert.ok(index.sections.services, "services op de homepage");
+  const blockIds = Object.keys((index.sections.services as { blocks?: Record<string, unknown> }).blocks ?? {});
+  assert.ok(blockIds.length > 0, "services heeft blokken");
+  for (const blockId of blockIds) {
+    assert.ok(idRe.test(blockId), `legacy blok-ID "${blockId}" bevat een hyfen`);
+  }
+});
+
+test("theme-zip: validatie vangt hyfen in template-section-ID's hard af (de les van 2026-09-20)", () => {
+  const theme = builtTheme();
+  const index = templateJsonOf(theme, "templates/index.json");
+  const sections: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(index.sections)) {
+    sections[key === "cta" ? "usp-band" : key] = value;
+  }
+  const tampered: ThemeFile[] = theme.map((f) =>
+    f.path === "templates/index.json"
+      ? {
+          ...f,
+          content: JSON.stringify({
+            sections,
+            order: index.order.map((k) => (k === "cta" ? "usp-band" : k)),
+          }),
+        }
+      : f
+  );
+  const result = validateThemeFiles(tampered);
+  assert.equal(result.passed, false, "hyfen-section-ID's moeten de validatie laten falen");
+  assert.ok(
+    result.errors.some((e) => e.includes('section-ID "usp-band"')),
+    "foutmelding benoemt de hyfen-section-ID"
+  );
+});
+
+test("theme-zip: validatie vangt hyfen-blok-ID's hard af", () => {
+  const theme = builtTheme();
+  const index = templateJsonOf(theme, "templates/index.json");
+  const services = index.sections.services as {
+    blocks: Record<string, unknown>;
+    block_order: string[];
+  };
+  const blocks: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(services.blocks)) {
+    blocks[key.replace("_", "-")] = value;
+  }
+  const tampered: ThemeFile[] = theme.map((f) =>
+    f.path === "templates/index.json"
+      ? {
+          ...f,
+          content: JSON.stringify({
+            sections: {
+              ...index.sections,
+              services: {
+                ...services,
+                blocks,
+                block_order: services.block_order.map((k) => k.replace("_", "-")),
+              },
+            },
+            order: index.order,
+          }),
+        }
+      : f
+  );
+  const result = validateThemeFiles(tampered);
+  assert.equal(result.passed, false, "hyfen-blok-ID's moeten de validatie laten falen");
+  assert.ok(
+    result.errors.some((e) => e.includes('blok-ID "service-1"')),
+    "foutmelding benoemt de hyfen-blok-ID"
+  );
+});

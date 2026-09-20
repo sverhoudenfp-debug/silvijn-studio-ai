@@ -227,7 +227,7 @@ function instanceToSectionEntry(
       const order: string[] = [];
       const count = Math.max(planned, labels.length, hints.length);
       for (let i = 0; i < count; i += 1) {
-        const key = `usp-${i + 1}`;
+        const key = `usp_${i + 1}`;
         blocks[key] = { type: "usp", settings: { label: labels[i] ?? null, description: hints[i] ?? null } };
         order.push(key);
       }
@@ -249,7 +249,7 @@ function instanceToSectionEntry(
       const order: string[] = [];
       const count = Math.max(planned, labels.length, values.length);
       for (let i = 0; i < count; i += 1) {
-        const key = `stat-${i + 1}`;
+        const key = `stat_${i + 1}`;
         blocks[key] = { type: "stat", settings: { label: labels[i] ?? null, value: values[i] ?? null } };
         order.push(key);
       }
@@ -269,7 +269,7 @@ function instanceToSectionEntry(
       const order: string[] = [];
       const count = Math.max(planned, titles.length, bodies.length);
       for (let i = 0; i < count; i += 1) {
-        const key = `service-${i + 1}`;
+        const key = `service_${i + 1}`;
         blocks[key] = {
           type: "service",
           settings: { title: titles[i] ?? null, description: bodies[i] ?? null },
@@ -305,7 +305,7 @@ function instanceToSectionEntry(
       const order: string[] = [];
       const count = Math.max(planned, titles.length, bodies.length);
       for (let i = 0; i < count; i += 1) {
-        const key = `step-${i + 1}`;
+        const key = `step_${i + 1}`;
         blocks[key] = { type: "step", settings: { title: titles[i] ?? null, description: bodies[i] ?? null } };
         order.push(key);
       }
@@ -324,7 +324,7 @@ function instanceToSectionEntry(
       const order: string[] = [];
       const count = Math.max(planned, captions.length, alts.length);
       for (let i = 0; i < count; i += 1) {
-        const key = `image-${i + 1}`;
+        const key = `image_${i + 1}`;
         blocks[key] = {
           type: "gallery_image",
           settings: { caption: captions[i] ?? null, alt: alts[i] ?? null },
@@ -346,7 +346,7 @@ function instanceToSectionEntry(
       const order: string[] = [];
       const count = Math.max(planned, titles.length, bodies.length);
       for (let i = 0; i < count; i += 1) {
-        const key = `project-${i + 1}`;
+        const key = `project_${i + 1}`;
         blocks[key] = { type: "project", settings: { title: titles[i] ?? null, description: bodies[i] ?? null } };
         order.push(key);
       }
@@ -367,7 +367,7 @@ function instanceToSectionEntry(
       const order: string[] = [];
       const count = Math.max(quoteTexts.length, authors.length);
       for (let i = 0; i < count; i += 1) {
-        const key = `testimonial-${i + 1}`;
+        const key = `testimonial_${i + 1}`;
         blocks[key] = {
           type: "testimonial",
           settings: { quote: quoteTexts[i] ?? null, author: authors[i] ?? null },
@@ -388,7 +388,7 @@ function instanceToSectionEntry(
       const order: string[] = [];
       const count = Math.max(planned, names.length, roles.length);
       for (let i = 0; i < count; i += 1) {
-        const key = `member-${i + 1}`;
+        const key = `member_${i + 1}`;
         blocks[key] = { type: "member", settings: { name: names[i] ?? null, role: roles[i] ?? null } };
         order.push(key);
       }
@@ -407,7 +407,7 @@ function instanceToSectionEntry(
       const order: string[] = [];
       const count = Math.max(planned, texts.length);
       for (let i = 0; i < count; i += 1) {
-        const key = `benefit-${i + 1}`;
+        const key = `benefit_${i + 1}`;
         blocks[key] = { type: "benefit", settings: { text: texts[i] ?? null } };
         order.push(key);
       }
@@ -427,7 +427,7 @@ function instanceToSectionEntry(
       const order: string[] = [];
       const count = Math.max(planned, questions.length, answersRaw.length);
       for (let i = 0; i < count; i += 1) {
-        const key = `question-${i + 1}`;
+        const key = `question_${i + 1}`;
         blocks[key] = {
           type: "question",
           settings: {
@@ -452,7 +452,7 @@ function instanceToSectionEntry(
       const order: string[] = [];
       const count = Math.max(planned, services.length, prices.length);
       for (let i = 0; i < count; i += 1) {
-        const key = `rate-${i + 1}`;
+        const key = `rate_${i + 1}`;
         blocks[key] = { type: "rate_item", settings: { service: services[i] ?? null, price: prices[i] ?? null } };
         order.push(key);
       }
@@ -525,7 +525,7 @@ function instanceToSectionEntry(
       const blocks: Record<string, Record<string, unknown>> = {};
       const order: string[] = [];
       for (let i = 0; i < count; i += 1) {
-        const key = `paragraph-${i + 1}`;
+        const key = `paragraph_${i + 1}`;
         blocks[key] = { type: "paragraph", settings: { body: paragraphs[i]?.body ?? null } };
         order.push(key);
       }
@@ -618,7 +618,10 @@ function composePage(
 
     const n = (typeCounters.get(entry.type) ?? 0) + 1;
     typeCounters.set(entry.type, n);
-    const key = n === 1 ? entry.type : `${entry.type}_${n}`;
+    // Section-ID's in Shopify-templates mogen GEEN hyfens bevatten (docs: alleen
+    // alfanumeriek; Dawn gebruikt underscores, het type zelf mag kebab blijven).
+    const idBase = entry.type.replace(/-/g, "_");
+    const key = n === 1 ? idBase : `${idBase}_${n}`;
     sections[key] = entry as unknown as Record<string, unknown>;
     order.push(key);
   }

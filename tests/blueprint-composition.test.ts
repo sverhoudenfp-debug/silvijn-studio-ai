@@ -217,7 +217,7 @@ function build(plan: DesignPlan): BuiltTheme {
 test("blueprint → usp-band schrijft uitsluitend settings die in het sectie-schema bestaan (Shopify-import-mirror)", () => {
   const files = build(planWithBlueprint(baseBlueprint())).files;
   const index = templateJson(files, "templates/index.json");
-  const usp = index.sections["usp-band"];
+  const usp = index.sections["usp_band"];
   assert.ok(usp, "usp-band op de homepage");
 
   // Het usp-band-schema kent geen heading: de compositie mag die dus nooit wegschrijven.
@@ -273,7 +273,7 @@ test("sectievolgorde volgt het blueprint exact (ook bij herhaling van een type)"
   const over = templateJson(theme.files, "templates/page.over-ons.json");
   assert.deepEqual(over.order.map((k) => over.sections[k].type), ["rich-text", "about", "rich-text", "cta"]);
   // Unieke section-keys bij herhaald type
-  assert.deepEqual(over.order, ["rich-text", "about", "rich-text_2", "cta"]);
+  assert.deepEqual(over.order, ["rich_text", "about", "rich_text_2", "cta"]);
 });
 
 test("layoutvarianten zijn daadwerkelijk zichtbaar in Shopify (setting + klasse + CSS)", () => {
@@ -324,8 +324,8 @@ test("elke section-instantie zet background/motion-settings (accent_band + stagg
   blueprint.pages[0].sectionInstances[1].motion = "stagger";
   const theme = build(planWithBlueprint(blueprint));
   const index = templateJson(theme.files, "templates/index.json");
-  assert.equal(index.sections["usp-band"].settings.background, "accent_band");
-  assert.equal(index.sections["usp-band"].settings.motion, "stagger");
+  assert.equal(index.sections["usp_band"].settings.background, "accent_band");
+  assert.equal(index.sections["usp_band"].settings.motion, "stagger");
   assert.equal(index.sections.hero.settings.background, "default");
 });
 
@@ -354,12 +354,12 @@ test("geen ongeplande secties: alleen blueprint-types in de templates", () => {
 test("trust-elements: echte usps/stats alleen, blokken uit trustElements, geen fabricatie", () => {
   const theme = build(planWithBlueprint(baseBlueprint()));
   const index = templateJson(theme.files, "templates/index.json");
-  const usp = index.sections["usp-band"];
+  const usp = index.sections["usp_band"];
   assert.ok(usp.block_order && usp.blocks);
   // Echte USP uit trustElements komt terecht; overige slots blijven leeg (bewerkbaar)
   assert.equal(usp.block_order.length, 2);
-  assert.equal(usp.blocks["usp-1"].settings.label, "10 jaar ervaring");
-  assert.equal(usp.blocks["usp-2"].settings.label, null);
+  assert.equal(usp.blocks["usp_1"].settings.label, "10 jaar ervaring");
+  assert.equal(usp.blocks["usp_2"].settings.label, null);
 });
 
 test("CTA-doelen worden deterministisch opgelost (paginakey, form, mailto)", () => {
@@ -386,8 +386,8 @@ test("content komt alléén uit de specificatie (services/faq/testimonials) — 
   const services = index.sections.services;
   assert.ok(services.block_order && services.blocks);
   assert.equal(services.block_order.length, 3); // 3 geplande slots, 2 echte diensten
-  assert.equal(services.blocks["service-1"].settings.title, "Testdienst A");
-  assert.equal(services.blocks["service-3"].settings.title, null); // geen derde dienst verzonnen
+  assert.equal(services.blocks["service_1"].settings.title, "Testdienst A");
+  assert.equal(services.blocks["service_3"].settings.title, null); // geen derde dienst verzonnen
 });
 
 test("backward compat: v1-plan zonder blueprint levert de bestaande compositie", () => {

@@ -213,6 +213,11 @@ function validateSectionAgainstSchema(
   const blocks = entry.blocks;
   if (blocks && typeof blocks === "object" && !Array.isArray(blocks)) {
     for (const [blockKey, blockValue] of Object.entries(blocks as Record<string, unknown>)) {
+      if (!SHOPIFY_TEMPLATE_ID_RE.test(blockKey)) {
+        errors.push(
+          `${where}: blok-ID "${blockKey}" bevat niet-alfanumerieke tekens (Shopify-docs: ID's alleen alfanumeriek; hyfens doen het hele template bij import vallen).`
+        );
+      }
       if (!blockValue || typeof blockValue !== "object" || Array.isArray(blockValue)) continue;
       const blockRecord = blockValue as Record<string, unknown>;
       const blockType = blockRecord.type;
@@ -240,6 +245,14 @@ function validateSectionAgainstSchema(
     }
   }
 }
+
+/**
+ * Shopify-template-ID's (section- én block-ID's) accepteren alleen
+ * alfanumerieke tekens (docs); underscores zijn bewezen veilig (Dawn,
+ * theme-editor). Hyfens laten Shopify het HELE templatebestand bij
+ * ZIP-import vallen (live bewezen 2026-09-20: index.json + page.diensten.json).
+ */
+const SHOPIFY_TEMPLATE_ID_RE = /^[a-zA-Z0-9_]+$/;
 
 function validateTemplates(
   parsed: Map<string, unknown>,
@@ -279,6 +292,11 @@ function validateTemplates(
       }
     }
     for (const [key, value] of Object.entries(sections)) {
+      if (!SHOPIFY_TEMPLATE_ID_RE.test(key)) {
+        errors.push(
+          `Template "${path}": section-ID "${key}" bevat niet-alfanumerieke tekens (Shopify-docs: ID's alleen alfanumeriek; hyfens doen het hele template bij import vallen).`
+        );
+      }
       if (!value || typeof value !== "object") {
         errors.push(`Template "${path}": sectie "${key}" is geen object.`);
         continue;
@@ -320,6 +338,11 @@ function validateTemplates(
       continue;
     }
     for (const [key, value] of Object.entries(sections as Record<string, unknown>)) {
+      if (!SHOPIFY_TEMPLATE_ID_RE.test(key)) {
+        errors.push(
+          `Section group "${path}": section-ID "${key}" bevat niet-alfanumerieke tekens (Shopify-docs: ID's alleen alfanumeriek).`
+        );
+      }
       if (!value || typeof value !== "object") continue;
       const entry = value as Record<string, unknown>;
       const type = entry.type;

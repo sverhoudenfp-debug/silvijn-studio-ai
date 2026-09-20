@@ -3132,11 +3132,11 @@ function buildHeaderGroup(input: HeaderGroupInput): ThemeFile {
         },
         blocks: Object.fromEntries(
           input.navItems.map((item, index) => [
-            `nav-${index + 1}`,
+            `nav_${index + 1}`,
             { type: "nav_item", settings: { label: item.label, link: item.url } },
           ])
         ),
-        block_order: input.navItems.map((_, i) => `nav-${i + 1}`),
+        block_order: input.navItems.map((_, i) => `nav_${i + 1}`),
       },
     },
     order: ["header"],
@@ -3194,11 +3194,11 @@ function homePageSectionInstances(spec: WebsiteSpecification, contact: WebsiteCo
       settings: { heading: "Onze diensten", subheading: null },
       blocks: Object.fromEntries(
         spec.content.services.map((s, i) => [
-          `service-${i + 1}`,
+          `service_${i + 1}`,
           { type: "service", settings: { title: s.title, description: s.description } },
         ])
       ),
-      block_order: spec.content.services.map((_, i) => `service-${i + 1}`),
+      block_order: spec.content.services.map((_, i) => `service_${i + 1}`),
     };
     order.push("services");
   }
@@ -3225,11 +3225,11 @@ function homePageSectionInstances(spec: WebsiteSpecification, contact: WebsiteCo
       settings: { heading: "Impressie", subheading: null },
       blocks: Object.fromEntries(
         Array.from({ length: galleryCount }, (_, i) => [
-          `image-${i + 1}`,
+          `image_${i + 1}`,
           { type: "gallery_image", settings: { caption: spec.media.imageDescriptions[i] ?? null, alt: null } },
         ])
       ),
-      block_order: Array.from({ length: galleryCount }, (_, i) => `image-${i + 1}`),
+      block_order: Array.from({ length: galleryCount }, (_, i) => `image_${i + 1}`),
     };
     order.push("gallery");
   }
@@ -3242,9 +3242,9 @@ function homePageSectionInstances(spec: WebsiteSpecification, contact: WebsiteCo
       type: "testimonials",
       settings: { heading: "Wat klanten zeggen" },
       blocks: Object.fromEntries(
-        quotes.map((quote, i) => [`testimonial-${i + 1}`, { type: "testimonial", settings: { quote, author: null } }])
+        quotes.map((quote, i) => [`testimonial_${i + 1}`, { type: "testimonial", settings: { quote, author: null } }])
       ),
-      block_order: quotes.map((_, i) => `testimonial-${i + 1}`),
+      block_order: quotes.map((_, i) => `testimonial_${i + 1}`),
     };
     order.push("testimonials");
   }
@@ -3254,9 +3254,9 @@ function homePageSectionInstances(spec: WebsiteSpecification, contact: WebsiteCo
       type: "benefits",
       settings: { heading: "Waarom klanten voor ons kiezen" },
       blocks: Object.fromEntries(
-        spec.content.benefits.map((b, i) => [`benefit-${i + 1}`, { type: "benefit", settings: { text: b } }])
+        spec.content.benefits.map((b, i) => [`benefit_${i + 1}`, { type: "benefit", settings: { text: b } }])
       ),
-      block_order: spec.content.benefits.map((_, i) => `benefit-${i + 1}`),
+      block_order: spec.content.benefits.map((_, i) => `benefit_${i + 1}`),
     };
     order.push("benefits");
   }
@@ -3267,11 +3267,11 @@ function homePageSectionInstances(spec: WebsiteSpecification, contact: WebsiteCo
       settings: { heading: "Veelgestelde vragen" },
       blocks: Object.fromEntries(
         spec.content.faq.map((f, i) => [
-          `question-${i + 1}`,
+          `question_${i + 1}`,
           { type: "question", settings: { question: f.question, answer: `<p>${escapeHtml(f.answer)}</p>` } },
         ])
       ),
-      block_order: spec.content.faq.map((_, i) => `question-${i + 1}`),
+      block_order: spec.content.faq.map((_, i) => `question_${i + 1}`),
     };
     order.push("faq");
   }

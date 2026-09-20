@@ -239,7 +239,7 @@ test("C3d: units zijn gebonden aan de exacte sectie-instantie (home/0 vs home/1)
 
   const services = sectionOf(home, "services");
   const blocks = services.blocks as Record<string, Record<string, unknown>>;
-  const firstService = blocks["service-1"].settings as Record<string, unknown>;
+  const firstService = blocks["service_1"].settings as Record<string, unknown>;
   assert.equal(firstService.title, "Webdesign uit het plan");
 });
 
@@ -309,8 +309,8 @@ test("C3d: fixed unit wordt verbatim overgenomen (deterministisch beschermd)", (
   const result = composeBlueprintTemplates({ blueprint: baseBlueprint(), spec: SPECIFICATION, contact: CONTACT, contentPlan: plan });
   const services = sectionOf(templateByPath(result, "templates/index.json"), "services");
   const blocks = services.blocks as Record<string, Record<string, unknown>>;
-  assert.equal((blocks["service-1"].settings as Record<string, unknown>).title, "Strakke hoveniersdiensten");
-  assert.equal((blocks["service-1"].settings as Record<string, unknown>).description, "Van aanleg tot onderhoud: alles volgens plan.");
+  assert.equal((blocks["service_1"].settings as Record<string, unknown>).title, "Strakke hoveniersdiensten");
+  assert.equal((blocks["service_1"].settings as Record<string, unknown>).description, "Van aanleg tot onderhoud: alles volgens plan.");
 });
 
 // ---------------------------------------------------------------------------
@@ -353,7 +353,7 @@ test("C3d: merchant_slot blijft leeg (geen AI-tekst) en wordt genoteerd", () => 
   const services = sectionOf(templateByPath(result, "templates/index.json"), "services");
   const blocks = services.blocks as Record<string, Record<string, unknown>>;
   // service-1: item_body is merchant_slot → bewust null (specificatie-fallback wordt NIET gebruikt).
-  assert.equal((blocks["service-1"].settings as Record<string, unknown>).description, null);
+  assert.equal((blocks["service_1"].settings as Record<string, unknown>).description, null);
   const merchantNote = result.notes.find((n) => n.includes("ruimte voor de merchant"));
   assert.ok(merchantNote, "merchant_slot moet in de notities zichtbaar blijven");
 });

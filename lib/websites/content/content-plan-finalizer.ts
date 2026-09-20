@@ -61,7 +61,11 @@ const rawUnitSchema = z.object({
   kind: z.enum(CONTENT_UNIT_KINDS),
   status: z.enum(CONTENT_UNIT_STATUSES),
   text: z.string().nullable().default(null),
-  evidence: z.array(z.string()).default([]),
+  // LIVE-LES 2026-09-20 (fixture E2E, STAP-2-run): de AI zendt soms
+  // evidence: null i.p.v. [] (semantisch identiek, maar het raw-schema
+  // verwierp het plan hard). Nullish -> [] is een veilige normalisatie:
+  // de finalizer dwingt de echte evidence-regels daarna alsnog af.
+  evidence: z.array(z.string()).nullish().transform((v) => v ?? []),
   sourceOrigin: z.enum(CONTENT_SOURCE_ORIGINS).nullable().default(null),
   instruction: z.string().nullable().default(null),
 });

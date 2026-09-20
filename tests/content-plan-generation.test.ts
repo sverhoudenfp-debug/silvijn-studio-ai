@@ -827,3 +827,46 @@ test("C3b: systeemprompt verbiedt customer/merchant_slot expliciet op evidence_o
   assert.match(system, /UITZONDERING evidence_only-secties[\s\S]*VERBODEN/, "de uitzondering op de geen-bron-regel staat expliciet in het contract");
   assert.match(system, /laat de unit weg en vermeld het in missingInformation/, "het eerlijke alternatief staat erbij");
 });
+
+
+// ------------------------------------------------------------------
+// LIVE-LES 2026-09-20 (fixture E2E, STAP-2-run): de AI zendt soms
+// evidence: null i.p.v. [] — het raw-schema verwierp toen het HELE plan
+// hard (21 units invalid). Nullish -> [] is veilig: de finalizer dwingt
+// de echte evidence-regels (generated vereist evidence; slots krijgen [])
+// daarna alsnog af.
+// ------------------------------------------------------------------
+
+test("C3b: raw evidence: null wordt genormaliseerd naar [] en faalt niet hard", () => {
+  const bundle = makeBundle({});
+  const pages = validRaw(bundle);
+  // Simuleer de live-AI-afwijking: null i.p.v. lege array.
+  const withNulls = pages.map((page) => ({
+    ...page,
+    units: page.units.map((u) => ({ ...u, evidence: null as unknown as string[] })),
+  }));
+  const parsed = rawContentPlanOutputSchema.safeParse(rawPlan(withNulls));
+  assert.equal(parsed.success, true, "null-evidence genormaliseerd naar [] i.p.v. hard schema-faal");
+  if (parsed.success) {
+    assert.ok(
+      parsed.data.pages.every((p) => p.units.every((u) => Array.isArray(u.evidence))),
+      "elke unit heeft nu een echte array"
+    );
+  }
+});
+
+test("C3b: generated units zonder evidence vallen daarna nog steeds door de finalizer", () => {
+  const bundle = makeBundle({});
+  const pages = validRaw(bundle).map((page) => ({
+    ...page,
+    units: page.units.map((u) =>
+      u.status === "generated" ? { ...u, evidence: null as unknown as string[] } : u
+    ),
+  }));
+  // Null-normalisatie mag géén fabricatiedeur openen: zonder echte evidence
+  // faalt de finalizer (of repareert eerlijk) — nooit een evidence-loze
+  // generated unit in het eindplan.
+  const result = finalize(rawPlan(pages), bundle);
+  const bare = result.plan.pages.flatMap((p) => p.units).find((u) => u.status === "generated" && u.evidence.length === 0);
+  assert.equal(bare, undefined, "geen generated unit zonder evidence in het eindplan");
+});

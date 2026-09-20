@@ -60,7 +60,7 @@ export const CONTENT_PLAN_JSON_CONTRACT = `{
           "kind": "<slot-kind uit de SECTIE-regels>",
           "status": "generated" | "customer_slot" | "merchant_slot" | "fixed",
           "text": "<tekst; null bij customer_slot/merchant_slot>",
-          "evidence": ["<byte-exact fragment uit een BRON>"],   // uitsluitend bij generated
+          "evidence": ["<byte-exact fragment uit een BRON>"],   // uitsluitend bij generated; anders lege array [] — NOOIT null
           "sourceOrigin": "lead" | "qualification" | "questionnaire" | "requirements" | "design_plan" | "blueprint" | null,   // verplicht bij fixed
           "instruction": "<wat de klant moet aanleveren; null behalve bij customer_slot>"
         }

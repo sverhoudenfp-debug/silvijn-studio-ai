@@ -233,7 +233,7 @@ function instanceToSectionEntry(
       }
       return {
         type: SECTION_FILE_NAMES.usp_band,
-        settings: { ...variantSettings(instance, "surface"), heading: "Waarom klanten voor ons kiezen" },
+        settings: { ...variantSettings(instance, "surface") },
         blocks,
         block_order: order,
       };

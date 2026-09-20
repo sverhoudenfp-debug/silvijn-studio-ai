@@ -432,6 +432,69 @@ test("theme-zip: de volledig gegenereerde themaset valideert zonder fouten", () 
 });
 
 // ---------------------------------------------------------------------------
+// Shopify-import-mirror (2026-09-20): ZIP-uploads valideren JSON-templates
+// strikt tegen de sectie-schema's en laten templatebestanden met onbekende
+// setting- of blok-ids STIL vallen — de homepage wordt dan 404. De validator
+// moet dit vóór oplevering fail-loud afvangen.
+// ---------------------------------------------------------------------------
+
+test("theme-zip: import-mirror vangt een onbekende setting in een template", () => {
+  const files = builtTheme().map((f) => {
+    if (f.path !== "templates/index.json") return f;
+    const data = JSON.parse(f.content);
+    const first = data.order[0];
+    data.sections[first].settings.heading_onbekend = "x";
+    return { ...f, content: JSON.stringify(data, null, 2) + "\n" };
+  });
+  const result = validateThemeFiles(files);
+  assert.equal(result.passed, false);
+  assert.ok(
+    result.errors.some((e) => e.includes("heading_onbekend") && e.includes("ZIP-import")),
+    `verwacht import-mirror-fout voor heading_onbekend, kreeg: ${JSON.stringify(result.errors)}`
+  );
+});
+
+test("theme-zip: import-mirror vangt een onbekend bloktype en blok-setting", () => {
+  const files = builtTheme().map((f) => {
+    if (f.path !== "templates/index.json") return f;
+    const data = JSON.parse(f.content);
+    const key = Object.keys(data.sections).find((k: string) => data.sections[k].blocks);
+    assert.ok(key, "verwacht een sectie met blocks");
+    const blocks = data.sections[key].blocks as Record<string, { type: string; settings: Record<string, unknown> }>;
+    const blockKey = Object.keys(blocks)[0];
+    const blokType = blocks[blockKey].type;
+    blocks[`${blockKey}_onbekend`] = { type: `${blokType}_bestaat_niet`, settings: { label: "x" } };
+    (data.sections[key].block_order as string[]).push(`${blockKey}_onbekend`);
+    // plus een geldig bloktype met een onbekende setting
+    const geldigKey = Object.keys(blocks)[0];
+    blocks[geldigKey].settings.setting_onbekend = "y";
+    return { ...f, content: JSON.stringify(data, null, 2) + "\n" };
+  });
+  const result = validateThemeFiles(files);
+  assert.equal(result.passed, false);
+  assert.ok(result.errors.some((e) => e.includes("_bestaat_niet") && e.includes("bloktype")));
+  assert.ok(result.errors.some((e) => e.includes("setting_onbekend") && e.includes("blok")));
+});
+
+test("theme-zip: import-mirror vereist name in section groups (Shopify-spec)", () => {
+  const zonderName = builtTheme().map((f) => {
+    if (f.path !== "sections/header-group.json") return f;
+    const data = JSON.parse(f.content);
+    delete data.name;
+    return { ...f, content: JSON.stringify(data, null, 2) + "\n" };
+  });
+  const result = validateThemeFiles(zonderName);
+  assert.equal(result.passed, false);
+  assert.ok(result.errors.some((e) => e.includes("header-group.json") && e.includes("name")));
+
+  // Gegenereerde groups hebben beide de verplichte name.
+  const headerGroup = JSON.parse(builtTheme().find((f) => f.path === "sections/header-group.json")!.content);
+  const footerGroup = JSON.parse(builtTheme().find((f) => f.path === "sections/footer-group.json")!.content);
+  assert.ok(typeof headerGroup.name === "string" && headerGroup.name.length > 0, "header-group name aanwezig");
+  assert.ok(typeof footerGroup.name === "string" && footerGroup.name.length > 0, "footer-group name aanwezig");
+});
+
+// ---------------------------------------------------------------------------
 // Validatie: ongeldige thema's
 // ---------------------------------------------------------------------------
 

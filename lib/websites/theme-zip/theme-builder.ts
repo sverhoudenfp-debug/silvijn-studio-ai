@@ -2424,7 +2424,7 @@ ${blueprintVariantSettings("rich_text", "default")},
 function buildUspBandSection(): ThemeFile {
   const liquid = `<section class="section usp-band usp-band--{{ section.settings.layout | default: 'row' }} section--bg-{{ section.settings.background | default: 'surface' }} motion--{{ section.settings.motion | default: 'none' }}">
   {%- if section.settings.background == 'image' -%}
-    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: '', placeholder_svg: 'placeholder.svg' -%}
   {%- endif -%}
   <div class="container">
     <div class="usp-row">
@@ -3122,6 +3122,7 @@ interface HeaderGroupInput {
 function buildHeaderGroup(input: HeaderGroupInput): ThemeFile {
   return jsonFile("sections/header-group.json", {
     type: "header",
+    name: "Header",
     sections: {
       header: {
         type: "header",
@@ -3149,6 +3150,7 @@ function buildFooterGroup(input: {
 }): ThemeFile {
   return jsonFile("sections/footer-group.json", {
     type: "footer",
+    name: "Footer",
     sections: {
       footer: {
         type: "footer",
@@ -3278,7 +3280,7 @@ function homePageSectionInstances(spec: WebsiteSpecification, contact: WebsiteCo
     type: "cta",
     settings: {
       heading: spec.content.ctaPrimaryText,
-      subheadline: spec.content.contactIntro,
+      subheading: spec.content.contactIntro,
       cta_label: spec.content.ctaPrimaryText,
       cta_link: "/pages/contact",
     },

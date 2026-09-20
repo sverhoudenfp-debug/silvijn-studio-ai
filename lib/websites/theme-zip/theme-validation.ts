@@ -148,7 +148,105 @@ function sectionSchemaOf(content: string): unknown | null {
   }
 }
 
-function validateTemplates(parsed: Map<string, unknown>, sectionFiles: Set<string>, errors: string[]): void {
+interface SectionSchemaShape {
+  settingIds: Set<string>;
+  blockTypes: Map<string, Set<string>>;
+}
+
+/**
+ * Shopify-import-mirror: ZIP-uploads valideren JSON-templates strikt tegen
+ * de sectie-schema's en laten templatebestanden met onbekende setting- of
+ * blok-ids STIL vallen (de homepage wordt dan 404). Deze extractie maakt
+ * die controle vóór oplevering mogelijk.
+ */
+function sectionSchemaShapeOf(content: string): SectionSchemaShape | null {
+  const schema = sectionSchemaOf(content);
+  if (!schema || typeof schema !== "object" || Array.isArray(schema)) return null;
+  const record = schema as Record<string, unknown>;
+  const settingIds = new Set<string>();
+  const rawSettings = record.settings;
+  if (Array.isArray(rawSettings)) {
+    for (const setting of rawSettings) {
+      if (setting && typeof setting === "object" && typeof (setting as Record<string, unknown>).id === "string") {
+        settingIds.add((setting as Record<string, unknown>).id as string);
+      }
+    }
+  }
+  const blockTypes = new Map<string, Set<string>>();
+  const rawBlocks = record.blocks;
+  if (Array.isArray(rawBlocks)) {
+    for (const block of rawBlocks) {
+      if (!block || typeof block !== "object") continue;
+      const blockRecord = block as Record<string, unknown>;
+      if (typeof blockRecord.type !== "string") continue;
+      const blockSettingIds = new Set<string>();
+      if (Array.isArray(blockRecord.settings)) {
+        for (const setting of blockRecord.settings as unknown[]) {
+          if (setting && typeof setting === "object" && typeof (setting as Record<string, unknown>).id === "string") {
+            blockSettingIds.add((setting as Record<string, unknown>).id as string);
+          }
+        }
+      }
+      blockTypes.set(blockRecord.type, blockSettingIds);
+    }
+  }
+  return { settingIds, blockTypes };
+}
+
+function validateSectionAgainstSchema(
+  where: string,
+  entry: Record<string, unknown>,
+  schema: SectionSchemaShape | null,
+  errors: string[]
+): void {
+  if (!schema) return;
+  const settings = entry.settings;
+  if (settings && typeof settings === "object" && !Array.isArray(settings)) {
+    for (const id of Object.keys(settings as Record<string, unknown>)) {
+      if (!schema.settingIds.has(id)) {
+        errors.push(
+          `${where}: setting "${id}" bestaat niet in het schema van de sectie (Shopify laat dit templatebestand bij ZIP-import vallen).`
+        );
+      }
+    }
+  }
+  const blocks = entry.blocks;
+  if (blocks && typeof blocks === "object" && !Array.isArray(blocks)) {
+    for (const [blockKey, blockValue] of Object.entries(blocks as Record<string, unknown>)) {
+      if (!blockValue || typeof blockValue !== "object" || Array.isArray(blockValue)) continue;
+      const blockRecord = blockValue as Record<string, unknown>;
+      const blockType = blockRecord.type;
+      if (typeof blockType !== "string") {
+        errors.push(`${where}: blok "${blockKey}" mist een type.`);
+        continue;
+      }
+      const blockSettingIds = schema.blockTypes.get(blockType);
+      if (!blockSettingIds) {
+        errors.push(
+          `${where}: bloktype "${blockType}" bestaat niet in het schema van de sectie (Shopify laat dit templatebestand bij ZIP-import vallen).`
+        );
+        continue;
+      }
+      const blockSettings = blockRecord.settings;
+      if (blockSettings && typeof blockSettings === "object" && !Array.isArray(blockSettings)) {
+        for (const id of Object.keys(blockSettings as Record<string, unknown>)) {
+          if (!blockSettingIds.has(id)) {
+            errors.push(
+              `${where}: blok "${blockKey}" gebruikt setting "${id}" die niet in het schema van bloktype "${blockType}" bestaat (Shopify laat dit templatebestand bij ZIP-import vallen).`
+            );
+          }
+        }
+      }
+    }
+  }
+}
+
+function validateTemplates(
+  parsed: Map<string, unknown>,
+  sectionFiles: Set<string>,
+  sectionSchemas: Map<string, SectionSchemaShape | null>,
+  errors: string[]
+): void {
   const templatePaths = [...parsed.keys()].filter((p) => p.startsWith("templates/"));
   const sectionGroups = new Set(
     [...parsed.keys()].filter((p) => p.startsWith("sections/") && p.endsWith("-group.json"))
@@ -192,11 +290,19 @@ function validateTemplates(parsed: Map<string, unknown>, sectionFiles: Set<strin
       }
       if (!knownSectionTypes.has(type)) {
         errors.push(`Template "${path}": sectietype "${type}" heeft geen bijbehorend sections/${type}.liquid.`);
+        continue;
       }
+      validateSectionAgainstSchema(
+        `Template "${path}": sectie "${key}"`,
+        value as Record<string, unknown>,
+        sectionSchemas.get(type) ?? null,
+        errors
+      );
     }
   }
 
-  // Section groups: geldig type (header/footer) + sections-structuur.
+  // Section groups: geldig type (header/footer), verplichte name
+  // (Shopify-spec) + sections-structuur met schema-valide content.
   for (const path of sectionGroups) {
     const data = parsed.get(path) as Record<string, unknown> | undefined;
     if (!data || typeof data !== "object") continue;
@@ -204,9 +310,34 @@ function validateTemplates(parsed: Map<string, unknown>, sectionFiles: Set<strin
     if (groupType !== "header" && groupType !== "footer") {
       errors.push(`Section group "${path}" moet type "header" of "footer" hebben.`);
     }
+    const name = data.name;
+    if (typeof name !== "string" || name.trim().length === 0 || name.length > 50) {
+      errors.push(`Section group "${path}" mist een geldige "name" (verplicht volgens de Shopify-spec, max 50 tekens).`);
+    }
     const sections = data.sections;
     if (!sections || typeof sections !== "object") {
       errors.push(`Section group "${path}" mist een sections-object.`);
+      continue;
+    }
+    for (const [key, value] of Object.entries(sections as Record<string, unknown>)) {
+      if (!value || typeof value !== "object") continue;
+      const entry = value as Record<string, unknown>;
+      const type = entry.type;
+      if (typeof type !== "string" || type.length === 0) {
+        errors.push(`Section group "${path}": sectie "${key}" mist een type.`);
+        continue;
+      }
+      if (type.startsWith("@")) continue; // app blocks: buiten de eigen thema-schema's
+      if (!knownSectionTypes.has(type)) {
+        errors.push(`Section group "${path}": sectietype "${type}" heeft geen bijbehorend sections/${type}.liquid.`);
+        continue;
+      }
+      validateSectionAgainstSchema(
+        `Section group "${path}": sectie "${key}"`,
+        entry,
+        sectionSchemas.get(type) ?? null,
+        errors
+      );
     }
   }
 }
@@ -460,12 +591,18 @@ export function validateThemeFiles(files: ThemeFile[], options?: { trustedClaims
   const parsed = validateJsonFiles(files, errors);
   assertSettingsConfig(parsed, errors);
   const sectionLiquid = new Set(files.filter((f) => /^sections\/[^/]+\.liquid$/.test(f.path)).map((f) => f.path));
+  const sectionSchemas = new Map<string, SectionSchemaShape | null>();
+  for (const path of sectionLiquid) {
+    const content = files.find((f) => f.path === path)?.content ?? "";
+    const sectionType = path.slice("sections/".length, -".liquid".length);
+    sectionSchemas.set(sectionType, content.length > 0 ? sectionSchemaShapeOf(content) : null);
+  }
   const assetPaths = new Set(files.filter((f) => f.path.startsWith("assets/")).map((f) => f.path));
   const snippetPaths = new Set(files.filter((f) => f.path.startsWith("snippets/")).map((f) => f.path));
   const sectionGroupPaths = new Set(
     files.filter((f) => /^sections\/[^/]+-group\.json$/.test(f.path)).map((f) => f.path)
   );
-  validateTemplates(parsed, sectionLiquid, errors);
+  validateTemplates(parsed, sectionLiquid, sectionSchemas, errors);
 
   // ---- 4. Liquid-inhoud
   validateLiquidContent(files, assetPaths, snippetPaths, sectionGroupPaths, sectionLiquid, errors);

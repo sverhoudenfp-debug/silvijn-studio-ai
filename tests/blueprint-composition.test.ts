@@ -214,6 +214,32 @@ function build(plan: DesignPlan): BuiltTheme {
 
 // ---------------------------------------------------------------------------
 
+test("blueprint → usp-band schrijft uitsluitend settings die in het sectie-schema bestaan (Shopify-import-mirror)", () => {
+  const files = build(planWithBlueprint(baseBlueprint())).files;
+  const index = templateJson(files, "templates/index.json");
+  const usp = index.sections["usp-band"];
+  assert.ok(usp, "usp-band op de homepage");
+
+  // Het usp-band-schema kent geen heading: de compositie mag die dus nooit wegschrijven.
+  assert.equal(usp.settings.heading, undefined, "heading hoort niet in usp-band (niet in het schema)");
+
+  // Alle geschreven settings bestaan in het schema van sections/usp-band.liquid.
+  const liquid = files.find((f) => f.path === "sections/usp-band.liquid")!;
+  const schemaMatch = liquid.content.match(/\{%\s*-?\s*schema\s*-?\s*%\}([\s\S]*?)\{%\s*-?\s*endschema\s*-?\s*%\}/);
+  assert.ok(schemaMatch, "usp-band heeft een schema");
+  const schema = JSON.parse(schemaMatch[1]);
+  const schemaIds = new Set<string>(schema.settings.map((s: { id: string }) => s.id));
+  for (const id of Object.keys(usp.settings)) {
+    assert.ok(schemaIds.has(id), `setting "${id}" bestaat niet in het usp-band-schema`);
+  }
+  // En het volledige blueprint-thema valideert onder de import-mirror-validator.
+  const validationResult = validateThemeFiles(files, {
+    trustedClaims: ["10 jaar ervaring"], // uit trustElements.usps (source: requirements) in de fixture
+  });
+  assert.deepEqual(validationResult.errors, [], `validatiefouten: ${JSON.stringify(validationResult.errors)}`);
+  assert.equal(validationResult.passed, true);
+});
+
 test("blueprint → homepage exact uit de blueprint opgebouwd", () => {
   const theme = build(planWithBlueprint(baseBlueprint()));
   const index = templateJson(theme.files, "templates/index.json");

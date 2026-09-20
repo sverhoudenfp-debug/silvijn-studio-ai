@@ -2,6 +2,10 @@ import { getAIActivityRepository } from "@/lib/repositories/ai-activity-reposito
 import { getLeadRepository } from "@/lib/repositories/lead-repository";
 import { getProjectRepository } from "@/lib/projects/repository";
 import { getQuestionnaireRepository } from "@/lib/questionnaire/repository";
+import {
+  buildQuestionnaireAnswerLines,
+  MAX_QUESTIONNAIRE_LINES,
+} from "@/lib/questionnaire/summary";
 import type { Project } from "@/lib/projects/types";
 import type { Lead } from "@/lib/types";
 import { AIService } from "@/lib/ai/service";
@@ -82,17 +86,19 @@ async function buildQuestionnaireSummary(leadId: string): Promise<{
     if (questionnaire.completionStatus == null) continue; // geen antwoorden ontvangen
     const responses = await getQuestionnaireRepository().listResponses(questionnaire.id);
     if (responses.length === 0) continue;
-    const questions = questionnaire.questions;
-    const latest = responses[responses.length - 1];
-    for (const question of questions) {
-      const answer = latest.answers[question.id];
-      if (answer != null && answer.trim().length > 0) {
-        lines.push(`${question.label.slice(0, 120)}: ${answer.slice(0, 300)}`);
-      }
-    }
+    // C1/C2-doorvoer (2026-09-20): antwoorden uit álle rondes (incl. de
+    // follow-upronde) plus upload-aantallen — eerlijke bevestigingen
+    // ("geen reviews beschikbaar") stromen zo mee naar het Design Plan,
+    // waar de A3-conversieketen ze als trust-disclosure kan gebruiken.
+    const answerLines = buildQuestionnaireAnswerLines(
+      questionnaire.questions,
+      questionnaire.followUpQuestions ?? [],
+      responses
+    );
+    for (const line of answerLines) lines.push(`${line.label}: ${line.value}`);
   }
 
-  return { lines: lines.slice(0, 40), hasCompletedQuestionnaire };
+  return { lines: lines.slice(0, MAX_QUESTIONNAIRE_LINES), hasCompletedQuestionnaire };
 }
 
 export class DesignPlanService {

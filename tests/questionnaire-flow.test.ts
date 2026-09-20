@@ -21,27 +21,43 @@ const questions: QuestionnaireQuestion[] = [
 ];
 
 test("completion decision: sufficient ends the flow, round 1 gets follow-ups, round 2 never does", () => {
-  assert.deepEqual(decideCompletion({ sufficient: true, missingInformation: [], followUpQuestions: [] }, 1), {
-    status: "QUESTIONNAIRE_COMPLETE",
-    followUpQuestions: [],
-  });
+  // Volledige content-dimensies (C1) laten een honest sufficient-oordeel staan.
+  const fullDims = {
+    offering: "Webdesign en onderhoud",
+    usps: "Snel, persoonlijk, lokaal",
+    proof: "NIET_BESCHIKBAAR: klant bevestigt geen reviews te hebben",
+    audience: "MKB in de regio",
+    toneOfVoice: "Zakelijk maar toegankelijk",
+    branding: "NIET_BESCHIKBAAR: klant geeft toestemming huisstijl te bepalen",
+    media: "NIET_BESCHIKBAAR: klant bevestigt dat foto's ontbreken",
+  };
+  assert.deepEqual(
+    decideCompletion({ sufficient: true, missingInformation: [], followUpQuestions: [], contentDimensions: fullDims }, 1),
+    { status: "QUESTIONNAIRE_COMPLETE", followUpQuestions: [], missingInformation: [] }
+  );
   const followUp = [{ id: "f1", label: "Aanvulling", type: "text" }];
   assert.deepEqual(decideCompletion({ sufficient: false, missingInformation: ["x"], followUpQuestions: followUp }, 1), {
     status: "QUESTIONNAIRE_FOLLOW_UP",
     followUpQuestions: followUp,
+    missingInformation: ["x"],
   });
   // insufficient zonder follow-upvragen wordt direct een aandachtspunt
   assert.deepEqual(decideCompletion({ sufficient: false, missingInformation: ["x"], followUpQuestions: [] }, 1), {
     status: "QUESTIONNAIRE_ATTENTION",
     followUpQuestions: [],
+    missingInformation: ["x"],
   });
   // ronde 2 krijgt NOOIT nieuwe follow-upvragen
   assert.deepEqual(decideCompletion({ sufficient: false, missingInformation: ["x"], followUpQuestions: followUp }, 2), {
     status: "QUESTIONNAIRE_ATTENTION",
     followUpQuestions: [],
+    missingInformation: ["x"],
   });
   // max 3 follow-upvragen worden afgekapt
-  assert.equal(decideCompletion({ sufficient: false, missingInformation: [], followUpQuestions: [{}, {}, {}, {}] }, 1).followUpQuestions.length, 3);
+  assert.equal(
+    decideCompletion({ sufficient: false, missingInformation: [], followUpQuestions: [{}, {}, {}, {}] }, 1).followUpQuestions.length,
+    3
+  );
 });
 
 test("answer validation: required, select options, email format and limits are enforced", () => {

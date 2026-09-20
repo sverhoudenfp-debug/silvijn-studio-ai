@@ -535,6 +535,17 @@ function buildMockQuestionnaireCompletion(prompt: string): string {
         resolvedInformation: [{ key: "regio", value: "TESTDATA (mock): regio al bekend uit leadgegevens" }],
         missingInformation: [],
         followUpQuestions: [],
+        // C1-mock: alle dimensies eerlijk herleid; declinabele dimensies
+        // expliciet afgezegd (er is gén echte data in de mock — nooit fabriceren).
+        contentDimensions: {
+          offering: "TESTDATA (mock): concreet aanbod uit de antwoorden",
+          usps: "TESTDATA (mock): USP 1 en USP 2 uit de antwoorden",
+          proof: "NIET_BESCHIKBAAR: TESTDATA (mock): klant bevestigt dat er geen reviews zijn",
+          audience: "TESTDATA (mock): doelgroep uit de antwoorden",
+          toneOfVoice: "TESTDATA (mock): gewenste toon uit de antwoorden",
+          branding: "NIET_BESCHIKBAAR: TESTDATA (mock): klant geeft toestemming de huisstijl te bepalen",
+          media: "NIET_BESCHIKBAAR: TESTDATA (mock): klant bevestigt dat er geen foto\'s zijn",
+        },
       }
     : {
         sufficient: false,
@@ -545,6 +556,16 @@ function buildMockQuestionnaireCompletion(prompt: string): string {
           { id: "follow_up_pages", label: "Welke pagina\'s wil je zeker terugzien? (bijv. Home, Diensten, Over ons, Contact)", type: "textarea", required: true },
           { id: "follow_up_content", label: "Heb je teksten en foto\'s beschikbaar voor de website?", type: "select", options: ["Ja, alles", "Deels", "Nee, maken jullie die?"], required: true },
         ],
+        // C1-mock: ronde 1 is eerlijk onvolledig (usps/proof/branding/media onbekend).
+        contentDimensions: {
+          offering: "TESTDATA (mock): concreet aanbod uit de antwoorden",
+          usps: "",
+          proof: "",
+          audience: "TESTDATA (mock): doelgroep uit de antwoorden",
+          toneOfVoice: "TESTDATA (mock): gewenste toon uit de antwoorden",
+          branding: "",
+          media: "",
+        },
       };
   return JSON.stringify(output);
 }

@@ -202,4 +202,20 @@ export const QuestionnaireCompletionSchema = z.object({
   resolvedInformation: z.array(z.object({ key: z.string().min(2).max(60), value: z.string().min(1).max(500) })).max(15),
   missingInformation: z.array(z.string().min(5).max(300)).max(5),
   followUpQuestions: z.array(QuestionnaireQuestionSchema).max(3),
+  /**
+   * C1 (2026-09-20): de zeven content-dimensies, door de AI herleid uit
+   * echte antwoorden/context ("" = onbekend). Declinabele dimensies mogen
+   * expliciet worden afgezegd met het NIET_BESCHIKBAAR-prefix. Wordt
+   * deterministisch afgedwongen (lib/questionnaire/richness.ts): zonder
+   * volledige dimensies wordt sufficient=true genegeerd.
+   */
+  contentDimensions: z.object({
+    offering: z.string().trim().max(500),
+    usps: z.string().trim().max(500),
+    proof: z.string().trim().max(500),
+    audience: z.string().trim().max(500),
+    toneOfVoice: z.string().trim().max(500),
+    branding: z.string().trim().max(500),
+    media: z.string().trim().max(500),
+  }),
 });

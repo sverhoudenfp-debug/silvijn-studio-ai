@@ -4,6 +4,7 @@ import { getLeadRepository, type LeadRepository } from "@/lib/repositories/lead-
 import { getProjectRepository, type ProjectRepository } from "@/lib/projects/repository";
 import { buildQuestionnaireContext, QuestionnaireContextError } from "./context";
 import { decideCompletion } from "./completion";
+import { ensureDesignCoreQuestions } from "./design-core";
 import { getQuestionnaireRepository, type Questionnaire, type QuestionnaireResponse, type QuestionnaireUpload } from "./repository";
 import {
   generatedQuestionsSchema,
@@ -200,6 +201,7 @@ async function runCompletionAssessment(questionnaire: Questionnaire, round: 1 | 
       sufficient: result.data.sufficient,
       missingInformation: result.data.missingInformation,
       followUpQuestions: result.data.followUpQuestions,
+      contentDimensions: result.data.contentDimensions,
     },
     round
   );
@@ -209,7 +211,9 @@ async function runCompletionAssessment(questionnaire: Questionnaire, round: 1 | 
     analysis: {
       summary: result.data.summary,
       resolvedInformation: result.data.resolvedInformation,
-      missingInformation: result.data.missingInformation,
+      // Verrijkt met de C1-content-dimensies (ook als de AI ze miste).
+      missingInformation: decision.missingInformation,
+      contentDimensions: result.data.contentDimensions,
       sufficient: result.data.sufficient,
       assessedAt: new Date().toISOString(),
       model: result.model,
@@ -276,6 +280,12 @@ export async function createQuestionnaireForLead(
     throw new QuestionnaireValidationError("AI-gegenereerde vragen voldoen niet aan de businessregels");
   }
 
+  // C2: deterministische design-kern " + chr(8212) + " ontbrekende kernonderwerpen worden
+  // aangevuld (korte vaste vragen, geen bedrijfsfeiten); bekende onderwerpen
+  // worden NIET opnieuw gevraagd; de limiet van 15 blijft gehandhaafd.
+  const core = ensureDesignCoreQuestions(parsed.data, context.summary);
+  const coreQuestions = core.addedTopics.length > 0 ? generatedQuestionsSchema.parse(core.questions) : parsed.data;
+
   const slug = await generateUniqueSlug(lead.businessName);
   return repository.create({
     leadId,
@@ -283,8 +293,15 @@ export async function createQuestionnaireForLead(
     slug,
     title: generation.data.title.slice(0, 120),
     intro: generation.data.intro.slice(0, 1000),
-    questions: parsed.data,
-    aiContext: context.aiContext,
+    questions: coreQuestions,
+    aiContext: {
+      ...context.aiContext,
+      designCore: {
+        addedTopics: core.addedTopics,
+        knownTopics: core.knownTopics,
+        enforcedAt: new Date().toISOString(),
+      },
+    },
   });
 }
 

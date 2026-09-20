@@ -268,6 +268,16 @@ export interface QuestionnaireCompletion {
   resolvedInformation: { key: string; value: string }[];
   missingInformation: string[];
   followUpQuestions: QuestionnaireGeneration["questions"];
+  /** C1: per dimensie herleide inhoud ("" = onbekend; NIET_BESCHIKBAAR-prefix = expliciet afgezegd). */
+  contentDimensions: {
+    offering: string;
+    usps: string;
+    proof: string;
+    audience: string;
+    toneOfVoice: string;
+    branding: string;
+    media: string;
+  };
 }
 
 

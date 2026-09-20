@@ -593,7 +593,18 @@ export class AIService {
           // veilig onder de SDK-grens. Verlaag niet terug en verhoog niet
           // boven 21333 zonder streaming in de provider.
           maxTokens: 20000,
-          temperature: 0.4,
+          // LIVE-LES 2026-09-20, C3e-E2E (copywriting=true-fixture, runs
+          // v1+v2): zónder expliciete reasoning-cap besteedt sonnet-5 bij
+          // rijke questionnaire-input de VOLLEDIGE 20000 max_tokens aan
+          // adaptive thinking (stop_reason=max_tokens vóór enige JSON, 2x
+          // achtereen, ~10 min per poging) — exact het patroon dat de
+          // C3b-contentplan-call al kende. Zelfde API-gegeven: dit model
+          // regelt thinking via output_config.effort (budget_tokens wordt
+          // afgewezen; temperature is deprecated zodra effort gezet is —
+          // de service laat temperature dan weg). "low" is de juiste
+          // inspanning: design planning is een invultaak uit gevalideerde
+          // questionnaire-brondata, geen vrije creatieve opdracht.
+          thinkingEffort: "low",
         },
         designPlanSchema
       );

@@ -115,6 +115,18 @@ test("service-contract: designplanning-call heeft een thinking-proof tokenbudget
   assert.doesNotMatch(block, /maxTokens: 12000/, "het pre-blueprint budget is achterhaald: blueprint-instanties kosten structureel extra output-tokens");
 });
 
+test("service-contract: designplanning-call zet reasoning-effort low (C3e-live-les 2026-09-20): adaptive thinking verslond anders het volledige 20000-budget vóór enige JSON", () => {
+  const start = serviceSource.indexOf("async generateDesignPlan");
+  const end = serviceSource.indexOf("designPlanSchema", start);
+  assert.ok(start !== -1 && end > start, "generateDesignPlan moet in service.ts staan");
+  const block = serviceSource.slice(start, end);
+  assert.match(
+    block,
+    /thinkingEffort: "low"/,
+    "C3e-live-les: zonder reasoning-cap besteedt sonnet-5 bij rijke input alle max_tokens aan thinking (stop_reason=max_tokens, 2x live gereproduceerd); effort 'low' is de juiste inspanning voor deze invultaak"
+  );
+});
+
 test("prompt-contract: user-prompt bevat het expliciete, volledige JSON-veldcontract en verbiedt eigen veldnamen", () => {
   const start = serviceSource.indexOf("function buildDesignPlanPrompt");
   const end = serviceSource.indexOf("const WEBSITE_QC_SYSTEM", start);

@@ -17,8 +17,13 @@
 export interface ThemeFile {
   /** Positie binnen de ZIP, bijv. "layout/theme.liquid". */
   path: string;
-  /** UTF-8 tekstinhoud. */
+  /**
+   * UTF-8 tekstinhoud. Voor binaire bestanden (D1: woff2-fonts) blijft
+   * dit leeg en staat de inhoud in `bytes`.
+   */
   content: string;
+  /** Binaire inhoud (bijv. woff2); leeg voor tekstbestanden. */
+  bytes?: Uint8Array;
 }
 
 export const THEME_ZIP_ENTRY_DATE = Date.UTC(2026, 0, 1);
@@ -51,6 +56,7 @@ export const THEME_ALLOWED_EXTENSIONS: ReadonlySet<string> = new Set([
   ".webp",
   ".ico",
   ".txt",
+  ".woff2",
 ]);
 
 /** Extensies die altijd als tekst gevalideerd worden. */
@@ -108,6 +114,11 @@ export const THEME_REQUIRED_FILES: readonly string[] = [
  * uitsluitend uit geverifieerde lead-/specificatiedata.
  */
 export const THEME_REQUIRED_SETTING_IDS: readonly string[] = [
+  // D1 — Design Token Engine: font-pairing en paletstemming zijn
+  // verplichte theme-settings (net als kleuren); defaults zijn zonder
+  // visualContract "system_sans"/"neutral_default".
+  "font_pairing",
+  "palette_mood",
   "brand_name",
   "contact_email",
   "contact_phone",

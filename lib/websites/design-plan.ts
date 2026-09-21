@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { ProjectRequirements } from "@/lib/projects/types";
 import { scanTextForFabricationPatterns } from "./safety-check";
 import { validateBlueprintConsistency, websiteBlueprintSchema } from "./blueprint/blueprint";
+import { visualContractSchema, type VisualContract } from "./visual-contract";
 
 /**
  * Design Plan (Fase I.1) — het INTERNE ontwerpplan per project.
@@ -64,6 +65,14 @@ export const designPlanSchema = z.object({
     dislikedColors: z.array(z.string().min(2).max(80)).max(8),
     restrictions: z.array(z.string().min(2).max(200)).max(8),
   }),
+  /**
+   * VISUAL CONTRACT (Design Token Engine D1, 2026-09-21) — machine-uitvoerbaar
+   * ontwerpcontract: enum-gesloten font-pairing, paletstemming, typografische
+   * curve, dichtheid en motion-niveau. ADDITIEF en OPTIONEEL: plannen zonder
+   * visualContract (alle plannen vóór D1) blijven exact geldig en renderen
+   * via de bestaande keyword-mapping (systeem-fonts, geen paletguard).
+   */
+  visualContract: visualContractSchema.nullable().optional(),
   typography: z.object({
     pairing: z.string().min(3).max(300).nullable(),
     scale: z.string().min(3).max(200).nullable(),
@@ -157,6 +166,7 @@ export const designPlanSchema = z.object({
 });
 
 export type DesignPlan = z.infer<typeof designPlanSchema>;
+export type { VisualContract };
 
 export type DesignPlanStatus = "generating" | "completed" | "failed";
 

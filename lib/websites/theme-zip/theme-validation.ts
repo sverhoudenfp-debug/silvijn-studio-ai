@@ -644,7 +644,7 @@ export function validateThemeFiles(files: ThemeFile[], options?: { trustedClaims
     if (!THEME_ALLOWED_EXTENSIONS.has(ext)) {
       errors.push(`Niet-toegestane extensie "${ext}" : "${path}".`);
     }
-    const bytes = Buffer.byteLength(file.content, "utf8");
+    const bytes = file.bytes ? file.bytes.byteLength : Buffer.byteLength(file.content, "utf8");
     totalBytes += bytes;
     if (bytes > THEME_ZIP_MAX_FILE_BYTES) {
       errors.push(`Bestand "${path}" is te groot (${bytes} bytes).`);

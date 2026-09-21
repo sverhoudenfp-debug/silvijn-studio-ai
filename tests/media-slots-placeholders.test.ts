@@ -222,6 +222,9 @@ const TOKENS: ThemeDesignTokens = {
   headingWeight: 700,
   bodyWeight: 400,
   heroLayout: "focused",
+  fontPairing: "system_sans",
+  paletteMood: "neutral_default",
+  paletteCorrections: [],
 };
 
 test("buildMediaPlaceholderSvgs: vaste set van 4 slot-placeholders in assets/", () => {

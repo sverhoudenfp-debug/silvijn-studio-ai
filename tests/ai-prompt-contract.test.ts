@@ -80,6 +80,11 @@ test("designplanning-prompt bevat het volledige geneste veldcontract", () => {
     "source: enum requirements|questionnaire|lead_notes",
     "basis: { sources",
     "missingInformation",
+    "visualContract: VERPLICHT object",
+    "modern_sans|geometric_sans|editorial_serif|classic_serif|humanist_sans|mono_technical",
+    "warm_organic|cool_professional|premium_dark|fresh_light|earthy_natural|bold_contrast|monochrome",
+    "compact|balanced|expressive|dramatic",
+    "none|subtle|expressive",
   ]) {
     assert.ok(designPrompt.includes(field), `prompt mist veldcontract: ${field}`);
   }

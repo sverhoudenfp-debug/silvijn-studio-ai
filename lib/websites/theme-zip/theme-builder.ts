@@ -15,6 +15,18 @@ import { BLUEPRINT_SECTION_REGISTRY, type BlueprintSectionType } from "../bluepr
 import type { WebsiteContactContext } from "../generator";
 import type { WebsiteSpecification } from "../types";
 import type { ThemeFile } from "./theme-structure";
+import {
+  FONT_PAIRING_KEYS,
+  FONT_PAIRING_OPTION_LABELS,
+  PALETTE_MOOD_OPTION_LABELS,
+  PALETTE_MOOD_KEYS,
+  TYPOGRAPHIC_CURVE_SCALE,
+  isWebFontPairing,
+  type FontPairingSettingValue,
+  type PaletteMoodSettingValue,
+} from "../visual-contract";
+import { derivePalette } from "./palette-engine";
+import { buildFontFaceCss, fontFamilyValues, fontPairingAssets } from "./font-library";
 
 /**
  * Deterministische Shopify-theme-builder (Fase I.2).
@@ -62,6 +74,16 @@ export interface ThemeDesignTokens {
    * één van vier vooraf gebouwde profielen.
    */
   styleProfile: "sharp" | "soft" | "premium" | "neutral";
+  /**
+   * D1 — Design Token Engine: machine-uitvoerbaar ontwerpcontract uit het
+   * Design Plan (visualContract). Zonder visualContract: "system_sans"
+   * (of "system_serif" bij een serif-plan) en "neutral_default" — exact
+   * het D0-gedrag (systeem-fonts, geen paletcorrecties).
+   */
+  fontPairing: FontPairingSettingValue;
+  paletteMood: PaletteMoodSettingValue;
+  /** D1: deterministische WCAG-correcties uit de palette engine (voor notes). */
+  paletteCorrections: readonly string[];
 }
 
 const FALLBACK_TOKENS: Omit<
@@ -78,6 +100,9 @@ const FALLBACK_TOKENS: Omit<
   sectionSpacing: "normal",
   containerWidth: "1160",
   radius: "10",
+  fontPairing: "system_sans",
+  paletteMood: "neutral_default",
+  paletteCorrections: [],
 };
 
 const FALLBACK_TYPOGRAPHY_TOKENS: Pick<
@@ -214,6 +239,21 @@ function spacingFor(density: string | null): string {
   return "normal";
 }
 
+/**
+ * D1: webfonts leveren 400/600/700 (kop) resp. 400/600 (lopende tekst);
+ * de plan-weights worden deterministisch naar de dichtstbijzijnde
+ * GELEVERDE weight geklemd, zodat de browser nooit hoeft te synthesizeren.
+ */
+function clampToShippedWeights(weights: { heading: number; body: number }): { heading: number; body: number } {
+  const headingShipped = [400, 600, 700];
+  const bodyShipped = [400, 600];
+  const nearest = (value: number, shipped: readonly number[]): number =>
+    shipped.reduce((best, candidate) =>
+      Math.abs(candidate - value) < Math.abs(best - value) ? candidate : best
+    , shipped[0]);
+  return { heading: nearest(weights.heading, headingShipped), body: nearest(weights.body, bodyShipped) };
+}
+
 export function buildThemeDesignTokens(plan: DesignPlan): ThemeDesignTokens {
   const primary = pickPlanColor(plan.colors.primary, FALLBACK_PALETTE.primary);
   const accent = pickPlanColor(plan.colors.accent, FALLBACK_PALETTE.accent);
@@ -222,7 +262,9 @@ export function buildThemeDesignTokens(plan: DesignPlan): ThemeDesignTokens {
   const fontKey = fontKeyFor(plan.typography.pairing);
   const fonts = FONT_STACKS[fontKey];
   const weights = weightsFor(plan.typography.weights);
-  return {
+  const contract = plan.visualContract ?? null;
+
+  const base = {
     primary,
     secondary,
     accent,
@@ -231,6 +273,42 @@ export function buildThemeDesignTokens(plan: DesignPlan): ThemeDesignTokens {
     text: neutrals[2] ?? FALLBACK_TOKENS.text,
     mutedText: neutrals[3] ?? FALLBACK_TOKENS.mutedText,
     border: neutrals[4] ?? FALLBACK_TOKENS.border,
+  };
+
+  // D1 — VISUAL CONTRACT: machine-uitvoerbaar ontwerpcontract. Alleen bij
+  // aanwezigheid wordt de palet-engine (HSL + WCAG-guard) en de
+  // webfont-pairing actief; zonder contract blijft de D0-afleiding exact
+  // gehandhaafd (backward compatible, byte-stabiel voor oude plannen).
+  if (contract) {
+    const palette = derivePalette({ ...base, mood: contract.paletteMood });
+    const shipped = clampToShippedWeights(weights);
+    return {
+      primary: palette.primary,
+      secondary: palette.secondary,
+      accent: palette.accent,
+      background: palette.background,
+      surface: palette.surface,
+      text: palette.text,
+      mutedText: palette.mutedText,
+      border: palette.border,
+      headingFont: fonts.heading,
+      bodyFont: fonts.body,
+      sectionSpacing: contract.density,
+      containerWidth: FALLBACK_TOKENS.containerWidth,
+      radius: String(radiusFor(plan.branding.styleDirection, plan.branding.mood)),
+      headingScale: TYPOGRAPHIC_CURVE_SCALE[contract.typographicCurve],
+      headingWeight: shipped.heading,
+      bodyWeight: shipped.body,
+      heroLayout: heroLayoutFor(plan),
+      styleProfile: styleProfileFor(plan.branding.styleDirection, plan.branding.mood),
+      fontPairing: contract.fontPairing,
+      paletteMood: contract.paletteMood,
+      paletteCorrections: palette.corrections,
+    };
+  }
+
+  return {
+    ...base,
     headingFont: fonts.heading,
     bodyFont: fonts.body,
     sectionSpacing: spacingFor(plan.spacing.density),
@@ -241,6 +319,11 @@ export function buildThemeDesignTokens(plan: DesignPlan): ThemeDesignTokens {
     bodyWeight: weights.body,
     heroLayout: heroLayoutFor(plan),
     styleProfile: styleProfileFor(plan.branding.styleDirection, plan.branding.mood),
+    // D0-gedrag: het layout-font werd altijd via settings.font_heading
+    // (sans/serif) geresolved; mono-plannen renderten feitelijk sans.
+    fontPairing: fontKey === "serif" ? "system_serif" : "system_sans",
+    paletteMood: "neutral_default",
+    paletteCorrections: [],
   };
 }
 
@@ -343,6 +426,17 @@ function buildSettingsSchema(
       name: "Kleuren",
       settings: [
         { type: "image_picker", id: "favicon", label: "Favicon" },
+        {
+          type: "select",
+          id: "palette_mood",
+          label: "Paletstemming",
+          default: tokens.paletteMood,
+          info: "Stuurt de afgeleide neutrale tinten en de WCAG-contrastcontrole (uit het interne Design Plan).",
+          options: [
+            { value: "neutral_default", label: PALETTE_MOOD_OPTION_LABELS.neutral_default },
+            ...PALETTE_MOOD_KEYS.map((key) => ({ value: key, label: PALETTE_MOOD_OPTION_LABELS[key] })),
+          ],
+        },
         { type: "color", id: "color_primary", label: "Primaire kleur", default: "#3f5f4f" },
         { type: "color", id: "color_secondary", label: "Secundaire kleur", default: tokens.secondary },
         { type: "color", id: "color_accent", label: "Accentkleur", default: "#c9a55a" },
@@ -358,9 +452,22 @@ function buildSettingsSchema(
       settings: [
         {
           type: "select",
+          id: "font_pairing",
+          label: "Font-pairing",
+          default: tokens.fontPairing,
+          info: "Webfonts worden zelfgehost meegeleverd (SIL OFL-licentie in assets). Systeemopties vallen terug op de besturingssysteemfonts.",
+          options: [
+            { value: "system_sans", label: FONT_PAIRING_OPTION_LABELS.system_sans },
+            { value: "system_serif", label: FONT_PAIRING_OPTION_LABELS.system_serif },
+            ...FONT_PAIRING_KEYS.map((key) => ({ value: key, label: FONT_PAIRING_OPTION_LABELS[key] })),
+          ],
+        },
+        {
+          type: "select",
           id: "font_heading",
           label: "Kopfont",
           default: "sans",
+          info: "Alleen van toepassing bij de systeem-fontopties.",
           options: [
             { value: "sans", label: "Sans-serif (systeem)" },
             { value: "serif", label: "Serif (systeem)" },
@@ -529,6 +636,8 @@ function buildSettingsData(
       color_muted: tokens.mutedText,
       color_border: tokens.border,
       color_text: tokens.text,
+      font_pairing: tokens.fontPairing,
+      palette_mood: tokens.paletteMood,
       font_heading: tokens.headingFont === FONT_STACKS.serif.heading ? "serif" : "sans",
       heading_scale: tokens.headingScale,
       heading_weight: String(tokens.headingWeight),
@@ -580,6 +689,12 @@ function buildThemeLayout(spec: WebsiteSpecification, tokens: ThemeDesignTokens)
     {% render 'meta-tags' %}
     {{ content_for_header }}
     {% style %}
+      {%- comment -%}
+        D1 — Design Token Engine: @font-face voor de GEPLANDE font-pairing
+        (kurateur, SIL OFL-gelicentieerd, self-hosted in assets/). De
+        declaraties staan in Liquid zodat asset_url correct resolvert.
+      {%- endcomment -%}
+      ${isWebFontPairing(tokens.fontPairing) ? buildFontFaceCss(tokens.fontPairing) : ""}
       :root {
         --color-primary: {{ settings.color_primary }};
         --color-secondary: {{ settings.color_secondary }};
@@ -589,8 +704,8 @@ function buildThemeLayout(spec: WebsiteSpecification, tokens: ThemeDesignTokens)
         --color-surface: {{ settings.color_surface }};
         --color-border: {{ settings.color_border }};
         --color-muted: {{ settings.color_muted }};
-        --font-heading: {% if settings.font_heading == 'serif' %}${FONT_STACKS.serif.heading}{% else %}${FONT_STACKS.sans.heading}{% endif %};
-        --font-body: ${tokens.bodyFont};
+        --font-heading: {% case settings.font_pairing %}{% when 'modern_sans' %}${fontFamilyValues("modern_sans").heading}{% when 'geometric_sans' %}${fontFamilyValues("geometric_sans").heading}{% when 'editorial_serif' %}${fontFamilyValues("editorial_serif").heading}{% when 'classic_serif' %}${fontFamilyValues("classic_serif").heading}{% when 'humanist_sans' %}${fontFamilyValues("humanist_sans").heading}{% when 'mono_technical' %}${fontFamilyValues("mono_technical").heading}{% else %}{% if settings.font_heading == 'serif' %}${FONT_STACKS.serif.heading}{% else %}${FONT_STACKS.sans.heading}{% endif %}{% endcase %};
+        --font-body: {% case settings.font_pairing %}{% when 'modern_sans' %}${fontFamilyValues("modern_sans").body}{% when 'geometric_sans' %}${fontFamilyValues("geometric_sans").body}{% when 'editorial_serif' %}${fontFamilyValues("editorial_serif").body}{% when 'classic_serif' %}${fontFamilyValues("classic_serif").body}{% when 'humanist_sans' %}${fontFamilyValues("humanist_sans").body}{% when 'mono_technical' %}${fontFamilyValues("mono_technical").body}{% else %}${tokens.bodyFont}{% endcase %};
         --font-weight-heading: {{ settings.heading_weight }};
         --font-weight-body: {{ settings.body_weight }};
         --heading-scale: {{ settings.heading_scale | divided_by: 100.0 }};
@@ -3371,6 +3486,22 @@ export function buildShopifyTheme(input: BuildThemeInput): BuiltTheme {
   files.push(buildThemeMediaSnippet());
   files.push(buildSectionBackgroundSnippet());
   files.push(buildLocaleFile());
+
+  // --- D1: webfont-pairing uit het visualContract — woff2-assets (binair)
+  //     plus de OFL-licentietekst per gebruikte familie. Zonder
+  //     visualContract worden er GEEN fontbestanden meegeleverd (exact
+  //     de D0-ZIP-inhoud).
+  if (isWebFontPairing(tokens.fontPairing)) {
+    for (const asset of fontPairingAssets(tokens.fontPairing)) {
+      files.push({ path: asset.path, content: asset.content, ...(asset.bytes ? { bytes: asset.bytes } : {}) });
+    }
+    notes.push(
+      `Font-pairing "${tokens.fontPairing}" meegeleverd als zelfgehoste woff2-assets inclusief SIL OFL-licentietekst per familie.`
+    );
+  }
+  for (const correction of tokens.paletteCorrections) {
+    notes.push(`Palet-engine (WCAG AA): ${correction}`);
+  }
 
   // --- Password-status (branded "coming soon" tijdens de launch)
   files.push(buildPasswordLayout());

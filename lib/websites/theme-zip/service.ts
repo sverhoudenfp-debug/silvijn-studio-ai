@@ -15,10 +15,12 @@ import type { GeneratedWebsite } from "../types";
 import type { WebsiteContactContext } from "../generator";
 import { buildShopifyTheme } from "./theme-builder";
 import { createThemeZip } from "./theme-zip";
-import { validateThemeFiles } from "./theme-validation";
+import { certifyThemeFiles } from "./preflight";
+
 import {
   getThemeZipArtifactRepository,
   type ThemeZipArtifact,
+  type ThemeZipArtifactPreflight,
   type ThemeZipArtifactRepository,
 } from "./repository";
 
@@ -90,7 +92,11 @@ export class ThemeZipService {
   async createArtifactSignedUrl(artifactId: string): Promise<string> {
     const artifact = await this.artifactRepository.getById(artifactId);
     if (!artifact) throw new ThemeZipGenerationError("Theme-artefact niet gevonden");
-    if (artifact.status !== "passed" || !artifact.storagePath || !artifact.storageBucket) {
+    if (
+      (artifact.status !== "certified" && artifact.status !== "passed") ||
+      !artifact.storagePath ||
+      !artifact.storageBucket
+    ) {
       throw new ThemeZipGenerationError("Dit artefact heeft geen opgeslagen, gevalideerde ZIP.");
     }
     if (!isSupabaseConfigured()) {
@@ -176,7 +182,6 @@ export class ThemeZipService {
       contact,
       contentPlan,
     });
-    const zipBytes = await createThemeZip(built.files);
     // Fase C: trustElements uit het blueprint zijn bewezen echte claims
     // (bron-verplicht, upstream Zod-gevalideerd); zij mogen de
     // fabricatie-net-scan rechtvaardig passeren.
@@ -194,7 +199,35 @@ export class ThemeZipService {
     if (contentPlan) {
       trustedClaims.push(...contentPlanTrustedClaims(contentPlan));
     }
-    const validation = validateThemeFiles(built.files, { trustedClaims });
+    // Theme Certification: de ZIP wordt pas gebouwd nadat de volledige
+    // preflight (deterministische contractchecks + extern Shopify Theme
+    // Check + veilige zelfreparatie) is doorstaan. De ZIP-bytes komen uit
+    // de gecertificeerde bestanden: wat bewezen is, is wat geleverd wordt.
+    const certification = await certifyThemeFiles(built.files, { trustedClaims });
+    const zipBytes = await createThemeZip(certification.files);
+
+    const preflightReport: ThemeZipArtifactPreflight = {
+      status: certification.result.status,
+      criticalErrors: certification.result.criticalErrors,
+      warnings: certification.result.warnings,
+      checks: certification.result.checks.map((c) => ({
+        id: c.id,
+        title: c.title,
+        result: c.result,
+        errors: c.errors,
+        warnings: c.warnings,
+        ...(c.note ? { note: c.note } : {}),
+      })),
+      externalRan: certification.result.external?.ran ?? false,
+      ...(certification.result.external?.note ? { externalNote: certification.result.external.note } : {}),
+      repairs: certification.repairs.map((r) => `${r.id}: ${r.description}`),
+    };
+    const validation = {
+      passed: certification.result.passed,
+      errors: certification.result.criticalErrors,
+      fileCount: certification.result.fileCount,
+      totalBytes: certification.result.totalBytes,
+    };
 
     if (!validation.passed) {
       const artifact = await this.artifactRepository.create({
@@ -202,12 +235,13 @@ export class ThemeZipService {
         projectId: website.projectId,
         leadId: website.leadId,
         version,
-        status: "failed",
+        status: "preflight_failed",
         fileName,
         sizeBytes: zipBytes.byteLength,
         fileCount: validation.fileCount,
         checksumSha256: hashToHex(zipBytes),
         validationErrors: validation.errors,
+        preflight: preflightReport,
       });
       await getAIActivityRepository().log({
         leadId: website.leadId,
@@ -241,7 +275,7 @@ export class ThemeZipService {
       projectId: website.projectId,
       leadId: website.leadId,
       version,
-      status: "passed",
+      status: "certified",
       fileName,
       sizeBytes: zipBytes.byteLength,
       fileCount: validation.fileCount,
@@ -249,13 +283,14 @@ export class ThemeZipService {
       storageBucket,
       storagePath,
       validationErrors: [],
+      preflight: preflightReport,
     });
 
     await getAIActivityRepository().log({
       leadId: website.leadId,
       type: "theme_zip_generation",
       status: "completed",
-      message: `Theme-ZIP gegenereerd en gevalideerd voor "${website.businessName}" (v${version}, ${validation.fileCount} bestanden, intern artefact — geen levering)${contentPlan ? ` — content uit ContentPlan op ${built.notes.length} compositie-notitie(s), ${contentPlanTrustedClaims(contentPlan).length} fact-locked claim(s) vertrouwd richting validatie` : " — geen ContentPlan, content uit de specification (legacy-flow)"}`,
+      message: `Theme-ZIP gegenereerd en GECERTIFICEERD voor "${website.businessName}" (v${version}, ${validation.fileCount} bestanden, intern artefact — geen levering)${contentPlan ? ` — content uit ContentPlan op ${built.notes.length} compositie-notitie(s), ${contentPlanTrustedClaims(contentPlan).length} fact-locked claim(s) vertrouwd richting validatie` : " — geen ContentPlan, content uit de specification (legacy-flow)"}`,
       metadata: {
         websiteId: website.id,
         projectId: website.projectId,

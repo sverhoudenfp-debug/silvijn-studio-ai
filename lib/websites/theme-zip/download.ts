@@ -4,9 +4,10 @@ import { getThemeZipArtifactRepository, type ThemeZipArtifact, type ThemeZipArti
  * Download-selectie voor theme-ZIP-artefacten (intern gebruik).
  *
  * Een artefact is alléén downloadbaar wanneer het de validatie heeft
- * doorstaan (status "passed") én er daadwerkelijk een ZIP in de privé-
- * opslag ligt (storageBucket + storagePath). Gefaalde builds en
- * artefacten zonder opgeslagen bestand worden nooit aangeboden.
+ * doorstaan (status "certified" — of legacy "passed" uit de tijd vóór de
+ * certificeringslaag) én er daadwerkelijk een ZIP in de privé-opslag ligt
+ * (storageBucket + storagePath). Preflight-gefaalde builds en artefacten
+ * zonder opgeslagen bestand worden nooit aangeboden.
  *
  * Er wordt hier NOOIT een (her)generatie gestart: deze module selecteert
  * uitsluitend bestaande, geldige artefacten. De productie-poort
@@ -24,7 +25,10 @@ export interface DownloadableArtifactSummary {
 /** Nieuwste geldige (passed + opgeslagen) artefact, of null. */
 export function selectDownloadableArtifact(artifacts: ThemeZipArtifact[]): ThemeZipArtifact | null {
   const downloadable = artifacts.filter(
-    (artifact) => artifact.status === "passed" && !!artifact.storageBucket && !!artifact.storagePath
+    (artifact) =>
+      (artifact.status === "certified" || artifact.status === "passed") &&
+      !!artifact.storageBucket &&
+      !!artifact.storagePath
   );
   if (downloadable.length === 0) return null;
   return downloadable.reduce((best, current) => (current.version > best.version ? current : best));

@@ -623,18 +623,15 @@ function buildSettingsSchema(
           label: "Bedrijfsnaam",
           default: businessName,
         },
-        {
-          type: "text",
-          id: "contact_email",
-          label: "E-mailadres (voor social sharing en structured data)",
-          default: contact.email ?? "",
-        },
-        {
-          type: "text",
-          id: "contact_phone",
-          label: "Telefoonnummer",
-          default: contact.phone ?? "",
-        },
+        // Lege text-defaults weert Shopify (FileSaveError, bewezen 2026-09-21):
+        // defaults alléén bij geverifieerde lead-data; anders geen default
+        // en vangt de Liquid-fallback (| default/!= blank) de lege waarde op.
+        ...(contact.email
+          ? [{ type: "text", id: "contact_email", label: "E-mailadres (voor social sharing en structured data)", default: contact.email }]
+          : [{ type: "text", id: "contact_email", label: "E-mailadres (voor social sharing en structured data)" }]),
+        ...(contact.phone
+          ? [{ type: "text", id: "contact_phone", label: "Telefoonnummer", default: contact.phone }]
+          : [{ type: "text", id: "contact_phone", label: "Telefoonnummer" }]),
         {
           type: "text",
           id: "contact_city",
@@ -1457,6 +1454,18 @@ function buildLocaleFile(): ThemeFile {
       cart: "Winkelwagen",
       back_home: "Terug naar de homepage",
       learn_more: "Meer informatie",
+      password_page: {
+        login_form_password: "Wachtwoord",
+        login_form_button: "Naar de site",
+        admin_link_html: "Eigenaar van deze winkel? <a href=\"/admin\">Log in</a> in de beheeromgeving.",
+      },
+    },
+    rates: {
+      service: "Dienst",
+      price: "Prijs",
+    },
+    newsletter: {
+      email: "E-mailadres",
     },
     contact: {
       title: "Contact",
@@ -1510,11 +1519,6 @@ function buildLocaleFile(): ThemeFile {
     error_404: {
       title: "Pagina niet gevonden",
       subtext: "De pagina die je zoekt bestaat niet (meer).",
-    },
-    password_page: {
-      login_form_password: "Wachtwoord",
-      login_form_button: "Naar de site",
-      admin_link_html: "Eigenaar van deze winkel? <a href=\"/admin\">Log in</a> in de beheeromgeving.",
     },
     customers: {
       login_page: {
@@ -2167,7 +2171,7 @@ function buildHeaderSection(): ThemeFile {
     },
     { "type": "checkbox", "id": "sticky", "label": "Vast (sticky) bovenaan", "default": true },
     { "type": "image_picker", "id": "logo", "label": "Logo (optioneel; anders merknaam als tekst)" },
-    { "type": "text", "id": "brand_text", "label": "Merknaam", "default": "" },
+    { "type": "text", "id": "brand_text", "label": "Merknaam" },
     { "type": "checkbox", "id": "show_cta", "label": "CTA-knop tonen", "default": true },
     { "type": "text", "id": "cta_label", "label": "CTA-tekst", "default": "Contact" },
     { "type": "url", "id": "cta_link", "label": "CTA-link" }
@@ -2310,6 +2314,21 @@ function buildThemeMediaSnippet(): ThemeFile {
   assign media_loading = loading | default: 'lazy'
   assign media_aspect = aspect | default: 'wide'
   assign fallback_svg = placeholder_svg | default: 'placeholder.svg'
+  assign placeholder_w = 1500
+  assign placeholder_h = 845
+  if media_aspect == 'landscape' or media_aspect == 'landscape_4_3'
+    assign placeholder_w = 1200
+    assign placeholder_h = 900
+  elsif media_aspect == 'square'
+    assign placeholder_w = 1000
+    assign placeholder_h = 1000
+  elsif media_aspect == 'portrait' or media_aspect == 'portrait_3_4'
+    assign placeholder_w = 900
+    assign placeholder_h = 1200
+  elsif media_aspect == 'tall'
+    assign placeholder_w = 800
+    assign placeholder_h = 1200
+  endif
 -%}
 {%- if image != blank -%}
   <div class="theme-media theme-media--{{ media_aspect }}" {% if image.presentation.focal_point %}style="--media-focal: {{ image.presentation.focal_point }}"{% endif %}>
@@ -2324,7 +2343,7 @@ function buildThemeMediaSnippet(): ThemeFile {
   </div>
 {%- else -%}
   <div class="theme-media theme-media--{{ media_aspect }} theme-media--placeholder">
-    <img src="{{ fallback_svg | asset_url }}" alt="" role="presentation" loading="{{ media_loading }}" decoding="async">
+    <img src="{{ fallback_svg | asset_url }}" alt="" role="presentation" width="{{ placeholder_w }}" height="{{ placeholder_h }}" loading="{{ media_loading }}" decoding="async">
   </div>
 {%- endif -%}
 `;
@@ -2345,6 +2364,7 @@ function buildSectionBackgroundSnippet(): ThemeFile {
   Parameters: image (image_picker), overlay (0-100), alt, placeholder_svg.
   Zonder afbeelding rendert de abstracte placeholder (geen gradient).
 {% endcomment %}
+{%- assign alt = alt | default: '' -%}
 <div class="section__background" aria-hidden="true">
   {%- render 'theme-media', image: image, aspect: 'wide', alt: alt, sizes: '100vw', loading: 'eager', placeholder_svg: placeholder_svg -%}
   <div class="section__background-overlay" style="opacity: {{ overlay | default: 45 | divided_by: 100.0 }}"></div>
@@ -2356,7 +2376,7 @@ function buildSectionBackgroundSnippet(): ThemeFile {
 function buildServicesSection(): ThemeFile {
   const liquid = `<section class="section services services--{{ section.settings.layout | default: 'grid' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
   {%- if section.settings.background == 'image' -%}
-    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading, placeholder_svg: 'placeholder.svg' -%}
   {%- endif -%}
   <div class="container">
     <div class="section__header">
@@ -2415,7 +2435,7 @@ ${blueprintVariantSettings("services", "default")},
 function buildAboutSection(): ThemeFile {
   const liquid = `<section class="section about about--{{ section.settings.layout | default: 'split' }} section--bg-{{ section.settings.background | default: 'surface' }} motion--{{ section.settings.motion | default: 'none' }}">
   {%- if section.settings.background == 'image' -%}
-    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading, placeholder_svg: 'placeholder.svg' -%}
   {%- endif -%}
   <div class="container">
     <div class="section__header">
@@ -2470,7 +2490,7 @@ ${blueprintVariantSettings("about", "surface")},
 function buildGallerySection(): ThemeFile {
   const liquid = `<section class="section gallery gallery--{{ section.settings.layout | default: 'grid' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
   {%- if section.settings.background == 'image' -%}
-    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading, placeholder_svg: 'placeholder.svg' -%}
   {%- endif -%}
   <div class="container">
     <div class="section__header">
@@ -2532,7 +2552,7 @@ function buildTestimonialsSection(): ThemeFile {
   const liquid = `{%- if section.blocks.size > 0 -%}
 <section class="section testimonials testimonials--{{ section.settings.layout | default: 'band' }} section--bg-{{ section.settings.background | default: 'surface' }} motion--{{ section.settings.motion | default: 'none' }}">
   {%- if section.settings.background == 'image' -%}
-    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading, placeholder_svg: 'placeholder.svg' -%}
   {%- endif -%}
   <div class="container">
     <div class="section__header">
@@ -2583,7 +2603,7 @@ ${blueprintVariantSettings("testimonials", "surface")},
 function buildBenefitsSection(): ThemeFile {
   const liquid = `<section class="section benefits benefits--{{ section.settings.layout | default: 'grid' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
   {%- if section.settings.background == 'image' -%}
-    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading, placeholder_svg: 'placeholder.svg' -%}
   {%- endif -%}
   <div class="container">
     <div class="section__header">
@@ -2627,7 +2647,7 @@ ${blueprintVariantSettings("benefits", "default")},
 function buildFaqSection(): ThemeFile {
   const liquid = `<section class="section faq faq--{{ section.settings.layout | default: 'accordion' }} section--bg-{{ section.settings.background | default: 'surface' }} motion--{{ section.settings.motion | default: 'none' }}">
   {%- if section.settings.background == 'image' -%}
-    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading, placeholder_svg: 'placeholder.svg' -%}
   {%- endif -%}
   <div class="container">
     <div class="section__header">
@@ -2672,7 +2692,7 @@ ${blueprintVariantSettings("faq", "surface")},
 function buildCtaSection(): ThemeFile {
   const liquid = `<section class="section cta cta--{{ section.settings.layout | default: 'band' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
   {%- if section.settings.background == 'image' -%}
-    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading, placeholder_svg: 'placeholder.svg' -%}
   {%- endif -%}
   <div class="container">
     <div class="cta__inner">
@@ -2710,7 +2730,7 @@ ${blueprintVariantSettings("cta", "default")},
 function buildContactSection(): ThemeFile {
   const liquid = `<section class="section contact contact--{{ section.settings.layout | default: 'split' }} section--bg-{{ section.settings.background | default: 'surface' }} motion--{{ section.settings.motion | default: 'none' }}" id="contact">
   {%- if section.settings.background == 'image' -%}
-    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading, placeholder_svg: 'placeholder.svg' -%}
   {%- endif -%}
   <div class="container">
     <div class="section__header">
@@ -2869,7 +2889,7 @@ ${blueprintVariantSettings("usp_band", "surface")}
 function buildStatsSection(): ThemeFile {
   const liquid = `<section class="section stats stats--{{ section.settings.layout | default: 'row' }} section--bg-{{ section.settings.background | default: 'surface' }} motion--{{ section.settings.motion | default: 'none' }}">
   {%- if section.settings.background == 'image' -%}
-    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading, placeholder_svg: 'placeholder.svg' -%}
   {%- endif -%}
   <div class="container">
     <div class="section__header">
@@ -2917,7 +2937,7 @@ ${blueprintVariantSettings("stats", "surface")},
 function buildProcessSection(): ThemeFile {
   const liquid = `<section class="section process process--{{ section.settings.layout | default: 'steps' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
   {%- if section.settings.background == 'image' -%}
-    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading, placeholder_svg: 'placeholder.svg' -%}
   {%- endif -%}
   <div class="container">
     <div class="section__header">
@@ -2970,7 +2990,7 @@ ${blueprintVariantSettings("process", "default")},
 function buildProjectsSection(): ThemeFile {
   const liquid = `<section class="section projects projects--{{ section.settings.layout | default: 'grid' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
   {%- if section.settings.background == 'image' -%}
-    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading, placeholder_svg: 'placeholder.svg' -%}
   {%- endif -%}
   <div class="container">
     <div class="section__header">
@@ -3027,7 +3047,7 @@ ${blueprintVariantSettings("projects", "default")},
 function buildTeamSection(): ThemeFile {
   const liquid = `<section class="section team team--{{ section.settings.layout | default: 'grid' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
   {%- if section.settings.background == 'image' -%}
-    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading, placeholder_svg: 'placeholder.svg' -%}
   {%- endif -%}
   <div class="container">
     <div class="section__header">
@@ -3081,7 +3101,7 @@ ${blueprintVariantSettings("team", "default")},
 function buildRatesSection(): ThemeFile {
   const liquid = `<section class="section rates rates--{{ section.settings.layout | default: 'table' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
   {%- if section.settings.background == 'image' -%}
-    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading, placeholder_svg: 'placeholder.svg' -%}
   {%- endif -%}
   <div class="container">
     <div class="section__header">
@@ -3151,7 +3171,7 @@ ${blueprintVariantSettings("rates", "default")},
 function buildNewsletterSection(): ThemeFile {
   const liquid = `<section class="section newsletter newsletter--{{ section.settings.layout | default: 'band' }} section--bg-{{ section.settings.background | default: 'surface' }} motion--{{ section.settings.motion | default: 'none' }}">
   {%- if section.settings.background == 'image' -%}
-    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading, placeholder_svg: 'placeholder.svg' -%}
   {%- endif -%}
   <div class="container">
     <div class="newsletter__inner">
@@ -3194,7 +3214,7 @@ ${blueprintVariantSettings("newsletter", "surface")},
 function buildBookingSection(): ThemeFile {
   const liquid = `<section class="section booking booking--{{ section.settings.layout | default: 'band' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
   {%- if section.settings.background == 'image' -%}
-    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading | default: '', placeholder_svg: 'placeholder.svg' -%}
+    {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.heading, placeholder_svg: 'placeholder.svg' -%}
   {%- endif -%}
   <div class="container">
     <div class="booking__inner">

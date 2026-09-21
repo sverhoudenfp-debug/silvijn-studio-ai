@@ -10,7 +10,15 @@ import { getSupabaseServerClient, isSupabaseConfigured } from "@/lib/supabase/se
  * Oudere versies blijven volledig terugvindbaar (incl. opslagpad + checksum).
  */
 
-export type ThemeZipArtifactStatus = "validating" | "passed" | "failed";
+/**
+ * THEME CERTIFICATION (2026-09-21): nieuwe artefacten zijn "certified"
+ * (volledige preflight doorstaan, incl. extern Theme Check) of
+ * "preflight_failed" (critical preflight-fout, nooit leverbaar).
+ * "passed"/"failed" zijn de legacy-statussen vóór de certificeringslaag
+ * (bewust geldig gelaten: historische artefacten blijven ongewijzigd
+ * leesbaar; download-selectie accepteert beide).
+ */
+export type ThemeZipArtifactStatus = "validating" | "passed" | "failed" | "certified" | "preflight_failed";
 
 export interface ThemeZipArtifact {
   id: string;
@@ -26,8 +34,21 @@ export interface ThemeZipArtifact {
   fileCount: number;
   checksumSha256: string;
   validationErrors: string[];
+  /** Theme Certification: volledig preflight-rapport (checks/warnings/extern). */
+  preflight: ThemeZipArtifactPreflight | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Persisteerbaar preflight-rapport (migratie 0025). */
+export interface ThemeZipArtifactPreflight {
+  status: "THEME_CERTIFIED" | "THEME_PREFLIGHT_FAILED";
+  criticalErrors: string[];
+  warnings: string[];
+  checks: { id: string; title: string; result: string; errors: string[]; warnings: string[]; note?: string }[];
+  externalRan: boolean;
+  externalNote?: string;
+  repairs: string[];
 }
 
 export interface ThemeZipArtifactCreateInput {
@@ -43,6 +64,7 @@ export interface ThemeZipArtifactCreateInput {
   storageBucket?: string | null;
   storagePath?: string | null;
   validationErrors?: string[];
+  preflight?: ThemeZipArtifactPreflight | null;
 }
 
 export interface ThemeZipArtifactRepository {
@@ -67,6 +89,7 @@ function buildArtifact(input: ThemeZipArtifactCreateInput, id: string, now: stri
     fileCount: input.fileCount,
     checksumSha256: input.checksumSha256,
     validationErrors: input.validationErrors ?? [],
+    preflight: input.preflight ?? null,
     createdAt: now,
     updatedAt: now,
   };
@@ -105,6 +128,7 @@ interface ArtifactRow {
   file_count: number;
   checksum_sha256: string;
   validation_errors: string[] | null;
+  preflight: ThemeZipArtifactPreflight | null;
   created_at: string;
   updated_at: string;
 }
@@ -124,6 +148,7 @@ function rowToArtifact(row: ArtifactRow): ThemeZipArtifact {
     fileCount: Number(row.file_count ?? 0),
     checksumSha256: row.checksum_sha256,
     validationErrors: row.validation_errors ?? [],
+    preflight: row.preflight ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -148,6 +173,7 @@ class SupabaseThemeZipArtifactRepository implements ThemeZipArtifactRepository {
         file_count: input.fileCount,
         checksum_sha256: input.checksumSha256,
         validation_errors: input.validationErrors ?? [],
+        preflight: input.preflight ?? null,
       })
       .select()
       .single();

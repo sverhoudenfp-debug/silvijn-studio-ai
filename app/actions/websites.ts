@@ -125,7 +125,11 @@ export async function createThemeZipDownloadUrlAction(artifactId: string): Promi
     const zipService = new ThemeZipService({ productionGate: assertProductionAuthorized });
     const artifact = await zipService.getArtifact(artifactId);
     if (!artifact) return { ok: false, error: "Theme-artefact niet gevonden." };
-    if (artifact.status !== "passed" || !artifact.storagePath || !artifact.storageBucket) {
+    if (
+      (artifact.status !== "certified" && artifact.status !== "passed") ||
+      !artifact.storagePath ||
+      !artifact.storageBucket
+    ) {
       return { ok: false, error: "Dit artefact heeft geen opgeslagen, gevalideerde ZIP." };
     }
     const url = await zipService.createArtifactSignedUrl(artifactId);

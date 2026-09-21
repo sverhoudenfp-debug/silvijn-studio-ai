@@ -2,7 +2,8 @@
  * Regressietests — "Download Shopify Theme ZIP"-actie.
  *
  * Contract: de download gebruikt uitsluitend een bestaand, gevalideerd
- * (status "passed") artefact mét opgeslagen ZIP uit de privé-bucket, via
+ * (status "certified" — of legacy "passed") artefact mét opgeslagen ZIP
+ * uit de privé-bucket, via
  * de bestaande signed-URL-infrastructuur. Er wordt NOOIT een nieuwe
  * website-/themegeneratie gestart en geen enkele QC-, payment-,
  * approval- of delivery-gate wordt aangeraakt.
@@ -97,6 +98,8 @@ test("Download-action: owner-only en start géén generatie", async (t) => {
 });
 
 test("Download-action: weigert artefacten zonder opgeslagen, gevalideerde ZIP", () => {
-  assert.match(downloadAction, /artifact\.status !== "passed"/);
-  assert.match(downloadAction, /!artifact\.storagePath \|\| !artifact\.storageBucket/);
+  // Theme Certification: de guard accepteert certified (nieuw) én legacy passed.
+assert.match(downloadAction, /artifact\.status !== "certified" && artifact\.status !== "passed"/);
+  // Theme Certification: dezelfde guard, witruimte-tolerant (meerregelig).
+assert.match(downloadAction, /!artifact\.storagePath\s*\|\|\s*!artifact\.storageBucket/);
 });

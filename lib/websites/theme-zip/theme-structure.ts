@@ -82,6 +82,10 @@ export const THEME_REQUIRED_FILES: readonly string[] = [
   "assets/theme.js",
   "sections/header.liquid",
   "sections/footer.liquid",
+  // Theme Certification (2026-09-21): de header-/footer-groups zijn de
+  // verplichte core-bindingen van elk Online Store 2.0-thema.
+  "sections/header-group.json",
+  "sections/footer-group.json",
   "templates/index.json",
   "templates/page.json",
   "templates/404.json",

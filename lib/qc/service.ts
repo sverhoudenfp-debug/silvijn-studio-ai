@@ -6,10 +6,17 @@ import type { Project } from "@/lib/projects/types";
 import { AIService, getWebsiteQCTier } from "@/lib/ai/service";
 import { readAIAttemptMetadata } from "@/lib/ai/errors";
 import { getGeneratedWebsiteRepository } from "@/lib/websites/repository";
+import { getDesignPlanRepository } from "@/lib/websites/design-plan-repository";
+import { contentPlanTrustedClaims } from "@/lib/websites/content/content-plan-consumption";
+import { getContentPlanRepository } from "@/lib/websites/content/content-plan-repository";
+import { runFullPreflight } from "@/lib/websites/theme-zip/preflight";
+import { readThemeZip } from "@/lib/websites/theme-zip/theme-zip";
+import { getThemeZipArtifactRepository } from "@/lib/websites/theme-zip/repository";
+import { getSupabaseServerClient, isSupabaseConfigured } from "@/lib/supabase/server";
+import { createHash } from "node:crypto";
 import type { GeneratedWebsite } from "@/lib/websites/types";
 import type { QCAnalysis } from "./ai-types";
 import { runDeterministicChecks, type ContentPlanCoverageSummary } from "./checks";
-import { getContentPlanRepository } from "@/lib/websites/content/content-plan-repository";
 import { computeOverallResult, computeScore, summarizeCategoryResults } from "./rules";
 import { getQualityControlRepository } from "./repository";
 import {
@@ -320,8 +327,46 @@ export class QualityControlService {
     const failedChecks = mergedChecks.filter((c) => c.result === "failed").map((c) => c.category);
 
     const finalStatus: QualityControl["status"] = "completed";
-    const websiteStatus: GeneratedWebsite["status"] =
-      overallResult === "pass" ? "ready_for_silvijn" : overallResult === "needs_revision" ? "needs_revision" : "failed";
+
+    // ---- 3a. THEME CERTIFICATION HARD GATE (2026-09-21):
+    // QC PASS is noodzakelijk, maar NIET voldoende voor READY_FOR_SILVIJN.
+    // De opgeslagen theme-ZIP moet op de eindbytes (download uit de privé-
+    // opslag, checksum-geverifieerd) de VOLLEDIGE preflight doorstaan:
+    // deterministische contractchecks + extern Shopify Theme Check.
+    // Zonder gecertificeerd artefact blijft de website READY_FOR_QC —
+    // Silvijn kan nooit per ongeluk een niet-bewezen theme afleveren.
+    let certification: Awaited<ReturnType<QualityControlService["certifyStoredThemeZip"]>> | null = null;
+    if (overallResult === "pass") {
+      certification = await this.certifyStoredThemeZip(project, website);
+      if (!certification.certified) {
+        mergedIssues.push({
+          id: "theme_certification",
+          category: "technical",
+          severity: "critical",
+          rule: "THEME_CERTIFICATION_REQUIRED",
+          message: `Theme-certificering ontbreekt of faalde: ${certification.reason}. READY_FOR_SILVIJN is geblokkeerd tot een gecertificeerde theme-ZIP bestaat (genereer de ZIP opnieuw via de projectdetailpagina).`,
+        });
+        recommendations.push(
+          "Los de theme-certificeringsfout op en genereer de theme-ZIP opnieuw vóór de definitieve oplevering (READY_FOR_SILVIJN vereist een gecertificeerde ZIP)."
+        );
+      } else if (certification.warnings.length > 0) {
+        for (const warning of certification.warnings.slice(0, 10)) {
+          mergedIssues.push({
+            id: "theme_certification_warning",
+            category: "technical",
+            severity: "warning",
+            rule: "THEME_CERTIFICATION_WARNING",
+            message: `Theme-preflight-waarschuwing: ${warning}`,
+          });
+        }
+      }
+    }
+
+    const websiteStatus: GeneratedWebsite["status"] = overallResult === "pass"
+      ? certification?.certified ? "ready_for_silvijn" : "ready_for_qc"
+      : overallResult === "needs_revision"
+        ? "needs_revision"
+        : "failed";
 
     qc = (await getQualityControlRepository().update(qc.id, {
       status: finalStatus,
@@ -353,10 +398,124 @@ export class QualityControlService {
         score,
         model,
         mode,
+        ...(certification
+          ? {
+              themeCertification: {
+                certified: certification.certified,
+                artifactVersion: certification.artifactVersion,
+                checksum: certification.checksum,
+                ...(certification.reason ? { reason: certification.reason } : {}),
+                ...(certification.warnings.length > 0 ? { warnings: certification.warnings.slice(0, 10) } : {}),
+              },
+            }
+          : {}),
       },
     });
 
     return qc;
+  }
+
+  /**
+   * FINALE PREFLIGHT op de opgeslagen theme-ZIP (QC hard gate,
+   * Theme Certification 2026-09-21). Download de daadwerkelijke bytes
+   * uit de privé-opslag, verifieer de checksum tegen het geregistreerde
+   * artefact en draai de VOLLEDIGE preflight (deterministische
+   * contractchecks + extern Shopify Theme Check) op de geextraheerde
+   * bestanden. Alleen een volledig gecertificeerde ZIP rechtvaardigt
+   * READY_FOR_SILVIJN.
+   */
+  private async certifyStoredThemeZip(
+    project: Project,
+    website: GeneratedWebsite
+  ): Promise<{
+    certified: boolean;
+    reason?: string;
+    artifactVersion?: number;
+    checksum?: string;
+    warnings: string[];
+  }> {
+    const artifacts = await getThemeZipArtifactRepository().listByWebsite(website.id);
+    const candidate = artifacts
+      .filter(
+        (a) => (a.status === "certified" || a.status === "passed") && !!a.storageBucket && !!a.storagePath
+      )
+      .sort((a, b) => b.version - a.version)[0];
+    if (!candidate) {
+      return {
+        certified: false,
+        reason:
+          "er is geen opgeslagen theme-ZIP-artefact met status certified/passed voor deze website (genereer de theme-ZIP eerst via de projectdetailpagina)",
+        warnings: [],
+      };
+    }
+    if (!isSupabaseConfigured() || !candidate.storageBucket || !candidate.storagePath) {
+      return {
+        certified: false,
+        reason: "de theme-opslag is niet geconfigureerd — de opgeslagen ZIP kan niet worden geverifieerd",
+        warnings: [],
+      };
+    }
+    const download = await getSupabaseServerClient()
+      .storage.from(candidate.storageBucket)
+      .download(candidate.storagePath);
+    if (download.error || !download.data) {
+      return {
+        certified: false,
+        reason: `de opgeslagen ZIP kon niet worden gedownload (${download.error?.message ?? "onbekend"})`,
+        warnings: [],
+      };
+    }
+    const bytes = new Uint8Array(await download.data.arrayBuffer());
+    const checksum = createHash("sha256").update(bytes).digest("hex");
+    if (checksum !== candidate.checksumSha256) {
+      return {
+        certified: false,
+        artifactVersion: candidate.version,
+        checksum,
+        reason: `checksum-mismatch: de opgeslagen ZIP (${checksum.slice(0, 12)}…) wijkt af van het geregistreerde artefact (${candidate.checksumSha256.slice(0, 12)}…)`,
+        warnings: [],
+      };
+    }
+    const files = await readThemeZip(bytes);
+    const trustedClaims = await this.themeTrustedClaims(project);
+    const result = await runFullPreflight(files, { trustedClaims });
+    if (!result.passed) {
+      return {
+        certified: false,
+        artifactVersion: candidate.version,
+        checksum,
+        reason: `preflight op de opgeslagen ZIP faalde: ${result.criticalErrors[0]}`,
+        warnings: result.warnings,
+      };
+    }
+    return {
+      certified: true,
+      artifactVersion: candidate.version,
+      checksum,
+      warnings: result.warnings,
+    };
+  }
+
+  /** Trustelements (Design Plan) + fact-locked contentclaims — spiegel van de ZIP-generatie. */
+  private async themeTrustedClaims(project: Project): Promise<string[]> {
+    const claims: string[] = [];
+    const plans = await getDesignPlanRepository().listByProject(project.id);
+    const plan = plans.find((p) => p.status === "completed" && p.plan !== null)?.plan;
+    if (plan?.blueprint) {
+      claims.push(
+        ...plan.blueprint.trustElements.usps.map((u) => u.label),
+        ...plan.blueprint.trustElements.stats.map((s) => `${s.value} ${s.label}`),
+        ...plan.blueprint.trustElements.badges.map((b) => b.label)
+      );
+    }
+    const contentPlans = await getContentPlanRepository().listByProject(project.id);
+    const completed = contentPlans
+      .filter((r) => r.status === "completed" && r.plan !== null)
+      .sort((a, b) => b.version - a.version)[0];
+    if (completed?.plan) {
+      claims.push(...contentPlanTrustedClaims(completed.plan));
+    }
+    return claims;
   }
 
   /**

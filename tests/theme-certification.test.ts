@@ -287,3 +287,19 @@ test("certification: migratie 0025 is additief (status-check + jsonb-kolom)", ()
   assert.ok(!migration.includes("drop column"), "databehoudend: geen kolomverlies");
   assert.ok(migration.includes("'passed'"), "legacy-statussen blijven geldig");
 });
+
+test("certification: generateWebsite-flow accepteert een certified artefact (regressie v15-bug)", () => {
+  const genSource = readFileSync(path.join(root, "lib/websites/service.ts"), "utf8");
+  assert.ok(
+    genSource.includes('zipArtifact.status === "certified" || zipArtifact.status === "passed"'),
+    "de websiteflow moet certified (nieuwe code) én legacy passed accepteren als ZIP-succes"
+  );
+  assert.ok(
+    !genSource.includes('zipArtifact.status !== "passed"'),
+    "de oude !== passed-check markeerde een gecertificeerde ZIP ten onrechte als failed"
+  );
+  assert.ok(
+    genSource.includes("preflight?.criticalErrors"),
+    "een preflight_failed artefact moet zijn criticalErrors als foutdetails doorgeven"
+  );
+});

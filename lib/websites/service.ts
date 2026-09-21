@@ -294,10 +294,16 @@ export class WebsiteGenerationService {
       });
       if (framework === "shopify") {
         const zipArtifact = await new ThemeZipService({ productionGate: assertProductionAuthorized }).generateForWebsite(website.id);
-        if (zipArtifact.status !== "passed") {
+        // Theme Certification: een geslaagde ZIP is "certified" (nieuwe code)
+        // of legacy "passed"; beide zijn geldige eindbestanden. Een
+        // "preflight_failed" of "failed" artefact is nooit leverbaar.
+        const zipOk = zipArtifact.status === "certified" || zipArtifact.status === "passed";
+        if (!zipOk) {
           const zipErrors = zipArtifact.validationErrors.length > 0
             ? zipArtifact.validationErrors
-            : ["Theme-ZIP-validatie faalde zonder foutdetails."];
+            : zipArtifact.preflight?.criticalErrors?.length
+              ? zipArtifact.preflight.criticalErrors
+              : ["Theme-ZIP-validatie faalde zonder foutdetails."];
           const failedZip = await getGeneratedWebsiteRepository().update(website.id, {
             status: "failed",
             generationStatus: "failed",

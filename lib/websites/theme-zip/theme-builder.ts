@@ -25,6 +25,18 @@ import {
   type FontPairingSettingValue,
   type PaletteMoodSettingValue,
 } from "../visual-contract";
+import {
+  type ArtDirection,
+  type ArtComposition,
+  type ArtCardTreatment,
+  type ArtImageryBalance,
+  type ArtImageStyle,
+  type ArtDecorative,
+  type ArtTransition,
+  type ArtMotionStyle,
+  ART_COMPOSITION_KEYS,
+  ART_COMPOSITION_OPTION_LABELS,
+} from "../art-direction";
 import { derivePalette } from "./palette-engine";
 import { buildFontFaceCss, fontFamilyValues, fontPairingAssets } from "./font-library";
 
@@ -65,8 +77,8 @@ export interface ThemeDesignTokens {
   /** Font-weights uit plan.typography.weights (hoogste = kop, laagste = lopende tekst). */
   headingWeight: number;
   bodyWeight: number;
-  /** Gecontroleerde hero-variant uit imagery/aboveTheFold/mood — bepaalt de CSS-opbouw. */
-  heroLayout: "focused" | "centered" | "split";
+  /** Gecontroleerde hero-variant uit imagery/aboveTheFold/mood — bepaalt de CSS-opbouw. D2 voegt "immersive" toe. */
+  heroLayout: "focused" | "centered" | "split" | "immersive";
   /**
    * Stijlprofiel (Rendering-stap 1, 2026-09-19): deterministische vertaling
    * van plan.branding.styleDirection/mood naar typografische hiërarchie
@@ -84,6 +96,13 @@ export interface ThemeDesignTokens {
   paletteMood: PaletteMoodSettingValue;
   /** D1: deterministische WCAG-correcties uit de palette engine (voor notes). */
   paletteCorrections: readonly string[];
+  /**
+   * D2 — ART DIRECTION: de niche-specifieke visuele kunstketen uit het
+   * Design Plan. null (alle plannen vóór D2) betekent exact het D0/D1-
+   * gedrag: geen composition-setting, geen art-direction.css, geen
+   * header-variantdefaults uit het plan.
+   */
+  artDirection: ArtDirection | null;
 }
 
 const FALLBACK_TOKENS: Omit<
@@ -99,6 +118,7 @@ const FALLBACK_TOKENS: Omit<
   bodyFont: "sans",
   sectionSpacing: "normal",
   containerWidth: "1160",
+  artDirection: null,
   radius: "10",
   fontPairing: "system_sans",
   paletteMood: "neutral_default",
@@ -264,6 +284,9 @@ export function buildThemeDesignTokens(plan: DesignPlan): ThemeDesignTokens {
   const weights = weightsFor(plan.typography.weights);
   const contract = plan.visualContract ?? null;
 
+  const artDirection = plan.artDirection ?? null;
+  const resolvedHeroLayout = artDirection?.heroTreatment ?? heroLayoutFor(plan);
+
   const base = {
     primary,
     secondary,
@@ -299,11 +322,12 @@ export function buildThemeDesignTokens(plan: DesignPlan): ThemeDesignTokens {
       headingScale: TYPOGRAPHIC_CURVE_SCALE[contract.typographicCurve],
       headingWeight: shipped.heading,
       bodyWeight: shipped.body,
-      heroLayout: heroLayoutFor(plan),
+      heroLayout: resolvedHeroLayout,
       styleProfile: styleProfileFor(plan.branding.styleDirection, plan.branding.mood),
       fontPairing: contract.fontPairing,
       paletteMood: contract.paletteMood,
       paletteCorrections: palette.corrections,
+      artDirection,
     };
   }
 
@@ -317,13 +341,16 @@ export function buildThemeDesignTokens(plan: DesignPlan): ThemeDesignTokens {
     headingScale: headingScaleFor(plan.typography.scale),
     headingWeight: weights.heading,
     bodyWeight: weights.body,
-    heroLayout: heroLayoutFor(plan),
+    heroLayout: resolvedHeroLayout,
     styleProfile: styleProfileFor(plan.branding.styleDirection, plan.branding.mood),
     // D0-gedrag: het layout-font werd altijd via settings.font_heading
     // (sans/serif) geresolved; mono-plannen renderten feitelijk sans.
     fontPairing: fontKey === "serif" ? "system_serif" : "system_sans",
     paletteMood: "neutral_default",
     paletteCorrections: [],
+    // D2: artDirection is onafhankelijk van het visualContract geldig;
+    // zonder artDirection blijft dit null (exact D0/D1-gedrag).
+    artDirection,
   };
 }
 
@@ -553,8 +580,21 @@ function buildSettingsSchema(
             { value: "focused", label: "Gefocust (smal tekstblok)" },
             { value: "centered", label: "Gecentreerd" },
             { value: "split", label: "Split (tekst + beeld)" },
+            { value: "immersive", label: "Immersief (beeldvullend)" },
           ],
         },
+        ...(tokens.artDirection
+          ? [
+              {
+                type: "select",
+                id: "composition",
+                label: "Compositie",
+                default: tokens.artDirection.composition,
+                info: "Visuele compositierichting uit het interne Design Plan (art direction).",
+                options: ART_COMPOSITION_KEYS.map((key) => ({ value: key, label: ART_COMPOSITION_OPTION_LABELS[key] })),
+              },
+            ]
+          : []),
         {
           type: "select",
           id: "style_profile",
@@ -646,6 +686,7 @@ function buildSettingsData(
       section_spacing: tokens.sectionSpacing,
       corner_radius: Number.parseInt(tokens.radius, 10),
       hero_layout: tokens.heroLayout,
+      ...(tokens.artDirection ? { composition: tokens.artDirection.composition } : {}),
       style_profile: tokens.styleProfile,
       // Alleen geverifieerde lead-/specificatiedata; nooit ingevulde waarden
       // verzinnen (lege string = bewust leeg gelaten).
@@ -715,9 +756,10 @@ function buildThemeLayout(spec: WebsiteSpecification, tokens: ThemeDesignTokens)
       }
     {% endstyle %}
     {{ 'theme.css' | asset_url | stylesheet_tag }}
-    <script src="{{ 'theme.js' | asset_url }}" defer></script>
+    ${tokens.artDirection ? `    {{ 'art-direction.css' | asset_url | stylesheet_tag }}
+` : ""}    <script src="{{ 'theme.js' | asset_url }}" defer></script>
   </head>
-  <body class="template-{{ template.name | default: 'index' }} style-{{ settings.style_profile | default: 'neutral' }}">
+  <body class="template-{{ template.name | default: 'index' }} style-{{ settings.style_profile | default: 'neutral' }}${tokens.artDirection ? " ad-{{ settings.composition }}" : ""}">
     <a class="skip-link" href="#main-content">{{ 'accessibility.skip_to_content' | t }}</a>
     {% sections 'header-group' %}
     <main id="main-content" role="main">
@@ -828,15 +870,53 @@ img { max-width: 100%; height: auto; display: block; }
 .skip-link:focus { left: 0; color: #fff; }
 :focus-visible { outline: 3px solid var(--color-accent); outline-offset: 2px; }
 
-/* Header */
-.site-header { border-bottom: 1px solid var(--color-border); background: var(--color-background); position: sticky; top: 0; z-index: 10; }
+/* Header (D2: verplichte core component met echte layoutvarianten) */
+.site-header { border-bottom: 1px solid var(--color-border); background: var(--color-background); z-index: 10; }
 .site-header__inner { display: flex; align-items: center; gap: 16px; justify-content: space-between; padding-block: 14px; }
 .site-header__brand { font-family: var(--font-heading); font-weight: var(--font-weight-heading); font-size: 1.2rem; color: var(--color-text); text-decoration: none; }
+.site-header__logo { max-height: 44px; width: auto; display: block; }
 .site-nav { display: flex; gap: 20px; flex-wrap: wrap; }
 .site-nav a { text-decoration: none; color: var(--color-text); font-weight: 500; }
 .site-nav a:hover, .site-nav a:focus { color: var(--color-primary); }
+.site-nav a[aria-current="page"] { color: var(--color-primary); box-shadow: 0 2px 0 var(--color-primary); }
 .site-header__actions { display: flex; gap: 12px; align-items: center; }
 .header-nav-toggle { display: none; }
+.header-nav-toggle__bar { display: block; width: 18px; height: 2px; background: var(--color-text); margin: 2px 0; border-radius: 1px; }
+.site-header--sticky { position: sticky; top: 0; }
+.site-header--sticky.site-header--scrolled { box-shadow: 0 1px 10px rgba(15, 23, 42, .06); }
+/* Variant: gecentreerd (logo links, nav centraal, CTA rechts) */
+.site-header--centered .site-header__inner { display: grid; grid-template-columns: 1fr auto 1fr; }
+.site-header--centered .site-header__brand { justify-self: start; }
+.site-header--centered .site-nav { justify-self: center; }
+.site-header--centered .site-header__actions { justify-self: end; }
+/* Variant: gesplitst (nav links, logo centraal, CTA rechts) */
+.site-header--split .site-header__inner { display: grid; grid-template-columns: 1fr auto 1fr; }
+.site-header--split .site-nav { grid-column: 1; grid-row: 1; justify-self: start; }
+.site-header--split .site-header__brand { grid-column: 2; grid-row: 1; justify-self: center; }
+.site-header--split .site-header__actions { grid-column: 3; grid-row: 1; justify-self: end; }
+/* Variant: transparant over de hero (contrastbehandeling) */
+.site-header--overlay { position: absolute; inset-inline: 0; top: 0; background: transparent; border-bottom-color: transparent; }
+.site-header--overlay .site-header__brand, .site-header--overlay .site-nav a, .site-header--overlay .site-nav a[aria-current="page"] { color: #fff; text-shadow: 0 1px 6px rgba(0, 0, 0, .35); }
+.site-header--overlay .site-nav a:hover, .site-header--overlay .site-nav a:focus { color: rgba(255, 255, 255, .82); }
+.site-header--overlay .header-nav-toggle__bar { background: #fff; }
+.site-header--overlay .site-header__cta { background: #fff; color: var(--color-primary); }
+.site-header--overlay .site-header__cta:hover, .site-header--overlay .site-header__cta:focus { background: var(--color-accent); color: #fff; }
+.site-header--overlay.site-header--scrolled { position: fixed; background: var(--color-background); border-bottom-color: var(--color-border); }
+.site-header--overlay.site-header--scrolled .site-header__brand, .site-header--overlay.site-header--scrolled .site-nav a, .site-header--overlay.site-header--scrolled .site-nav a[aria-current="page"] { color: var(--color-text); text-shadow: none; }
+.site-header--overlay.site-header--scrolled .site-nav a:hover, .site-header--overlay.site-header--scrolled .site-nav a:focus { color: var(--color-primary); }
+.site-header--overlay.site-header--scrolled .header-nav-toggle__bar { background: var(--color-text); }
+.site-header--overlay.site-header--scrolled .site-header__cta { background: var(--color-primary); color: #fff; }
+/* Mobiel fullscreen-menu (D2) */
+@media (max-width: 989px) {
+  .header-nav-toggle { display: inline-flex; flex-direction: column; align-items: center; padding: 10px 12px; }
+  .site-nav { position: fixed; inset: 0; z-index: 40; flex-direction: column; align-items: center; justify-content: center; gap: 26px; background: var(--color-background); opacity: 0; pointer-events: none; transition: opacity .2s ease; }
+  .site-nav[data-open="true"] { opacity: 1; pointer-events: auto; }
+  .site-nav a { font-size: 1.25rem; }
+  body.nav-open { overflow: hidden; }
+}
+@media (min-width: 990px) {
+  .header-nav-toggle { display: none; }
+}
 
 /* Hero — basis + gecontroleerde varianten (focused/centered/split) uit het Design Plan */
 .hero { padding-block: var(--section-spacing); background: linear-gradient(180deg, var(--color-surface), var(--color-background)); }
@@ -849,6 +929,11 @@ img { max-width: 100%; height: auto; display: block; }
 .hero--split .hero__inner { max-width: none; grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); gap: 40px; align-items: center; }
 .hero--split .hero__media img { width: 100%; height: auto; display: block; border-radius: var(--radius); background: var(--color-surface); }
 .hero--split .hero__actions { margin-top: 8px; }
+.hero--immersive { min-height: 68vh; display: flex; align-items: center; }
+.hero--immersive .container { position: relative; z-index: 1; }
+.hero--immersive .hero__inner { max-width: 860px; margin-inline: auto; text-align: center; }
+.hero--immersive .hero__actions { justify-content: center; }
+.hero--immersive .hero__eyebrow { margin-inline: auto; }
 
 /* Buttons */
 .btn {
@@ -1177,20 +1262,189 @@ function buildThemeJs(): ThemeFile {
   const js = `// Gegenereerd door Silvijn Studio — minimale, progressieve verbeteringen.
 (function () {
   "use strict";
-  document.addEventListener("DOMContentLoaded", function () {
+  function init() {
+    // D2: sticky/scrolled-state op de header (schaduw + overlay-terugval).
+    var header = document.querySelector("[data-site-header]");
+    if (header) {
+      var onScroll = function () { header.classList.toggle("site-header--scrolled", window.scrollY > 8); };
+      onScroll();
+      window.addEventListener("scroll", onScroll, { passive: true });
+    }
+    // D2: mobiel fullscreen-menu (open/dicht, Escape, sluiten bij navigatie).
     var toggle = document.querySelector("[data-nav-toggle]");
     var nav = document.querySelector("[data-nav]");
     if (toggle && nav) {
+      var setOpen = function (open) {
+        nav.setAttribute("data-open", open ? "true" : "false");
+        toggle.setAttribute("aria-expanded", open ? "true" : "false");
+        document.body.classList.toggle("nav-open", open);
+      };
       toggle.addEventListener("click", function () {
-        var open = nav.getAttribute("data-open") === "true";
-        nav.setAttribute("data-open", open ? "false" : "true");
-        toggle.setAttribute("aria-expanded", open ? "false" : "true");
+        setOpen(nav.getAttribute("data-open") !== "true");
+      });
+      nav.addEventListener("click", function (event) {
+        if (event.target && event.target.closest && event.target.closest("a")) setOpen(false);
+      });
+      document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape") setOpen(false);
       });
     }
-  });
+    // D2: active navigation state — markeer de link van de huidige pagina.
+    var path = (window.location.pathname.replace(/\/$/, "") || "/");
+    Array.prototype.forEach.call(document.querySelectorAll(".site-nav a[href]"), function (link) {
+      var href = (link.getAttribute("href") || "").replace(window.location.origin, "").replace(/\/$/, "") || "/";
+      if (href === path || (href !== "/" && path.indexOf(href + "/") === 0)) {
+        link.setAttribute("aria-current", "page");
+      }
+    });
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
 })();
 `;
   return { path: "assets/theme.js", content: js };
+}
+
+/**
+ * D2 — ART DIRECTION-CSS (assets/art-direction.css). Bestaat uITSLOTEND
+ * bij een artDirection-contract op het Design Plan; plannen zonder
+ * contract krijgen dit bestand niet (exact D0/D1-gedrag).
+ *
+ * Opbouw (alle regels vooraf gebouwd en enum-gestuurd — NIET AI-CSS):
+ * 1. Compositie: zes volledige rule-sets op body.ad-<composition> zodat
+ *    de merchant de compositie kan switchen via de theme-setting.
+ * 2. Kaart-, beeld-, decoratie-, overgangs- en motion-keuzes: de regels
+ *    van de GEKOZEN enums worden direct geschreven (niet switchbaar, wel
+ *    deterministisch uit het contract).
+ * Motion overschrijft uitsluitend animation-name van de bestaande
+ * bp-fade-up-keyframes; prefers-reduced-motion geldt onverkort.
+ */
+function buildArtDirectionCss(tokens: ThemeDesignTokens): ThemeFile | null {
+  const art = tokens.artDirection;
+  if (art == null) return null;
+
+  const compositionBlocks: Record<ArtComposition, string> = {
+    editorial: `/* Editoriaal: tijdschriftachtige maatvoering, smalle tekstmaat, ritmische kaarten */
+body.ad-editorial .section__header { max-width: 620px; }
+body.ad-editorial .hero__inner { max-width: 680px; }
+body.ad-editorial .hero p { font-size: 1.25rem; }
+body.ad-editorial .card-grid { gap: 32px; }
+body.ad-editorial .card-grid > :nth-child(2) { margin-top: 24px; }
+body.ad-editorial .section__header h2 { letter-spacing: -0.01em; }`,
+    asymmetric: `/* Asymmetrisch: bewuste oneven wittenruimte- en offset-verschuivingen */
+body.ad-asymmetric .card-grid > :nth-child(2n) { margin-top: 28px; }
+body.ad-asymmetric .section__header { margin-inline-start: 8%; }
+body.ad-asymmetric .hero__eyebrow { letter-spacing: .18em; }
+body.ad-asymmetric .about__grid { align-items: start; }
+body.ad-asymmetric .card-grid { align-items: start; }`,
+    minimal: `/* Minimalistisch: vlakke kaarten, maximale witruimte, rustige helderheid */
+body.ad-minimal { --section-spacing: calc(var(--section-spacing) + 24px); }
+body.ad-minimal .card { border: none; background: transparent; padding: 0; }
+body.ad-minimal .hero { background: var(--color-background); }
+body.ad-minimal .section__header { max-width: 560px; }`,
+    immersive: `/* Immersief: beleving voorop — beeldvullende media en forse hero */
+body.ad-immersive .hero { min-height: 76vh; align-items: center; }
+body.ad-immersive .theme-media { border-radius: 0; }
+body.ad-immersive .gallery-item .theme-media { aspect-ratio: 16 / 10; }
+body.ad-immersive .section--bg-surface { background: var(--color-surface); }`,
+    structured: `/* Gestructureerd: zakelijk, strak grid, eenduidige vlakken */
+body.ad-structured .card-grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 24px; }
+body.ad-structured .card-grid > :nth-child(n) { margin-top: 0; }
+body.ad-structured .section__header { max-width: 720px; margin-bottom: 40px; }
+body.ad-structured .card { border-color: var(--color-border); }`,
+    playful: `/* Speels: rondere vormen, accentdetails, uitnodigend karakter */
+body.ad-playful .card { border-radius: calc(var(--radius) + 8px); }
+body.ad-playful .btn { border-radius: 999px; }
+body.ad-playful .section__header h2::after { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--color-accent); margin-left: 10px; vertical-align: middle; }`,
+  };
+
+  const cardBlocks: Record<ArtCardTreatment, string> = {
+    bordered: `/* Kaartbehandeling: bordered (standaardkader) — geen extra regels nodig. */`,
+    shadow: `/* Kaartbehandeling: schaduw (zwevend, zacht) */
+.card { border-color: transparent; box-shadow: 0 12px 32px rgba(15, 23, 42, .08); background: var(--color-background); }`,
+    flat: `/* Kaartbehandeling: vlak (kaderloos contrastvlak) */
+.card { border: none; background: var(--color-surface); }`,
+    accent_top: `/* Kaartbehandeling: accentrand bovenaan */
+.card { border-top: 3px solid var(--color-primary); }`,
+  };
+
+  const imageryBlocks: Record<ArtImageryBalance, string> = {
+    image_forward: `/* Beeld-tel-tekst: beeld voorop — ruimere mediakolommen */
+.hero--split .hero__inner { grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); }
+.gallery-item .theme-media { aspect-ratio: 16 / 10; }`,
+    balanced: `/* Beeld-tel-tekst: gebalanceerd — geen extra regels nodig. */`,
+    text_forward: `/* Beeld-tel-tekst: tekst voorop — smallere mediakolommen */
+.hero--split .hero__inner { grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); }
+.section__header { max-width: 640px; }
+.gallery-item .theme-media { aspect-ratio: 4 / 3; }`,
+  };
+
+  const imageStyleBlocks: Record<ArtImageStyle, string> = {
+    framed: `/* Beeldstijl: gekaderd */
+.theme-media { border-radius: var(--radius); border: 1px solid var(--color-border); }`,
+    full_bleed: `/* Beeldstijl: beeldvullend (geen kaders) */
+.theme-media { border-radius: 0; border: none; }
+.card { border-radius: 0; }`,
+    tinted_overlay: `/* Beeldstijl: getinte overlay voor eenheid tussen beelden */
+.theme-media { position: relative; }
+.theme-media::after { content: ""; position: absolute; inset: 0; background: linear-gradient(155deg, rgba(15, 23, 42, .22), rgba(15, 23, 42, .05)); pointer-events: none; }
+.section__background .theme-media::after { display: none; }`,
+  };
+
+  const decorativeBlocks: Record<ArtDecorative, string> = {
+    none: `/* Decoratie: geen — bewust leeg. */`,
+    accent_bars: `/* Decoratie: accentbalken boven sectiekoppen */
+.section__header h2::before { content: ""; display: block; width: 46px; height: 4px; border-radius: 2px; background: var(--color-accent); margin-bottom: 16px; }`,
+    soft_dividers: `/* Decoratie: zachte scheidingslijnen */
+.section .section__header { border-top: 1px solid var(--color-border); padding-top: 28px; }
+.site-footer { border-top: 1px solid var(--color-border); }`,
+  };
+
+  const transitionBlocks: Record<ArtTransition, string> = {
+    hard_cut: `/* Sectie-overgang: harde snede (standaard) — geen extra regels nodig. */`,
+    surface_alternate: `/* Sectie-overgang: afwisselende contrastvlakken */
+.main-content > section.section--bg-default:nth-of-type(even) { background: var(--color-surface); }`,
+    gradient_blend: `/* Sectie-overgang: vloeiende gradient-overgang */
+.section--bg-surface { background: linear-gradient(180deg, var(--color-surface), var(--color-background)); }`,
+  };
+
+  const motionName = art.motionStyle === "rise" ? "ad-rise" : art.motionStyle === "scale" ? "ad-scale" : "ad-fade";
+  const motionKeyframes: Record<ArtMotionStyle, string> = {
+    fade: `@keyframes ad-fade { from { opacity: 0; } to { opacity: 1; } }`,
+    rise: `@keyframes ad-rise { from { opacity: 0; transform: translateY(28px); } to { opacity: 1; transform: none; } }`,
+    scale: `@keyframes ad-scale { from { opacity: 0; transform: scale(.955); } to { opacity: 1; transform: none; } }`,
+  };
+  const motionBlock = `/* Motion-personality: ${art.motionStyle} (overschrijft uitsluitend
+   animation-name; duur/easing en prefers-reduced-motion blijven onverkort) */
+${motionKeyframes[art.motionStyle]}
+.motion--fade_up, .motion--stagger .section__header, .motion--stagger .hero__inner > *, .motion--stagger .rte > *, .motion--stagger :where(.card-grid, .process-list, .stats-row, .usp-row, .team-grid, .testimonial-grid, .faq-list, .gallery-grid, .projects-grid, .contact-grid, .about__grid) > * { animation-name: ${motionName}; }`;
+
+  const css = `/* Gegenereerd door Silvijn Studio — D2 art direction (deterministische
+   compositielaag uit het interne Design Plan; enum-gestuurd, geen AI-CSS).
+   Concept: ${art.concept.replace("*/", "* /")} */
+
+/* --- Compositie (merchant-switchbaar via de compositie-setting) --- */
+${Object.values(compositionBlocks).join("\n\n")}
+
+/* --- Kaartbehandeling: ${art.cardTreatment} --- */
+${cardBlocks[art.cardTreatment]}
+
+/* --- Beeld-tel-tekstverhouding: ${art.imageryBalance} --- */
+${imageryBlocks[art.imageryBalance]}
+
+/* --- Beeldstijl: ${art.imageStyle} --- */
+${imageStyleBlocks[art.imageStyle]}
+
+/* --- Decoratie: ${art.decorativeStyle} --- */
+${decorativeBlocks[art.decorativeStyle]}
+
+/* --- Sectie-overgangen: ${art.sectionTransition} --- */
+${transitionBlocks[art.sectionTransition]}
+
+${motionBlock}
+`;
+
+  return { path: "assets/art-direction.css", content: css };
 }
 
 function buildLocaleFile(): ThemeFile {
@@ -1854,13 +2108,26 @@ function buildGiftCardTemplate(): ThemeFile {
 // Sections
 // ---------------------------------------------------------------------------
 
+/**
+ * HEADER (D2, verplichte core component) — meerdere ECHTE layoutvarianten
+ * (minimal / centered / split / overlay-transparant), logo-afbeelding met
+ * tekstfallback, optionele CTA, sticky-stand met scrolled-state (JS voegt
+ * .site-header--scrolled toe), mobiel fullscreen-menu, active navigation
+ * state (aria-current via theme.js) en contrastbehandeling voor de
+ * overlay-variant. De AI kiest de variant via het artDirection-contract
+ * (headerStyle); de merchant kan hem altijd overschakelen.
+ */
 function buildHeaderSection(): ThemeFile {
-  const liquid = `<header class="site-header">
+  const liquid = `<header class="site-header site-header--{{ section.settings.layout | default: 'minimal' }}{% if section.settings.sticky %} site-header--sticky{% endif %}" data-site-header>
   <div class="container site-header__inner">
     <a class="site-header__brand" href="/">
-      {{ section.settings.brand_text | default: shop.name }}
+      {%- if section.settings.logo != blank -%}
+        {{ section.settings.logo | image_url: width: 180 | image_tag: widths: '120,180,240', alt: section.settings.brand_text | default: shop.name, class: 'site-header__logo' }}
+      {%- else -%}
+        {{ section.settings.brand_text | default: shop.name }}
+      {%- endif -%}
     </a>
-    <nav class="site-nav" data-nav aria-label="{{ 'general.menu' | t }}">
+    <nav class="site-nav" id="site-nav" data-nav aria-label="{{ 'general.menu' | t }}">
       {%- for block in section.blocks -%}
         <a href="{{ block.settings.link }}" {{ block.shopify_attributes }}>
           {{ block.settings.label }}
@@ -1868,11 +2135,15 @@ function buildHeaderSection(): ThemeFile {
       {%- endfor -%}
     </nav>
     <div class="site-header__actions">
-      <a class="btn btn--primary" href="{{ section.settings.cta_link | default: '/pages/contact' }}">
-        {{ section.settings.cta_label }}
-      </a>
-      <button type="button" class="btn btn--secondary header-nav-toggle" data-nav-toggle aria-expanded="false" aria-controls="site-nav">
-        {{ 'general.menu' | t }}
+      {%- if section.settings.show_cta -%}
+        <a class="btn btn--primary site-header__cta" href="{{ section.settings.cta_link | default: '/pages/contact' }}">
+          {{ section.settings.cta_label }}
+        </a>
+      {%- endif -%}
+      <button type="button" class="btn btn--secondary header-nav-toggle" data-nav-toggle aria-expanded="false" aria-controls="site-nav" aria-label="{{ 'general.menu' | t }}">
+        <span class="header-nav-toggle__bar"></span>
+        <span class="header-nav-toggle__bar"></span>
+        <span class="header-nav-toggle__bar"></span>
       </button>
     </div>
   </div>
@@ -1882,7 +2153,22 @@ function buildHeaderSection(): ThemeFile {
 {
   "name": "Header",
   "settings": [
+    {
+      "type": "select",
+      "id": "layout",
+      "label": "Layoutvariant",
+      "default": "minimal",
+      "options": [
+        { "value": "minimal", "label": "Strak (logo links, nav rechts)" },
+        { "value": "centered", "label": "Gecentreerd (nav centraal)" },
+        { "value": "split", "label": "Gesplitst (nav links, logo centraal)" },
+        { "value": "overlay", "label": "Transparant over hero" }
+      ]
+    },
+    { "type": "checkbox", "id": "sticky", "label": "Vast (sticky) bovenaan", "default": true },
+    { "type": "image_picker", "id": "logo", "label": "Logo (optioneel; anders merknaam als tekst)" },
     { "type": "text", "id": "brand_text", "label": "Merknaam", "default": "" },
+    { "type": "checkbox", "id": "show_cta", "label": "CTA-knop tonen", "default": true },
     { "type": "text", "id": "cta_label", "label": "CTA-tekst", "default": "Contact" },
     { "type": "url", "id": "cta_link", "label": "CTA-link" }
   ],
@@ -1974,7 +2260,7 @@ function buildHeroSection(): ThemeFile {
         </div>
       {%- endif -%}
     </div>
-    {%- if hero_layout != 'split' -%}
+    {%- if hero_layout != 'split' and hero_layout != 'immersive' -%}
       <div class="hero__band">
         {%- render 'theme-media', image: section.settings.image, image_mobile: section.settings.image_mobile, aspect: 'wide', alt: section.settings.image_alt, sizes: '100vw', loading: 'eager', fetchpriority: 'high', placeholder_svg: 'placeholder-hero.svg' -%}
       </div>
@@ -3234,17 +3520,33 @@ interface HeaderGroupInput {
   ctaLabel: string;
 }
 
-function buildHeaderGroup(input: HeaderGroupInput): ThemeFile {
+/**
+ * D2: bij een artDirection-contract neemt de header-group de GEPLANDE
+ * variantdefaults over (headerStyle + sticky); zonder contract blijft de
+ * group exact de D0/D1-vorm (geen layout/sticky/show_cta-keys — het
+ * sectieschema levert dan de defaults).
+ */
+function buildHeaderGroup(input: HeaderGroupInput, artDirection: ArtDirection | null): ThemeFile {
+  const plannedSettings =
+    artDirection != null
+      ? {
+          layout: artDirection.headerStyle,
+          sticky: true,
+          show_cta: true,
+          brand_text: input.businessName,
+          cta_label: input.ctaLabel,
+        }
+      : {
+          brand_text: input.businessName,
+          cta_label: input.ctaLabel,
+        };
   return jsonFile("sections/header-group.json", {
     type: "header",
     name: "Header",
     sections: {
       header: {
         type: "header",
-        settings: {
-          brand_text: input.businessName,
-          cta_label: input.ctaLabel,
-        },
+        settings: plannedSettings,
         blocks: Object.fromEntries(
           input.navItems.map((item, index) => [
             `nav_${index + 1}`,
@@ -3478,6 +3780,15 @@ export function buildShopifyTheme(input: BuildThemeInput): BuiltTheme {
   files.push(buildButtonSnippet());
   files.push(buildThemeCss());
   files.push(buildThemeJs());
+  // D2: de art-direction-laag bestaat uitsluitend bij een contract —
+  // plannen zonder artDirection krijgen exact de D0/D1-bestandsset.
+  if (tokens.artDirection != null) {
+    const artDirectionCss = buildArtDirectionCss(tokens);
+    if (artDirectionCss) files.push(artDirectionCss);
+    notes.push(
+      `Art direction: compositie "${tokens.artDirection.composition}", header "${tokens.artDirection.headerStyle}", hero "${tokens.artDirection.heroTreatment}", kaarten "${tokens.artDirection.cardTreatment}", beeld "${tokens.artDirection.imageryBalance}/${tokens.artDirection.imageStyle}", decoratie "${tokens.artDirection.decorativeStyle}", overgangen "${tokens.artDirection.sectionTransition}", motion "${tokens.artDirection.motionStyle}" (assets/art-direction.css).`
+    );
+  }
   // R1: media-plan (sloten + placeholder-variant) uit specification + Design
   // Plan; de generieke placeholder blijft voor product-cards/giftcard.
   const mediaPlan = mediaPlanFor(spec, plan.imagery.placeholderStrategy);
@@ -3556,11 +3867,14 @@ export function buildShopifyTheme(input: BuildThemeInput): BuiltTheme {
     url: pageKeyHome.has(item.pageKey.toLowerCase()) ? "/" : `/pages/${slugifyPageKey(item.pageKey)}`,
   }));
   files.push(
-    buildHeaderGroup({
-      businessName: spec.business.businessName,
-      navItems,
-      ctaLabel: spec.content.ctaPrimaryText,
-    })
+    buildHeaderGroup(
+      {
+        businessName: spec.business.businessName,
+        navItems,
+        ctaLabel: spec.content.ctaPrimaryText,
+      },
+      tokens.artDirection
+    )
   );
   files.push(
     buildFooterGroup({

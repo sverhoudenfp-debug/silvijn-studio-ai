@@ -696,6 +696,23 @@ export function validateThemeFiles(files: ThemeFile[], options?: { trustedClaims
     if (!layout.content.includes("content_for_layout")) {
       errors.push('layout/theme.liquid mist {{ content_for_layout }}.');
     }
+    // ---- 5b. D2 ART DIRECTION: de art-direction-laag is referentieel
+    //     geldig — de layout mag art-direction.css alleen koppelen als het
+    //     bestand er werkelijk is, en omgekeerd hoort een meegeleverd
+    //     art-direction.css bij een layout die hem koppelt. Plannen zonder
+    //     artDirection krijgen het bestand niet én de koppeling niet.
+    const linksArtDirectionCss = layout.content.includes("'art-direction.css' | asset_url");
+    if (linksArtDirectionCss && !seen.has("assets/art-direction.css")) {
+      errors.push("layout/theme.liquid koppelt assets/art-direction.css, maar dat bestand ontbreekt in het thema.");
+    }
+    if (seen.has("assets/art-direction.css") && !linksArtDirectionCss) {
+      errors.push("assets/art-direction.css is aanwezig maar wordt door layout/theme.liquid niet gekoppeld.");
+    }
+    // De compositie-bodyclass hoort bij de koppeling: koppeling zonder
+    // ad-bodyclass betekent dat de compositielaaag niet geactiveerd kan worden.
+    if (linksArtDirectionCss && !layout.content.includes("ad-{{ settings.composition }}")) {
+      errors.push("layout/theme.liquid koppelt art-direction.css maar mist de compositie-bodyclass (ad-...).");
+    }
   }
 
   // ---- 5b. Completeness-referenties (Fase I.2): password-status, klantaccounts,

@@ -3,6 +3,7 @@ import type { ProjectRequirements } from "@/lib/projects/types";
 import { scanTextForFabricationPatterns } from "./safety-check";
 import { validateBlueprintConsistency, websiteBlueprintSchema } from "./blueprint/blueprint";
 import { visualContractSchema, type VisualContract } from "./visual-contract";
+import { artDirectionSchema, type ArtDirection } from "./art-direction";
 
 /**
  * Design Plan (Fase I.1) — het INTERNE ontwerpplan per project.
@@ -73,6 +74,15 @@ export const designPlanSchema = z.object({
    * via de bestaande keyword-mapping (systeem-fonts, geen paletguard).
    */
   visualContract: visualContractSchema.nullable().optional(),
+  /**
+   * ART DIRECTION (D2, 2026-09-21) — de niche-specifieke visuele kunstketen
+   * (concept, compositie, merkpersoonlijkheid, headerstijl, hero-behandeling,
+   * kaart- en beeldbehandeling, decoratie, overgangen, motion-personality).
+   * ADDITIEF en OPTIONEEL: plannen zonder artDirection (alle plannen vóór D2)
+   * blijven exact geldig en renderen zonder composition-setting en zonder
+   * art-direction.css (D0/D1-gedrag).
+   */
+  artDirection: artDirectionSchema.nullable().optional(),
   typography: z.object({
     pairing: z.string().min(3).max(300).nullable(),
     scale: z.string().min(3).max(200).nullable(),
@@ -166,7 +176,7 @@ export const designPlanSchema = z.object({
 });
 
 export type DesignPlan = z.infer<typeof designPlanSchema>;
-export type { VisualContract };
+export type { VisualContract, ArtDirection };
 
 export type DesignPlanStatus = "generating" | "completed" | "failed";
 
@@ -245,6 +255,32 @@ export function validateDesignPlanConsistency(
     );
     if (!blueprintConsistency.passed) {
       errors.push(...blueprintConsistency.errors.map((error) => `Blueprint: ${error}`));
+    }
+
+    // 5. ART DIRECTION → BLUEPRINT (D2): de art direction moet daadwerkelijk
+    //    doorkomen in de machine-compositie, anders is het contract dode data.
+    //    (a) hero-behandeling: de hero-instantie op de homepage moet exact de
+    //    gekozen heroTreatment renderen; (b) motion-vloer: visualContract.
+    //    motionLevel "none" betekent dat het blueprint nergens motion mag
+    //    plannen. Beide guards lopen alleen bij aanwezig contract (backward
+    //    compatible).
+    if (plan.artDirection != null) {
+      const heroInstance = plan.blueprint.pages[0]?.sectionInstances.find((i) => i.type === "hero");
+      if (heroInstance && heroInstance.layout !== plan.artDirection.heroTreatment) {
+        errors.push(
+          `Art direction: heroTreatment "${plan.artDirection.heroTreatment}" wijkt af van de geplande hero-layout "${heroInstance.layout}" — blueprint en art direction moeten één lijn trekken.`
+        );
+      }
+    }
+    if (plan.visualContract?.motionLevel === "none") {
+      const movingInstances = plan.blueprint.pages.flatMap((page) =>
+        page.sectionInstances.filter((i) => i.motion !== "none").map((i) => `${page.key}/${i.type}`)
+      );
+      if (movingInstances.length > 0) {
+        errors.push(
+          `Art direction: visualContract.motionLevel is "none", maar het blueprint plant motion bij: ${movingInstances.join(", ")} — bij motionLevel "none" hoort geen enkele animatie.`
+        );
+      }
     }
   }
 

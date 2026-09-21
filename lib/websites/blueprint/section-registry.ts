@@ -159,6 +159,7 @@ export const BLUEPRINT_SECTION_REGISTRY: Record<BlueprintSectionType, BlueprintS
       layout("focused", "Compacte, gefocuste boodschap met veel witruimte."),
       layout("band", "Lage, brede band met korte claim."),
       layout("minimal", "Zeer sober: alleen kernzin en CTA — stil."),
+      layout("immersive", "Volledig beeld als achtergrond met overlay-tekst."),
     ],
     defaultLayout: "split",
     blocks: [],

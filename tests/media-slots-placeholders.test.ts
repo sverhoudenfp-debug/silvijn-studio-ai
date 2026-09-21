@@ -225,6 +225,7 @@ const TOKENS: ThemeDesignTokens = {
   fontPairing: "system_sans",
   paletteMood: "neutral_default",
   paletteCorrections: [],
+    artDirection: null,
 };
 
 test("buildMediaPlaceholderSvgs: vaste set van 4 slot-placeholders in assets/", () => {

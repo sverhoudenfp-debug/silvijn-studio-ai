@@ -439,6 +439,23 @@ export function buildMockDesignPlan(prompt: string): string {
       dislikedColors: [],
       restrictions: [],
     },
+    // ART DIRECTION (D2): deterministische, contract-conforme stijlkeuze in
+    // de mock — uitsluitend enum-waarden, concept is stijlmotivering zonder
+    // bedrijfsfeiten. heroTreatment="split" sluit exact aan op de
+    // hero-instantie-layout in de mock-blueprint (consistency-guard).
+    artDirection: {
+      concept: "Nuchtere, gestructureerde compositie met rustige hiërarchie en uitvoerige witruimte (mock-stijlkeuze).",
+      composition: "structured",
+      brandPersonality: "calm_professional",
+      headerStyle: "minimal",
+      heroTreatment: "split",
+      cardTreatment: "bordered",
+      imageryBalance: "balanced",
+      imageStyle: "framed",
+      decorativeStyle: "none",
+      sectionTransition: "surface_alternate",
+      motionStyle: "fade",
+    },
     typography: {
       pairing: null,
       scale: null,

@@ -126,25 +126,46 @@ export function mapGmailMessage(raw: GmailRawMessage): GmailMessage {
   };
 }
 
-/** Verzenden: eigen Message-ID zodat antwoorden matchbaar blijven. */
+/**
+ * Verzenden: eigen Message-ID zodat antwoorden matchbaar blijven.
+ *
+ * Reply-threading: een antwoord op een prospect-reactie krijgt
+ * inReplyTo (In-Reply-To-header), references (References-header) en
+ * threadId (Gmail-threadId in de send-body, waarmee Gmail het bericht
+ * in dezelfde conversatie plaatst). Initiele outreach laat deze weg:
+ * dat bericht start terecht een nieuwe thread.
+ */
+export interface GmailThreadSendOptions {
+  readonly inReplyTo?: string | null;
+  readonly references?: string | null;
+  readonly threadId?: string | null;
+}
+
 export async function gmailSend(
   accessToken: string,
-  input: { to: string; subject: string; body: string; messageIdHeader: string; from: string }
+  input: { to: string; subject: string; body: string; messageIdHeader: string; from: string } & GmailThreadSendOptions
 ): Promise<{ gmailMessageId: string; threadId: string }> {
-  const mime = [
+  const headerLines = [
     `From: ${input.from}`,
     `To: ${input.to}`,
     `Subject: ${input.subject}`,
     `Message-ID: ${input.messageIdHeader}`,
+  ];
+  if (input.inReplyTo) headerLines.push(`In-Reply-To: ${input.inReplyTo}`);
+  if (input.references) headerLines.push(`References: ${input.references}`);
+  const mime = [
+    ...headerLines,
     "MIME-Version: 1.0",
     'Content-Type: text/plain; charset="UTF-8"',
     "",
     input.body,
   ].join("\r\n");
+  const payload: Record<string, string> = { raw: base64UrlEncode(mime) };
+  if (input.threadId) payload.threadId = input.threadId;
   const data = (await gmailFetch(accessToken, `${GMAIL_API}/messages/send`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ raw: base64UrlEncode(mime) }),
+    body: JSON.stringify(payload),
   })) as { id: string; threadId: string };
   return { gmailMessageId: data.id, threadId: data.threadId };
 }

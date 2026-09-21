@@ -83,6 +83,11 @@ export async function ingestGmailInbox(): Promise<GmailIngestResult> {
           p_thread: match.threadKey ?? `gmail:${accountKey}:${message.threadId}`,
           p_outreach: match.outreachId,
           p_in_reply_to: message.headers.inReplyTo,
+          // Reply-threading: bewijsstukken waarmee een later AI-antwoord
+          // als echte reply in deze Gmail-thread wordt verstuurd.
+          p_provider_thread_id: message.threadId,
+          p_provider_rfc_message_id: message.headers.messageId,
+          p_provider_references: message.headers.references,
         });
         if (error) throw new Error(`Gmail-reactie kon niet worden vastgelegd: ${error.message}`);
         // De RPC is idempotent op providersleutel; hetzelfde bericht-ID

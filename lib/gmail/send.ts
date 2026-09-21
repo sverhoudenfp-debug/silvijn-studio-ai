@@ -5,6 +5,7 @@ import { requireGmailConfig } from "./config";
 import { getGmailAccessToken } from "./tokens";
 import { gmailSend } from "./client";
 import { newOutreachMessageIdHeader } from "./provider";
+import { buildReplyThreadHeaders, type ReplyThreadHeaders } from "./threading";
 
 /**
  * Expliciete verzendstap voor outreach via Gmail — altijd mens-geïnitieerd
@@ -23,6 +24,52 @@ export interface SentOutreachResult {
   readonly sentAt: string;
 }
 
+/**
+ * Thread-context voor een antwoord-draft: de meest recente bevestigde
+ * Gmail-reactie van de klant in dit gesprek (Gmail-threadId, RFC
+ * Message-ID, References) plus onze eigen al verzonden Message-IDs.
+ * Puur leesactie; zonder conversation_id of zonder Gmail-bewijs →
+ * alle headers null (ongewijzigd gedrag).
+ */
+async function resolveReplyThreadHeaders(
+  client: ReturnType<typeof getSupabaseServerClient>,
+  conversationId: string | null
+): Promise<ReplyThreadHeaders> {
+  if (!conversationId) return { inReplyTo: null, references: null, threadId: null };
+
+  const { data: inbound, error: inboundError } = await client
+    .from("inbound_messages")
+    .select("provider_thread_id,provider_rfc_message_id,provider_references")
+    .eq("conversation_id", conversationId)
+    .eq("source", "gmail")
+    .eq("reply_confirmed", true)
+    .order("received_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (inboundError) throw new Error(`Thread-context kon niet worden gelezen: ${inboundError.message}`);
+  if (!inbound) return { inReplyTo: null, references: null, threadId: null };
+
+  const { data: sent, error: sentError } = await client
+    .from("outreach_drafts")
+    .select("provider_message_id")
+    .eq("conversation_id", conversationId)
+    .eq("status", "sent")
+    .order("sent_at", { ascending: true })
+    .limit(500);
+  if (sentError) throw new Error(`Verzonden drafts in gesprek konden niet worden gelezen: ${sentError.message}`);
+
+  return buildReplyThreadHeaders({
+    latestInbound: {
+      providerThreadId: inbound.provider_thread_id,
+      providerRfcMessageId: inbound.provider_rfc_message_id,
+      providerReferences: inbound.provider_references,
+    },
+    sentMessageIds: (sent ?? [])
+      .map((row: { provider_message_id: string | null }) => row.provider_message_id)
+      .filter((value: string | null): value is string => typeof value === "string" && value.length > 0),
+  });
+}
+
 export async function sendOutreachViaGmail(draftId: string): Promise<SentOutreachResult> {
   const id = z.uuid().parse(draftId);
   if (!isSupabaseConfigured()) throw new Error("BLOCKED_EXTERNAL_CONFIGURATION: database niet geconfigureerd");
@@ -31,7 +78,7 @@ export async function sendOutreachViaGmail(draftId: string): Promise<SentOutreac
 
   const { data: draft, error } = await client
     .from("outreach_drafts")
-    .select("id,lead_id,status,channel,subject,body,provider_message_id")
+    .select("id,lead_id,status,channel,subject,body,provider_message_id,conversation_id")
     .eq("id", id)
     .single();
   if (error || !draft) throw new Error("Outreach-draft niet gevonden");
@@ -54,6 +101,12 @@ export async function sendOutreachViaGmail(draftId: string): Promise<SentOutreac
   const to = contact?.[0]?.address ?? lead?.email ?? null;
   if (!to) throw new Error("Geen e-mailadres bekend voor deze lead");
 
+  // Reply-threading: als dit draft een antwoord binnen een bestaand
+  // gesprek is, verwijs het naar de thread van de klantmail. Initiële
+  // outreach (geen conversation_id of geen Gmail-inbound) verandert
+  // niet: dat start terecht een nieuwe thread.
+  const threadHeaders = await resolveReplyThreadHeaders(client, draft.conversation_id);
+
   const { accessToken } = await getGmailAccessToken(config.accountKey);
   const messageIdHeader = newOutreachMessageIdHeader();
   const gmailResult = await gmailSend(accessToken, {
@@ -62,6 +115,7 @@ export async function sendOutreachViaGmail(draftId: string): Promise<SentOutreac
     subject: draft.subject,
     body: draft.body,
     messageIdHeader,
+    ...threadHeaders,
   });
 
   const sentAt = new Date().toISOString();

@@ -1,3 +1,4 @@
+import { auditD3CompositionFiles } from "./composition-audit";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -757,6 +758,12 @@ export function runDeterministicPreflight(
       }
     }
     push("orphans", "Orphan-referenties (ongebruikte snippets/secties)", [], warnings);
+  }
+
+  const compositionAudit = auditD3CompositionFiles(files);
+  if (compositionAudit.active) {
+    push("d3_composition", "D3 compositiecontract, inhoudsdichtheid en herhaling", compositionAudit.errors, compositionAudit.warnings,
+      `${compositionAudit.sectionCount} compositie-instanties; ${compositionAudit.variants.length} verschillende type/variant-combinaties. Heuristieken op werkelijke template-inhoud, geen visuele score.`);
   }
 
   const criticalErrors = checks.flatMap((c) => c.errors);

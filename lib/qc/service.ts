@@ -226,6 +226,28 @@ export class QualityControlService {
     const mergedChecks: QCCategoryCheck[] = deterministic.checks.map((check) => ({ ...check, issues: [...check.issues] }));
     const mergedIssues: QCIssue[] = [...deterministic.issues];
 
+    // D3 evidence is the certified artifact's actual template content, not a
+    // fresh/current Design Plan which may have changed since this website.
+    const d3Artifact = (await getThemeZipArtifactRepository().listByWebsite(website.id))
+      .filter((artifact) => artifact.status === "certified" || artifact.status === "passed")
+      .sort((a, b) => b.version - a.version)[0];
+    const d3Check = d3Artifact?.preflight?.checks.find((check) => check.id === "d3_composition");
+    if (d3Check) {
+      const d3Issues: QCIssue[] = [
+        ...d3Check.errors.map((message, index): QCIssue => ({ id: `d3_error_${index}`, category: "design", severity: "critical", rule: "D3_COMPOSITION_CONTRACT", message })),
+        ...d3Check.warnings.map((message, index): QCIssue => ({ id: `d3_warning_${index}`, category: "design", severity: "warning", rule: message.split(" ")[0], message })),
+      ];
+      mergedIssues.push(...d3Issues);
+      const designCheck = mergedChecks.find((check) => check.category === "design");
+      if (designCheck) {
+        designCheck.issues.push(...d3Issues);
+        designCheck.notes.push(d3Check.note ?? "D3 compositiecontrole uitgevoerd op het opgeslagen theme-artefact.");
+        if (d3Check.errors.length) designCheck.result = "failed";
+        else if (d3Check.warnings.length && designCheck.result === "passed") designCheck.result = "warning";
+      }
+    }
+
+
     // ---- 2. AI QUALITY ANALYSIS (adviserend, 1 gecontroleerde AI-call)
     let aiSummary = "Geen AI-analyse beschikbaar.";
     let recommendations: string[] = [];
@@ -242,8 +264,8 @@ export class QualityControlService {
           requirementsSummary: summarizeRequirements(project),
           specificationSummary: summarizeSpecification(website),
           generatedSectionsSummary: summarizeSections(website),
-          deterministicResults: `${summarizeCategoryResults(deterministic.checks)} | issues: ${
-            deterministic.issues.map((i) => `${i.category}/${i.severity}: ${i.message}`).join(" ;; ") || "geen"
+          deterministicResults: `${summarizeCategoryResults(mergedChecks)} | issues: ${
+            mergedIssues.map((i) => `${i.category}/${i.severity}: ${i.message}`).join(" ;; ") || "geen"
           }`,
         },
         lead.id

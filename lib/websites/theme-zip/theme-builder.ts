@@ -1,3 +1,4 @@
+import { applyD3CompositionRendering } from "./composition-renderer";
 import type { DesignPlan } from "../design-plan";
 import {
   findSlot,
@@ -3982,5 +3983,14 @@ export function buildShopifyTheme(input: BuildThemeInput): BuiltTheme {
     );
   }
 
+  // D3 is opt-in per blueprint instance. Legacy plans retain exact bytes.
+  const hasD3 = plan.blueprint?.pages.some((page) => page.sectionInstances.some((section) => section.composition));
+  if (hasD3) {
+    const composed = applyD3CompositionRendering(files);
+    const layout = composed.find((file) => file.path === "layout/theme.liquid");
+    if (layout) layout.content = layout.content.replace("  </head>", "    {{ 'composition.css' | asset_url | stylesheet_tag }}\n  </head>");
+    notes.push("D3: enum-gesloten composities uit het blueprint vertaald naar Liquid-structuren, token-CSS en expliciete mobiele herordening; geen AI-CSS of gefabriceerde inhoud.");
+    return { files: composed, notes };
+  }
   return { files, notes };
 }

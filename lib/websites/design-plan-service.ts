@@ -1,3 +1,4 @@
+import { selectD3Compositions } from "./blueprint/composition-engine";
 import { getAIActivityRepository } from "@/lib/repositories/ai-activity-repository";
 import { getLeadRepository } from "@/lib/repositories/lead-repository";
 import { getProjectRepository } from "@/lib/projects/repository";
@@ -74,10 +75,12 @@ function summarizeRequirements(project: Project): string {
 async function buildQuestionnaireSummary(leadId: string): Promise<{
   lines: string[];
   hasCompletedQuestionnaire: boolean;
+  hasAvailableMedia: boolean;
 }> {
   const questionnaires = await getQuestionnaireRepository().findByLeadId(leadId);
   const lines: string[] = [];
   let hasCompletedQuestionnaire = false;
+  let hasAvailableMedia = false;
 
   for (const questionnaire of questionnaires) {
     if (questionnaire.completionStatus === "QUESTIONNAIRE_COMPLETE") {
@@ -86,6 +89,7 @@ async function buildQuestionnaireSummary(leadId: string): Promise<{
     if (questionnaire.completionStatus == null) continue; // geen antwoorden ontvangen
     const responses = await getQuestionnaireRepository().listResponses(questionnaire.id);
     if (responses.length === 0) continue;
+    hasAvailableMedia ||= responses.some(response => response.uploads.some(upload => upload.path.length > 0 && upload.size > 0 && /^image\//.test(upload.mimeType)));
     // C1/C2-doorvoer (2026-09-20): antwoorden uit álle rondes (incl. de
     // follow-upronde) plus upload-aantallen — eerlijke bevestigingen
     // ("geen reviews beschikbaar") stromen zo mee naar het Design Plan,
@@ -98,7 +102,7 @@ async function buildQuestionnaireSummary(leadId: string): Promise<{
     for (const line of answerLines) lines.push(`${line.label}: ${line.value}`);
   }
 
-  return { lines: lines.slice(0, MAX_QUESTIONNAIRE_LINES), hasCompletedQuestionnaire };
+  return { lines: lines.slice(0, MAX_QUESTIONNAIRE_LINES), hasCompletedQuestionnaire, hasAvailableMedia };
 }
 
 export class DesignPlanService {
@@ -154,7 +158,7 @@ export class DesignPlanService {
 
     try {
       // ---- 4. Echte context samenstellen (questionnaires, requirements, lead)
-      const { lines: questionnaireLines, hasCompletedQuestionnaire } = await buildQuestionnaireSummary(lead.id);
+      const { lines: questionnaireLines, hasCompletedQuestionnaire, hasAvailableMedia } = await buildQuestionnaireSummary(lead.id);
       const suggestedTemplate = selectTemplateForIndustry(lead.industry);
 
       // ---- 5. AI DESIGN PLANNING (enige AI-call)
@@ -178,7 +182,13 @@ export class DesignPlanService {
         },
         lead.id
       );
-      const plan: DesignPlan = planning.data;
+      const compositionSelection = selectD3Compositions(planning.data, {
+        industry: lead.industry, newGeneration: true,
+        // Actual stored image-upload metadata, never planned blueprint slots.
+        // Asset-to-slot assignment remains manual (no D4 image intelligence).
+        hasAvailableMedia,
+      });
+      const plan: DesignPlan = compositionSelection.plan;
 
       // ---- 6. DETERMINISTISCHE CONSISTENTIECHECKS
       //      (scope/prijsintegriteit, navigatieverwijzingen, fabricatie-scan)
@@ -208,7 +218,7 @@ export class DesignPlanService {
         missingInformation: plan.missingInformation,
         model: planning.model,
         mode: planning.mode,
-        generationNotes: `Design Plan v${version} gegenereerd (intern — nooit klantzichtbaar). ${plan.missingInformation.length} ontbrekende informatiepunten expliciet doorgegeven.`,
+        generationNotes: `Design Plan v${version} gegenereerd (intern — nooit klantzichtbaar). ${plan.missingInformation.length} ontbrekende informatiepunten expliciet doorgegeven. D3: ${compositionSelection.adjustments.join(" | ") || "AI-composities behouden"}`,
       });
       await getAIActivityRepository().log({
         leadId: lead.id,

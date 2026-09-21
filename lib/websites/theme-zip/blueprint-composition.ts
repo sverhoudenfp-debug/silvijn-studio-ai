@@ -159,6 +159,7 @@ function variantSettings(instance: BlueprintSectionInstance, backgroundDefault: 
     layout: instance.layout,
     background: instance.background || backgroundDefault,
     motion: instance.motion || "none",
+    ...(instance.composition ? { composition: instance.composition.variant, composition_density: instance.composition.density } : {}),
   };
 }
 

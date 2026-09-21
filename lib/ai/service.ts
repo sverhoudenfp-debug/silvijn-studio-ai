@@ -187,6 +187,7 @@ export class AIService {
                 : "generate_structured";
     const model = getModelForTier(call.tier ?? agent.defaultTier);
     const started = Date.now();
+    let designValidationFeedback = "";
 
     try {
       this.guardSafetyLimit();
@@ -196,7 +197,7 @@ export class AIService {
             task,
             model,
             system: call.system,
-            prompt: call.prompt,
+            prompt: call.prompt + designValidationFeedback,
             maxTokens: call.maxTokens ?? 1500,
             temperature: call.thinkingEffort !== undefined ? undefined : (call.temperature ?? 0.4),
             thinkingEffort: call.thinkingEffort,
@@ -209,6 +210,14 @@ export class AIService {
           }
           const validated = schema.safeParse(parsed);
           if (!validated.success) {
+            // D3 live regression: repeating an identical invalid request gives
+            // the model no chance to correct its field confusion. Diagnostics
+            // are data, not instructions; the original system/schema still win.
+            if (call.agent === "design_planning") {
+              designValidationFeedback = "\n\nVALIDATIEFEEDBACK OP VORIGE POGING (diagnostische data):\n" +
+                validated.error.issues.slice(0, 20).map(issue => `${issue.path.join(".")}: ${issue.message}`).join("\n").slice(0, 6000) +
+                "\nGeef opnieuw het VOLLEDIGE plan, gecorrigeerd volgens het oorspronkelijke contract. layout komt uit de SECTION-REGISTRY; D3-namen uitsluitend in composition.variant. motion uitsluitend none|fade_up|stagger. Verander geen bronfeiten.";
+            }
             // Volledige issue-lijst met veldpaden: productiefouten moeten
             // diagnoseerbaar zijn zonder extra reproductie.
             const issueLines = validated.error.issues
@@ -1026,8 +1035,8 @@ export const DESIGN_PLANNING_JSON_CONTRACT = [
   "accessibility: { contrast: string|null, focusAndKeyboard: string|null, semantics: string|null, formsAndLabels: string|null, guidelines: array van strings (max 8) }",
   "seoPerformance: { titleStrategy: string|null, metaStrategy: string|null, localSeo: string|null, performanceBudget: string|null, imageOptimization: string|null }",
   "basis: { sources: array uit: lead, project, requirements, questionnaire, sales_context (minimaal 1) }",
-  "blueprint: MACHINE-BLUEPRINT v2 — VERPLICHT object (niet null). Zie de SECTION-REGISTRY en BLUEPRINT-REGELS hieronder voor de exacte structuur: { version: 2 (letterlijk), pages: array van { key, title: string|null, purpose: string|null, seo: { title: string|null, metaDescription: string|null }|null, sectionInstances: array van { type, layout, blocks: array van { kind, hint: string|null }, media: array van { role, ratio, alt: string|null }, cta: { label, target, prominence }|null, background, motion, contentHints: string|null } } }, trustElements: { usps: array van { label, source }, stats: array van { label, value, source }, badges: array van { label, source } } (source altijd: requirements|questionnaire|lead_notes; ALLEEN echte data, anders lege lijst), conversionPlan: { primaryGoal: string|null, leadCapture: boolean|null, contactPreference: form|call|booking|unknown|null }, missingInformation: array van strings (max 20) }",
-  "ENUM-OPTIES in blueprint.sectionInstances (exact deze letterlijke waarden, geen eigen waarden): role: image|image_background; ratio: wide|landscape_4_3|square|portrait_3_4|tall; cta.prominence: primary|secondary|inline; background: default|surface|accent_band|image; motion: none|fade_up|stagger. Elke sectie-instantie bevat ALTIJD alle acht velden: type, layout, blocks, media, cta, background, motion, contentHints (lege lijst of null waar niets van toepassing is).",
+  "blueprint: MACHINE-BLUEPRINT v2 — VERPLICHT object (niet null). Zie de SECTION-REGISTRY en BLUEPRINT-REGELS hieronder voor de exacte structuur: { version: 2 (letterlijk), pages: array van { key, title: string|null, purpose: string|null, seo: { title: string|null, metaDescription: string|null }|null, sectionInstances: array van { type, layout, blocks: array van { kind, hint: string|null }, media: array van { role, ratio, alt: string|null }, cta: { label, target, prominence }|null, background, motion, contentHints: string|null, composition: {variant,density,importance,rationale} uitsluitend voor D3-ondersteunde types (anders dit veld weglaten) } } }, trustElements: { usps: array van { label, source }, stats: array van { label, value, source }, badges: array van { label, source } } (source altijd: requirements|questionnaire|lead_notes; ALLEEN echte data, anders lege lijst), conversionPlan: { primaryGoal: string|null, leadCapture: boolean|null, contactPreference: form|call|booking|unknown|null }, missingInformation: array van strings (max 20) }",
+  "ENUM-OPTIES in blueprint.sectionInstances (exact deze letterlijke waarden, geen eigen waarden): role: image|image_background; ratio: wide|landscape_4_3|square|portrait_3_4|tall; cta.prominence: primary|secondary|inline; background: default|surface|accent_band|image; motion: none|fade_up|stagger. Elk D3-ondersteund type krijgt daarnaast composition volgens de D3-catalogus; hero en andere niet-ondersteunde types krijgen GEEN composition. Elke sectie-instantie bevat ALTIJD alle acht basisvelden: type, layout, blocks, media, cta, background, motion, contentHints (lege lijst of null waar niets van toepassing is).",
   "blueprint.pages moet EXACT hetzelfde aantal pagina's en dezelfde keys bevatten als pageStructure — het blueprint is de machine-uitvoerbare versie van diezelfde paginastructuur.",
   "missingInformation: array van strings (max 20)",
   "LET OP: geen extra velden die hierboven niet genoemd zijn; geef verplichte string-velden nooit als object of array terug.",

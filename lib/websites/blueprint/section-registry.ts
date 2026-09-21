@@ -1,3 +1,4 @@
+import { buildD3CompositionContract } from "./composition-registry";
 /**
  * SECTION-REGISTRY (Fase A+B, 2026-09-19) — de gesloten, canonieke catalogus
  * van blueprint-secties voor de machine-uitvoerbare Website Blueprint v2.
@@ -525,5 +526,6 @@ export function buildBlueprintSectionContract(): string {
       `- ${type} (${def.label}) [${pt.tier} = ${tierText}; ${emptyText}; minimaal nodig: ${pt.minimalTrustedInput}]: layouts ${layouts}; blokken: ${blocks}; media: ${media}; CTA ${def.supportsCta ? "ondersteund" : "niet"} — ${def.purpose} ${def.compositionHint}`
     );
   }
+  lines.push(buildD3CompositionContract());
   return lines.join("\n");
 }

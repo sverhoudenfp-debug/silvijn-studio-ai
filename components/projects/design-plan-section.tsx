@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { getD3Composition } from "@/lib/websites/blueprint/composition-registry";
 import { generateDesignPlanAction } from "@/app/actions/design-plans";
 import type { DesignPlanRecord } from "@/lib/websites/design-plan";
 import { Badge } from "@/components/ui/badge";
@@ -96,6 +97,31 @@ export function DesignPlanSection({
                   <span className="font-semibold text-zinc-100">Kleuren:</span> primair {latest.plan.colors.primary ?? "—"},{" "}
                   accent {latest.plan.colors.accent ?? "—"}
                 </p>
+              )}
+              {latest.plan.blueprint?.pages.some((page) => page.sectionInstances.some((section) => section.composition)) && (
+                <details className="rounded-lg border border-zinc-800 p-3">
+                  <summary className="cursor-pointer font-semibold text-zinc-100">D3 composities per pagina</summary>
+                  <p className="mt-2 text-zinc-500">Geplande hiërarchie en mobiele uitvoering. Lege content- en mediaslots zijn geen aangeleverde inhoud.</p>
+                  {latest.plan.blueprint.pages.map((page) => (
+                    <div key={page.key} className="mt-3">
+                      <p className="font-semibold text-zinc-200">{page.title ?? page.key}</p>
+                      <ol className="mt-1 space-y-2">
+                        {page.sectionInstances.map((section, index) => {
+                          if (!section.composition) return null;
+                          const choice = section.composition;
+                          const definition = getD3Composition(section.type, choice.variant);
+                          return (
+                            <li key={`${page.key}-${index}`} className="border-l border-zinc-700 pl-3">
+                              <p>{index + 1}. {section.type}: {definition?.label ?? choice.variant} · {choice.density} · {choice.importance}</p>
+                              <p className="text-zinc-400">{choice.rationale}</p>
+                              <p className="text-zinc-500">Mobiel: {definition?.mobileStrategy ?? "Onbekend"}</p>
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    </div>
+                  ))}
+                </details>
               )}
               {latest.plan.typography.pairing && (
                 <p>

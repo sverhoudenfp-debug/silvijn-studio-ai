@@ -1,3 +1,4 @@
+import { getD3Composition } from "./composition-registry";
 import { z } from "zod";
 import type { ProjectRequirements } from "@/lib/projects/types";
 import {
@@ -65,6 +66,12 @@ export const blueprintCtaSchema = z.object({
 
 export const blueprintSectionInstanceSchema = z
   .object({
+    composition: z.object({
+      variant: z.string().min(2).max(40),
+      density: z.enum(["compact", "balanced", "airy"]),
+      importance: z.enum(["primary", "supporting"]),
+      rationale: z.string().min(3).max(400),
+    }).optional(),
     type: z.enum(BLUEPRINT_SECTION_TYPES),
     layout: z.string().min(2).max(40),
     blocks: z.array(blueprintBlockSchema).max(24),
@@ -79,6 +86,9 @@ export const blueprintSectionInstanceSchema = z
     if (!definition) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Onbekend sectietype "${instance.type}".` });
       return;
+    }
+    if (instance.composition && !getD3Composition(instance.type, instance.composition.variant)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["composition", "variant"], message: `Onbekende D3-compositie ${instance.type}/${instance.composition.variant}.` });
     }
     // 1. Layout moet bij het sectietype bestaan.
     if (!isBlueprintLayout(instance.type as BlueprintSectionType, instance.layout)) {

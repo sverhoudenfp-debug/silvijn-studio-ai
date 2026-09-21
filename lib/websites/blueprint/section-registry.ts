@@ -154,10 +154,10 @@ export const BLUEPRINT_SECTION_REGISTRY: Record<BlueprintSectionType, BlueprintS
     label: "Hero",
     purpose: "Bovenaan de homepage: primaire boodschap, positiebepaling en de belangrijkste CTA.",
     layouts: [
-      layout("split", "Tekst links, beeld/media rechts — evenwichtig en informatief."),
-      layout("centered", "Gecentreerde boodschap op volle breedte — rustig en zelfverzekerd."),
-      layout("focused", "Compacte, gefocuste boodschap met veel witruimte — directief."),
-      layout("band", "Lage, brede band met korte claim — snel en zakelijk."),
+      layout("split", "Tekst links, beeld/media rechts — informatief."),
+      layout("centered", "Gecentreerde boodschap op volle breedte."),
+      layout("focused", "Compacte, gefocuste boodschap met veel witruimte."),
+      layout("band", "Lage, brede band met korte claim."),
       layout("minimal", "Zeer sober: alleen kernzin en CTA — stil."),
     ],
     defaultLayout: "split",
@@ -204,7 +204,7 @@ export const BLUEPRINT_SECTION_REGISTRY: Record<BlueprintSectionType, BlueprintS
     layouts: [
       layout("grid", "Responsief tegelgrid (2-3 per rij)."),
       layout("cards", "Kaarten met ruimte voor beeld boven de tekst."),
-      layout("alternating", "Afwisselend links/rechts per dienst — rustiger ritme."),
+      layout("alternating", "Afwisselend links/rechts per dienst."),
       layout("list", "Compacte lijst met titel + één regel tekst."),
     ],
     defaultLayout: "grid",

@@ -9,6 +9,7 @@ delete process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 import { buildShopifyTheme, buildThemeDesignTokens } from "../lib/websites/theme-zip/theme-builder";
 import { createThemeZip, readThemeZip } from "../lib/websites/theme-zip/theme-zip";
 import { validateThemeFiles } from "../lib/websites/theme-zip/theme-validation";
+import { BLUEPRINT_SECTION_REGISTRY, BLUEPRINT_SECTION_TYPES } from "../lib/websites/blueprint/section-registry";
 import { THEME_REQUIRED_FILES, type ThemeFile } from "../lib/websites/theme-zip/theme-structure";
 import { getThemeZipArtifactRepository } from "../lib/websites/theme-zip/repository";
 import { ThemeZipService } from "../lib/websites/theme-zip/service";
@@ -955,3 +956,124 @@ test("theme-zip: validatie vangt hyfen-blok-ID's hard af", () => {
     "foutmelding benoemt de hyfen-blok-ID"
   );
 });
+
+/** ===== Regressie: schema-optielabels (2026-09-21, live import-bewijs) =====
+ * Shopify's ZIP-import/theme-editor keurt select-/radio-opties met een label
+ * langer dan 50 tekens af (bewezen FileSaveError op hero.liquid: "Invalid
+ * schema: setting with id="layout" option label is too long (max 50
+ * characters)") en valt dan het HELE sectiebestand + alle templates die
+ * ernaar verwijzen stilletjes af. Dit was de werkelijke oorzaak dat
+ * index.json/page.diensten.json sinds v1 stilletjes verdwenen (hero 4x,
+ * services 1x overtreding; alle 19 overige secties bleven intact in kit-1).
+ * Setting-labels van 54 tekens zijn bewezen veilig (about.liquid importeerde
+ * in kit-1); de limiet geldt dus specifiek voor optielabels.
+ */
+test("theme-zip: alle registry-layoutdescriptions passen in Shopify's optielabel-limiet van 50 tekens", () => {
+  for (const type of BLUEPRINT_SECTION_TYPES) {
+    const def = BLUEPRINT_SECTION_REGISTRY[type];
+    for (const layout of def.layouts) {
+      assert.ok(
+        layout.description.length <= 50,
+        `layout "${type}/${layout.key}" heeft een description van ${layout.description.length} tekens; Shopify staat max 50 optielabeltekens toe (${layout.description})`
+      );
+    }
+  }
+});
+
+test("theme-zip: gegenereerde sectieschema's hebben geen optielabels langer dan 50 tekens", () => {
+  const files = builtTheme();
+  const schemaRe = /\{%\s*-?\s*schema\s*-?\s*%\}([\s\S]*?)\{%\s*-?\s*endschema\s*-?\s*%\}/;
+  for (const file of files) {
+    if (!file.path.startsWith("sections/") || !file.path.endsWith(".liquid")) continue;
+    const match = file.content.match(schemaRe);
+    if (!match) continue;
+    const schema = JSON.parse(match[1]) as {
+      settings?: { type?: string; id?: string; options?: { label?: string }[] }[];
+      blocks?: { type?: string; settings?: { type?: string; id?: string; options?: { label?: string }[] }[] }[];
+    };
+    const check = (settings: { type?: string; id?: string; options?: { label?: string }[] }[] | undefined, context: string) => {
+      for (const setting of settings ?? []) {
+        if (setting.type !== "select" && setting.type !== "radio") continue;
+        for (const option of setting.options ?? []) {
+          assert.ok(
+            (option.label ?? "").length <= 50,
+            `${file.path}: optielabel van setting "${setting.id}"${context} is ${(option.label ?? "").length} tekens (max 50): "${option.label}"`
+          );
+        }
+      }
+    };
+    check(schema.settings, "");
+    for (const block of schema.blocks ?? []) {
+      check(block.settings, ` (blok "${block.type}")`);
+    }
+  }
+});
+
+test("theme-zip: validatie vangt te lange optielabels hard af (de les van 2026-09-21)", () => {
+  const thema = builtTheme();
+  const teLang = "x".repeat(51);
+  const exactGrens = "y".repeat(50);
+
+  // 51 tekens -> falen, met de setting-id in de foutmelding.
+  const teLangTheme: ThemeFile[] = thema.map((f) =>
+    f.path === "sections/hero.liquid"
+      ? { ...f, content: f.content.replace('"label": "Geen"', `"label": "${teLang}"`) }
+      : f
+  );
+  assert.ok(
+    teLongTampered(teLangTheme),
+    "sanity: de tamper raakt een label in hero.liquid"
+  );
+  const resultLang = validateThemeFiles(teLangTheme);
+  assert.equal(resultLang.passed, false, "een optielabel van 51 tekens moet de validatie laten falen");
+  assert.ok(
+    resultLang.errors.some((e) => e.includes("too long") && e.includes('"motion"') && e.includes("sections/hero.liquid")),
+    "foutmelding benoemt het bestand, de setting-id en de limiet"
+  );
+
+  // exact 50 tekens -> toegestaan (grens is max 50, niet < 50).
+  const grensTheme: ThemeFile[] = thema.map((f) =>
+    f.path === "sections/hero.liquid"
+      ? { ...f, content: f.content.replace('"label": "Geen"', `"label": "${exactGrens}"`) }
+      : f
+  );
+  const resultGrens = validateThemeFiles(grensTheme);
+  assert.ok(
+    resultGrens.passed,
+    `een optielabel van exact 50 tekens is geldig (Shopify: max 50); gevonden fouten: ${resultGrens.errors.join("; ")}`
+  );
+});
+
+test("theme-zip: validatie dekt ook optielabels in blok-settings", () => {
+  const thema = builtTheme();
+  const injectie =
+    '{ "type": "select", "id": "stijl", "label": "Stijl", "options": [{ "value": "a", "label": "' +
+    "z".repeat(51) +
+    '" }] }, { "type": "image_picker", "id": "image", "label": "Afbeelding (optioneel)" }';
+  const tampered: ThemeFile[] = thema.map((f) =>
+    f.path === "sections/services.liquid"
+      ? {
+          ...f,
+          content: f.content.replace(
+            '{ "type": "image_picker", "id": "image", "label": "Afbeelding (optioneel)" }',
+            injectie
+          ),
+        }
+      : f
+  );
+  assert.ok(
+    tampered.some((f) => f.path === "sections/services.liquid" && f.content.includes('"stijl"')),
+    "sanity: de bloktamper is aangebracht"
+  );
+  const result = validateThemeFiles(tampered);
+  assert.equal(result.passed, false, "een te lang optielabel in blok-settings moet falen");
+  assert.ok(
+    result.errors.some((e) => e.includes("too long") && e.includes('blok "service"')),
+    "foutmelding benoemt het blok"
+  );
+});
+
+function teLongTampered(theme: ThemeFile[]): boolean {
+  return theme.some((f) => f.path === "sections/hero.liquid" && f.content.includes("x".repeat(51)));
+}
+

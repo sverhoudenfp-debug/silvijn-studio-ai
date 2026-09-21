@@ -138,6 +138,54 @@ function assertSettingsConfig(parsed: Map<string, unknown>, errors: string[]): v
   }
 }
 
+/**
+ * Shopify import-mirror: de ZIP-import/theme-editor keurt select-/radio-
+ * opties met een label langer dan 50 tekens af en valt dan het HELE
+ * sectiebestand (en alle templates die ernaar verwijzen) stilletjes af.
+ * Bewezen via Shopifys eigen FileSaveError op hero.liquid (2026-09-21):
+ * "Invalid schema: setting with id=\"layout\" option label is too long
+ * (max 50 characters)". Ondergrens bewijs: setting-labels van 54 tekens
+ * zijn bewezen veilig (about.liquid importeerde); de limiet geldt dus
+ * specifiek voor optielabels.
+ */
+const SCHEMA_OPTION_LABEL_MAX_LENGTH = 50;
+
+function schemaOversizedOptionLabels(schema: Record<string, unknown>): string[] {
+  const schendingen: string[] = [];
+  const checkSettings = (settings: unknown[], context: string): void => {
+    for (const rawSetting of settings) {
+      if (!rawSetting || typeof rawSetting !== "object") continue;
+      const setting = rawSetting as Record<string, unknown>;
+      if (setting.type !== "select" && setting.type !== "radio") continue;
+      if (!Array.isArray(setting.options)) continue;
+      const id = typeof setting.id === "string" ? setting.id : "(zonder id)";
+      for (const rawOption of setting.options) {
+        if (!rawOption || typeof rawOption !== "object") continue;
+        const option = rawOption as Record<string, unknown>;
+        const label = typeof option.label === "string" ? option.label : "";
+        if (label.length > SCHEMA_OPTION_LABEL_MAX_LENGTH) {
+          schendingen.push(
+            `setting "${id}"${context} option label is too long (${label.length} > ${SCHEMA_OPTION_LABEL_MAX_LENGTH} tekens): "${label}"`
+          );
+        }
+      }
+    }
+  };
+  if (Array.isArray(schema.settings)) {
+    checkSettings(schema.settings, "");
+  }
+  if (Array.isArray(schema.blocks)) {
+    for (const rawBlock of schema.blocks) {
+      if (!rawBlock || typeof rawBlock !== "object") continue;
+      const block = rawBlock as Record<string, unknown>;
+      if (!Array.isArray(block.settings)) continue;
+      const type = typeof block.type === "string" ? block.type : "(zonder type)";
+      checkSettings(block.settings, ` (blok "${type}")`);
+    }
+  }
+  return schendingen;
+}
+
 function sectionSchemaOf(content: string): unknown | null {
   const match = content.match(/\{%\s*-?\s*schema\s*-?\s*%\}([\s\S]*?)\{%\s*-?\s*endschema\s*-?\s*%\}/);
   if (!match) return null;
@@ -442,6 +490,12 @@ function validateLiquidContent(files: ThemeFile[], assetPaths: Set<string>, snip
         ((schema as Record<string, unknown>).name as string).trim().length === 0
       ) {
         errors.push(`Sectie "${file.path}" mist een "name" in het schema.`);
+      } else if (schema && typeof schema === "object" && !Array.isArray(schema)) {
+        for (const schending of schemaOversizedOptionLabels(schema as Record<string, unknown>)) {
+          errors.push(
+            `Sectie "${file.path}": Shopify schema-fout — ${schending} (Shopify laat deze sectie en alle templates die ernaar verwijzen bij ZIP-import stilletjes vallen).`
+          );
+        }
       }
     }
   }

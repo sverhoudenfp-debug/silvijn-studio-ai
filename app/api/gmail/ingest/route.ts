@@ -2,10 +2,13 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 
 /**
- * Ingest-endpoint voor de Gmail-inbox (Masterconfig C/E). Wordt aangeboden
- * voor een latere geplande automations-run; NU is er geen enkele cron die
- * dit endpoint aanroept — ingest is daarnaast handmatig triggerbaar door
- * de eigenaar via Settings (server action).
+ * Ingest-endpoint voor de Gmail-inbox (Masterconfig C/E). Wordt elke 15
+ * minuten aangeroepen door de externe planner (Base44-workflow
+ * "Gmail-ingest elke 15 minuten" → backend function gmailIngestTick) met de
+ * CRON_SECRET-header; daarnaast handmatig triggerbaar door de eigenaar via
+ * Settings (server action). Dit endpoint koppelt uitsluitend echte
+ * antwoorden (idempotente RPC); de AI-reply-pipeline blijft een expliciet
+ * eigenaarscommando en wordt hier bewust nooit gestart.
  *
  * Toegang: geldige eigenaarssessie (cookie) of CRON_SECRET-header.
  * Zonder credentials en zonder geautoriseerde Gmail-verbinding faalt

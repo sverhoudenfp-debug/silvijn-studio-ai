@@ -9,6 +9,7 @@ import { SalesService, type SalesAnalysisResult } from "./service";
 import { getInboundMessageRepository, getSalesInteractionRepository } from "./repository";
 import { getOutreachRepository } from "@/lib/outreach/repository";
 import { approveAndSendDraft } from "@/lib/outreach/send";
+import { ensureActiveQuestionnaireForLead } from "./questionnaire-step";
 
 /**
  * Reply-pipeline (Fase E) — verwerkt een binnenkomende prospect-reactie
@@ -55,6 +56,11 @@ const pipelineInput = z.object({
   mode: z.enum(["review", "auto"]),
 });
 
+export function appendQuestionnaireParagraph(body: string, url: string): string {
+  if (body.includes(url)) return body;
+  return `${body.trimEnd()}\n\nOm gericht te kunnen adviseren hebben we een korte vragenlijst voor u klaargezet. Invullen duurt een paar minuten:\n${url}`;
+}
+
 function buildReplySubject(originalSubject: string): string {
   const stripped = originalSubject.replace(/^((re|fw|fwd):\s*)+/i, "").trim();
   return `Re: ${stripped || "uw bericht"}`.slice(0, 990);
@@ -62,6 +68,11 @@ function buildReplySubject(originalSubject: string): string {
 
 /** Positieve intents die een gespreksvoortzetting rechtvaardigen. */
 const POSITIVE_INTENTS = ["interested", "demo_request", "call_request"];
+
+/** Positieve intents met voldoende interesse mogen de vragenlijst aangeboden krijgen. */
+function questionnaireWarranted(intent: string, interestLevel: string): boolean {
+  return POSITIVE_INTENTS.includes(intent) && ["medium", "high"].includes(interestLevel);
+}
 
 export async function processInboundReply(input: z.input<typeof pipelineInput>): Promise<ReplyPipelineOutcome> {
   const parsed = pipelineInput.parse(input);
@@ -124,6 +135,22 @@ export async function processInboundReply(input: z.input<typeof pipelineInput>):
   if (!inbound || inbound.leadId !== parsed.leadId) throw new Error("Inbound bericht niet gevonden voor deze lead");
 
   const isDemoRequest = interaction.intent === "demo_request";
+  // Vragenlijst (Masterconfig F): bij echte interesse krijgt de prospect de
+  // publieke vragenlijst-link mee, zodat antwoorden op het juiste lead-record
+  // landen. Bestaat er al een actieve vragenlijst, dan wordt die hergebruikt;
+  // er wordt nooit een tweede aangemaakt. Mislukt de stap, dan gaat het
+  // antwoord zonder link (geen verzonnen URL) en wordt dat gelogd.
+  let body = interaction.responseDraft;
+  let questionnaireNote = "";
+  if (questionnaireWarranted(interaction.intent, interaction.qualification.interestLevel)) {
+    const questionnaire = await ensureActiveQuestionnaireForLead(parsed.leadId);
+    if (questionnaire.url) {
+      body = appendQuestionnaireParagraph(body, questionnaire.url);
+      questionnaireNote = questionnaire.created ? " (vragenlijst aangemaakt en meegestuurd)" : " (bestaande vragenlijst meegestuurd)";
+    } else {
+      questionnaireNote = ` (vragenlijst niet meegestuurd: ${questionnaire.reason ?? "onbekend"})`;
+    }
+  }
   const draft = await getOutreachRepository().create({
     leadId: parsed.leadId,
     channel: "email",
@@ -131,7 +158,7 @@ export async function processInboundReply(input: z.input<typeof pipelineInput>):
     purpose: isDemoRequest ? "demo_offer" : "sales_reply",
     conversationId: inbound.conversationId ?? null,
     subject: buildReplySubject(inbound.subject),
-    body: interaction.responseDraft,
+    body,
     personalizationReason: "Antwoord op binnenkomende prospect-reactie (reply-pipeline)",
     callToAction: interaction.suggestedNextAction,
     model: analysis.model,
@@ -161,7 +188,7 @@ export async function processInboundReply(input: z.input<typeof pipelineInput>):
     leadId: parsed.leadId,
     businessName: lead.businessName,
     outcome: "answered",
-    detail: `Antwoord verzonden via ${sent.accountKey}${isDemoRequest ? " (demo aangeboden)" : ""}`,
+    detail: `Antwoord verzonden via ${sent.accountKey}${isDemoRequest ? " (demo aangeboden)" : ""}${questionnaireNote}`,
     draftId: draft.id,
     interactionId: interaction.id,
   };
@@ -172,10 +199,14 @@ export async function processInboundReply(input: z.input<typeof pipelineInput>):
  * expliciete eigenaarsronde (na Gmail-sync of vanaf het dashboard).
  */
 export async function processPendingReplies(input: {
-  ownerUserId: string;
+  /** Eigenaar bij een dashboardronde; null bij de Gmail-ingest-tick (trigger verplicht). */
+  ownerUserId: string | null;
+  trigger?: "owner_command" | "gmail_ingest";
   mode: "review" | "auto";
   limit?: number;
 }): Promise<ReplyPipelineResult> {
+  const trigger = input.trigger ?? "owner_command";
+  if (trigger === "owner_command" && !input.ownerUserId) throw new Error("OWNER_REQUIRED");
   const limit = Math.min(Math.max(Math.floor(input.limit ?? 10), 1), 25);
   const [inbounds, interactions] = await Promise.all([
     getInboundMessageRepository().list(),
@@ -216,6 +247,7 @@ export async function processPendingReplies(input: {
         entity_type: "reply_pipeline",
         entity_id: null,
         details: {
+          trigger,
           mode: input.mode,
           processed: outcomes.length,
           answered: outcomes.filter((o) => o.outcome === "answered").length,

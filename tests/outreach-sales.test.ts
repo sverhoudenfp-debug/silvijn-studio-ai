@@ -386,6 +386,11 @@ test("auto-outreach start uitsluitend via de owner-geautoriseerde server action"
     "lib/outreach/orchestrator.ts",
     "lib/outreach/followups.ts",
     "lib/sales/reply-pipeline.ts",
+    // 0028 (bewuste scopewijziging 2026-09-22): de Gmail-ingest-tick mag de
+    // reply-pipeline starten, maar uitsluitend achter de eigenaarsinstelling
+    // studio_settings.reply_handling_mode (default "off"; alleen de owner-RPC
+    // kan die wijzigen). Koude outreach en follow-ups blijven owner-only.
+    "app/api/gmail/ingest/route.ts",
   ];
   const violations = offenders.filter((o) => !allowed.includes(o));
   assert.deepEqual(violations, [], "orchestratie is alleen bereikbaar via de owner-geate actions");
@@ -395,6 +400,13 @@ test("auto-outreach start uitsluitend via de owner-geautoriseerde server action"
     assert.match(src, /"use server"/);
     assert.match(src, /await requireStudioOwner\(\)/);
   }
+  // De ingest-route start nooit koude outreach of follow-ups en leest de modus
+  // uit de eigenaarsinstelling; zonder modus (off) wordt de pipeline niet eens geladen.
+  const ingest = readFileSync("app/api/gmail/ingest/route.ts", "utf8");
+  assert.doesNotMatch(ingest, /OutreachOrchestrator|processDueFollowups|processInboundReply/);
+  assert.match(ingest, /getReplyHandlingMode\(\)/);
+  assert.match(ingest, /if \(mode !== "off"\)/);
+  assert.match(ingest, /trigger: "gmail_ingest"/);
   // Vercel-cron kent geen outreach-endpoint: alleen de automation-runtime.
   const vercel = readFileSync("vercel.json", "utf8");
   for (const cron of JSON.parse(vercel).crons ?? []) {

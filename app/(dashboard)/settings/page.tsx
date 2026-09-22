@@ -5,6 +5,8 @@ import { gmailIngestStatus } from "@/lib/gmail/ingest";
 import { GmailSettingsCard } from "@/components/settings/gmail-settings-card";
 import { EnvironmentStatusCard } from "@/components/settings/environment-status-card";
 import { loadEnvironmentStatus } from "@/lib/config/environment-status";
+import { ReplyHandlingCard } from "@/components/settings/reply-handling-card";
+import { getReplyHandlingMode, REPLY_HANDLING_LABELS } from "@/lib/settings/studio-settings";
 
 const sections = [
   { title: "Studio gegevens", description: "Bedrijfsnaam, e-mailadres, handtekening voor outreach" },
@@ -22,7 +24,7 @@ export default async function SettingsPage({
   searchParams: Promise<{ gmail_error?: string; gmail_connected?: string }>;
 }) {
   await requireStudioOwner();
-  const [params, gmail, environment] = await Promise.all([searchParams, gmailIngestStatus(), loadEnvironmentStatus()]);
+  const [params, gmail, environment, replyMode] = await Promise.all([searchParams, gmailIngestStatus(), loadEnvironmentStatus(), getReplyHandlingMode()]);
   return (
     <div className="space-y-6">
       <div>
@@ -32,6 +34,7 @@ export default async function SettingsPage({
         </p>
       </div>
       <GmailSettingsCard gmail={gmail} flash={{ error: params.gmail_error ?? null, connected: params.gmail_connected ?? null }} />
+      <ReplyHandlingCard mode={replyMode} options={REPLY_HANDLING_LABELS} />
       <EnvironmentStatusCard checks={environment.checks} unavailable={environment.unavailable} />
       <div className="grid gap-4 md:grid-cols-2">
       {sections.map((section) => (

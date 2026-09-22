@@ -109,14 +109,36 @@ export async function sendOutreachViaGmail(draftId: string): Promise<SentOutreac
 
   const { accessToken } = await getGmailAccessToken(config.accountKey);
   const messageIdHeader = newOutreachMessageIdHeader();
-  const gmailResult = await gmailSend(accessToken, {
-    from: config.accountKey,
-    to,
-    subject: draft.subject,
-    body: draft.body,
-    messageIdHeader,
-    ...threadHeaders,
-  });
+  // Dubbelverzend-slot: claim het draft atomair vóór de provider-call. Alleen
+  // een approved draft zónder provider_message_id kan geclaimd worden; een
+  // gelijktijdige tweede poging (dashboardklik + ingest-tick, dubbele klik)
+  // ziet 0 rijen en stopt zonder te verzenden. Faalt de provider ná de claim,
+  // dan wordt het draft 'failed' en is een nieuwe eigenaarsgoedkeuring nodig.
+  const { data: claimed, error: claimError } = await client
+    .from("outreach_drafts")
+    .update({ provider_message_id: messageIdHeader, provider_account_key: config.accountKey })
+    .eq("id", id)
+    .eq("status", "approved")
+    .is("provider_message_id", null)
+    .select("id");
+  if (claimError) throw new Error(`Verzendclaim mislukt: ${claimError.message}`);
+  if (!claimed || claimed.length !== 1) {
+    throw new Error("Dit draft is al geclaimd of verzonden (dubbelverzending voorkomen)");
+  }
+  let gmailResult: Awaited<ReturnType<typeof gmailSend>>;
+  try {
+    gmailResult = await gmailSend(accessToken, {
+      from: config.accountKey,
+      to,
+      subject: draft.subject,
+      body: draft.body,
+      messageIdHeader,
+      ...threadHeaders,
+    });
+  } catch (error) {
+    await client.from("outreach_drafts").update({ status: "failed" }).eq("id", id).eq("provider_message_id", messageIdHeader);
+    throw error;
+  }
 
   const sentAt = new Date().toISOString();
   const { error: updateError } = await client
@@ -128,7 +150,8 @@ export async function sendOutreachViaGmail(draftId: string): Promise<SentOutreac
       provider_account_key: config.accountKey,
     })
     .eq("id", id)
-    .eq("status", "approved");
+    .eq("status", "approved")
+    .eq("provider_message_id", messageIdHeader);
   if (updateError) throw new Error(`Verzonden draft kon niet worden vastgelegd: ${updateError.message}`);
 
   return { draftId: id, messageIdHeader, gmailMessageId: gmailResult.gmailMessageId, sentAt };

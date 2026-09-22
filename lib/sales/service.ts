@@ -150,7 +150,15 @@ export class SalesService {
         leadScore: lead.leadScore,
         demoUrl: demo?.status === "ready" ? demo.previewUrl : null,
         demoHeadline: demo?.status === "ready" ? demo.headline : null,
-        outreachHistory: outreachDrafts.slice(0, 3).map((d) => `Concept (${d.status}): "${d.subject}"`),
+        // Gespreksgeheugen: wat wij werkelijk verzonden (onderwerp + tekst),
+        // zodat het antwoord voortbouwt op eerdere toezeggingen en niets herhaalt.
+        outreachHistory: [
+          ...outreachDrafts
+            .filter((d) => d.status === "sent")
+            .slice(0, 3)
+            .map((d) => `Verzonden door ons (${d.sentAt?.slice(0, 10) ?? "datum onbekend"}): "${d.subject}" — ${d.body.slice(0, 700)}`),
+          ...outreachDrafts.filter((d) => d.status !== "sent").slice(0, 2).map((d) => `Concept (${d.status}): "${d.subject}"`),
+        ],
         previousInbound: earlierInbound.map((m) => ({
           sender: m.sender,
           subject: m.subject,

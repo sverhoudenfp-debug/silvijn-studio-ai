@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { LifecycleControl } from "./lifecycle-control";
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { generateDemoForLead } from "@/app/(dashboard)/leads/[id]/actions";
 import { OutreachSection } from "@/components/leads/outreach-section";
 import { SalesSection } from "@/components/sales/sales-section";
 import { ProjectSection } from "@/components/leads/project-section";
@@ -21,7 +22,7 @@ import {
   websiteStatusMeta,
 } from "@/lib/mock-data";
 import type { DemoWebsite, Lead } from "@/lib/types";
-import { cn, scoreCategory, scoreVariant, slugify } from "@/lib/utils";
+import { cn, scoreCategory, scoreVariant } from "@/lib/utils";
 
 const inputClass =
   "h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none";
@@ -42,6 +43,8 @@ export function LeadDetail({
   const [events, setEvents] = useState(() => mockLeadActivity(lead));
   const [noteText, setNoteText] = useState("");
   const [editing, setEditing] = useState(false);
+  const [demoPending, startDemo] = useTransition();
+  const [demoMessage, setDemoMessage] = useState<string | null>(null);
   const [form, setForm] = useState({
     businessName: lead.businessName,
     industry: lead.industry,
@@ -115,20 +118,32 @@ export function LeadDetail({
           </button>
           <button
             type="button"
-            disabled
-            title="Demo-generatie komt in Fase 3"
-            className="h-9 cursor-not-allowed rounded-lg border border-zinc-800 bg-zinc-900 px-4 text-xs font-medium text-zinc-500"
+            disabled={demoPending}
+            title="G4: genereert de gratis één-pagina-demo uit ons eigen thema, uitsluitend op basis van leadfeiten"
+            onClick={() => {
+              setDemoMessage(null);
+              startDemo(async () => {
+                const result = await generateDemoForLead(current.id);
+                setDemoMessage(
+                  result.ok
+                    ? `Demo klaar: ${result.previewUrl} (${result.missingInformation.length} open punten)`
+                    : `Demo mislukt: ${result.error}`
+                );
+              });
+            }}
+            className="h-9 rounded-lg border border-zinc-700 bg-zinc-900 px-4 text-xs font-medium text-zinc-200 transition-colors hover:border-zinc-500 disabled:cursor-wait disabled:opacity-60"
           >
-            Create demo · Fase 3
+            {demoPending ? "Demo genereren…" : demo ? "Demo opnieuw genereren" : "Genereer demo"}
           </button>
-          {current.demoStatus === "ready" ? (
+          {demo?.status === "ready" ? (
             <Link
-              href={`/demo/${slugify(current.businessName)}`}
+              href={demo.previewUrl}
               className="inline-flex h-9 items-center rounded-lg bg-indigo-600 px-4 text-xs font-semibold text-white transition-colors hover:bg-indigo-500"
             >
               Bekijk demo →
             </Link>
           ) : null}
+          {demoMessage ? <span className="text-xs text-zinc-400">{demoMessage}</span> : null}
         </div>
       </div>
 

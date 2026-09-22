@@ -36,6 +36,19 @@ export default async function DemoPage(props: PageProps<"/demo/[slug]">) {
     return <DemoStatusPage demo={demo} lead={lead ?? undefined} />;
   }
 
+  if (demo.source === "theme_page") {
+    // G4: het volledige, zelfstandige HTML-document uit ons eigen thema.
+    return (
+      <iframe
+        title={`Voorbeeldontwerp ${demo.businessName}`}
+        src={`/demo/${demo.slug}/html`}
+        sandbox="allow-scripts"
+        referrerPolicy="no-referrer"
+        style={{ display: "block", width: "100vw", height: "100vh", border: 0, background: "#fff" }}
+      />
+    );
+  }
+
   if (!lead) notFound();
   return <DemoRenderer demo={demo} lead={lead} />;
 }

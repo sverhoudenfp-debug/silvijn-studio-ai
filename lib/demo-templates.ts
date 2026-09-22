@@ -16,6 +16,14 @@ export interface DemoTemplateConfig {
 }
 
 export const demoTemplates: Record<DemoTemplate, DemoTemplateConfig> = {
+  theme_page: {
+    key: "theme_page",
+    name: "Eigen thema (één pagina)",
+    description: "G4: gerenderd uit ons eigen Shopify-thema als zelfstandig HTML-document; uitsluitend leadfeiten plus neutrale placeholders.",
+    hero: "from-slate-800 to-slate-950",
+    accent: "bg-slate-700",
+    sectionOrder: ["services", "about", "cta"],
+  },
   local_service: {
     key: "local_service",
     name: "Local Service",

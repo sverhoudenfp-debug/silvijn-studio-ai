@@ -94,7 +94,11 @@ export type DemoTemplate =
   | "local_service"
   | "professional_service"
   | "home_improvement"
-  | "business_standard";
+  | "business_standard"
+  /** G4: één-pagina-demo gerenderd uit ons eigen Shopify-thema (HTML opgeslagen). */
+  | "theme_page";
+
+export type DemoSource = "legacy_template" | "theme_page";
 
 export type GenerationStatus = "idle" | "generating" | "completed" | "failed";
 
@@ -114,6 +118,11 @@ export interface DemoWebsite {
   ctaText: string;
   notes: string;
   previewUrl: string;
+  /** G4: herkomst van de demo. Legacy-demo's blijven het React-templatesysteem gebruiken. */
+  source: DemoSource;
+  /** SHA-256 van het opgeslagen HTML-document (alleen theme_page). */
+  themeSha256: string | null;
+  generatedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

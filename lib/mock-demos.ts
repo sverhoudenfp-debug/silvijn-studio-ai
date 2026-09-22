@@ -15,7 +15,7 @@ export const generationStatusMeta: Record<GenerationStatus, { label: string; var
   failed: { label: "Failed", variant: "danger" },
 };
 
-type DemoSeed = Omit<DemoWebsite, "slug" | "previewUrl">;
+type DemoSeed = Omit<DemoWebsite, "slug" | "previewUrl" | "source" | "themeSha256" | "generatedAt">;
 
 const rawDemos: DemoSeed[] = [
   { id: "demo-001", leadId: "ld-001", businessName: "Jansen Dakwerken", industry: "Dakwerken", city: "Eindhoven", template: "home_improvement", status: "ready", generationStatus: "completed", headline: "Een dak waar u op kunt vertrouwen", description: "Jansen Dakwerken verzorgt nieuwe daken, renovatie en onderhoud in Eindhoven en omstreken. Vakkundig werk, met garantie en heldere prijzen.", services: ["Nieuwe daken", "Dakrenovatie", "Onderhoud en reparatie", "Dakisolatie"], ctaText: "Vraag vandaag nog een gratis dakinspectie aan", notes: "Eerste versie — klant reageerde positief.", createdAt: "2026-09-14T20:33:00.000Z", updatedAt: "2026-09-15T20:33:00.000Z" },
@@ -32,6 +32,9 @@ export const demos: DemoWebsite[] = rawDemos.map((demo) => ({
   ...demo,
   slug: slugify(demo.businessName),
   previewUrl: `/demo/${slugify(demo.businessName)}`,
+  source: "legacy_template" as const,
+  themeSha256: null,
+  generatedAt: null,
 }));
 
 // Slug-uniekheid afgedwongen — dubbele slugs zijn een programmeerfout.

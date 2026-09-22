@@ -3,6 +3,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { gmailIngestStatus } from "@/lib/gmail/ingest";
 import { GmailSettingsCard } from "@/components/settings/gmail-settings-card";
+import { EnvironmentStatusCard } from "@/components/settings/environment-status-card";
+import { loadEnvironmentStatus } from "@/lib/config/environment-status";
 
 const sections = [
   { title: "Studio gegevens", description: "Bedrijfsnaam, e-mailadres, handtekening voor outreach" },
@@ -11,7 +13,6 @@ const sections = [
   { title: "Lead scoring", description: "Weging van reviews, locatie, branche en contactgegevens" },
   { title: "Prijsregels", description: "Basisprijs per pagina, functies, SEO en onderhoud — configureerbaar" },
   { title: "Website generatie", description: "Standaard stijlen, platforms (Next.js / Shopify), templates" },
-  { title: "API integraties", description: "Google Maps, Supabase, e-mailprovider — via environment variables" },
   { title: "Security & AVG", description: "Gegevensbewaring, logging, toestemmingen" },
 ];
 
@@ -21,7 +22,7 @@ export default async function SettingsPage({
   searchParams: Promise<{ gmail_error?: string; gmail_connected?: string }>;
 }) {
   await requireStudioOwner();
-  const [params, gmail] = await Promise.all([searchParams, gmailIngestStatus()]);
+  const [params, gmail, environment] = await Promise.all([searchParams, gmailIngestStatus(), loadEnvironmentStatus()]);
   return (
     <div className="space-y-6">
       <div>
@@ -31,6 +32,7 @@ export default async function SettingsPage({
         </p>
       </div>
       <GmailSettingsCard gmail={gmail} flash={{ error: params.gmail_error ?? null, connected: params.gmail_connected ?? null }} />
+      <EnvironmentStatusCard checks={environment.checks} unavailable={environment.unavailable} />
       <div className="grid gap-4 md:grid-cols-2">
       {sections.map((section) => (
         <Card key={section.title} className="cursor-pointer transition-colors hover:border-zinc-700">

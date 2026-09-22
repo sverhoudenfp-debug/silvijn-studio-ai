@@ -1288,9 +1288,9 @@ function buildThemeJs(): ThemeFile {
       });
     }
     // D2: active navigation state — markeer de link van de huidige pagina.
-    var path = (window.location.pathname.replace(/\/$/, "") || "/");
+    var path = (window.location.pathname.replace(/\\/$/, "") || "/");
     Array.prototype.forEach.call(document.querySelectorAll(".site-nav a[href]"), function (link) {
-      var href = (link.getAttribute("href") || "").replace(window.location.origin, "").replace(/\/$/, "") || "/";
+      var href = (link.getAttribute("href") || "").replace(window.location.origin, "").replace(/\\/$/, "") || "/";
       if (href === path || (href !== "/" && path.indexOf(href + "/") === 0)) {
         link.setAttribute("aria-current", "page");
       }

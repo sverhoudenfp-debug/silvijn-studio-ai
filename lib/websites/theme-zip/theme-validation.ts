@@ -687,6 +687,19 @@ export function validateThemeFiles(files: ThemeFile[], options?: { trustedClaims
   // ---- 4b. Media-slotverplichtingen (R1)
   validateMediaSlots(files, assetPaths, errors);
 
+  // ---- 4c. JavaScript-assets moeten parseerbaar zijn. Theme Check en
+  // Liquid-rendering zien een JS-syntaxfout niet; in de browser faalt dan
+  // het volledige script (sticky header, mobiel menu, active nav). Alleen
+  // parsen, nooit uitvoeren.
+  for (const file of files) {
+    if (!/^assets\/[^/]+\.js$/.test(file.path) || !file.content) continue;
+    try {
+      new Function(file.content);
+    } catch (error) {
+      errors.push(`ASSET_JS_SYNTAX: "${file.path}" is geen geldig JavaScript (${error instanceof Error ? error.message : String(error)}).`);
+    }
+  }
+
   // ---- 5. Layout-verplichtingen
   const layout = files.find((f) => f.path === "layout/theme.liquid");
   if (layout) {

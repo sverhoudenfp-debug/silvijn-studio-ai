@@ -67,8 +67,19 @@ export interface DiscoveryCandidateResult {
   websiteStatus: WebsiteStatus;
 }
 
+export interface GooglePreKvkSummary {
+  phase: "google_no_website_listed_v1";
+  requested: number;
+  googleCandidates: number;
+  noWebsiteListed: number;
+  websiteListedSkipped: number;
+  quotaMet: boolean;
+  stopReason: "quota_met" | "results_exhausted" | "page_limit" | "candidate_limit" | "technical_error";
+}
+
 export interface DiscoveryResult {
   identity?: import("./identity/persistence").IdentityDiscoverySummary;
+  preKvk?: GooglePreKvkSummary;
   candidates: DiscoveryCandidateResult[];
   totalFound: number;
   source: string;

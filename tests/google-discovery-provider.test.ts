@@ -26,6 +26,7 @@ test("searchPage sends minimal field mask, headers, and structured payload", asy
         {
           id: "place_123",
           displayName: { text: "Bakkerij Jansen" },
+          websiteUri: "https://bakkerij-jansen.example/path",
           addressComponents: [
             { longText: "Kerkstraat", shortText: "Kerkstraat", types: ["route"] },
             { longText: "12", shortText: "12", types: ["street_number"] },
@@ -66,7 +67,7 @@ test("searchPage sends minimal field mask, headers, and structured payload", asy
   assert.equal(headers["X-Goog-Api-Key"], "secret-api-key-123");
   assert.equal(
     headers["X-Goog-FieldMask"],
-    "places.id,places.displayName,places.addressComponents,nextPageToken"
+    "places.id,places.displayName,places.addressComponents,places.websiteUri,nextPageToken"
   );
   assert.equal(headers["Content-Type"], "application/json");
 
@@ -90,6 +91,8 @@ test("searchPage sends minimal field mask, headers, and structured payload", asy
   assert.equal(candidate.kind, "temporary_google");
   assert.equal(candidate.placeId, "place_123");
   assert.equal(candidate.displayName, "Bakkerij Jansen");
+  assert.equal(candidate.websiteUrl, "https://bakkerij-jansen.example/path");
+  assert.equal(candidate.websiteListingStatus, "website_listed");
   assert.deepEqual(candidate.address, {
     postalCode: "1234 AB",
     houseNumber: "12",
@@ -337,7 +340,7 @@ test("ensures candidates contain ONLY TemporaryGoogleCandidate fields and no ext
   });
 
   const candidate = page.candidates[0] as unknown as Record<string, unknown>;
-  const allowedKeys = ["kind", "placeId", "displayName", "address"];
+  const allowedKeys = ["kind", "placeId", "displayName", "websiteUrl", "websiteListingStatus", "address"];
   const actualKeys = Object.keys(candidate);
 
   assert.deepEqual(actualKeys.sort(), allowedKeys.sort());

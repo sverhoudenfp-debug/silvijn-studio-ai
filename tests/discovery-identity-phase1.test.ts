@@ -18,7 +18,7 @@ delete process.env.GOOGLE_PLACES_API_KEY;
 delete process.env.KVK_API_KEY;
 const request = { country: "NL", city: "Eindhoven", industry: "Schilders", source: "google" as const, limit: 2 };
 function temporary(id = "google_id_1"): TemporaryGoogleCandidate {
-  return { kind: "temporary_google", placeId: id, displayName: "GOOGLE_SECRET_NAME_SENTINEL", address: { postalCode: "5611AB", houseNumber: "1", addition: null, street: "GOOGLE_SECRET_STREET", city: "Eindhoven", countryCode: "NL" } };
+  return { kind: "temporary_google", placeId: id, displayName: "GOOGLE_SECRET_NAME_SENTINEL", websiteUrl: null, websiteListingStatus: "no_website_listed", address: { postalCode: "5611AB", houseNumber: "1", addition: null, street: "GOOGLE_SECRET_STREET", city: "Eindhoven", countryCode: "NL" } };
 }
 function identity(kvk = "12345678", est = "000012345678"): VerifiedKvkIdentity {
   return { kind: "verified_kvk", kvkNumber: kvk, establishmentNumber: est, businessName: "KVK Test Schilder", tradeNames: ["KVK Test Schilder"],

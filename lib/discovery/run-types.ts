@@ -29,6 +29,7 @@ export interface DiscoveryRunLeadSummary {
 
 export interface DiscoveryRunSummary {
   identity?: import("./identity/persistence").IdentityDiscoverySummary;
+  preKvk?: import("./types").GooglePreKvkSummary;
   created: DiscoveryRunLeadSummary[];
   duplicateReasons: Record<string, number>;
 }

@@ -24,6 +24,8 @@ const sampleCandidate: TemporaryGoogleCandidate = {
   kind: "temporary_google",
   placeId: "place_abc123",
   displayName: "Jansen & Zonen B.V.",
+  websiteUrl: null,
+  websiteListingStatus: "no_website_listed",
   address: {
     postalCode: "1012 AB",
     houseNumber: "10",
@@ -184,6 +186,8 @@ test("ambiguous: insufficient evidence when address and city are missing", async
     kind: "temporary_google",
     placeId: "p1",
     displayName: "Jansen B.V.",
+    websiteUrl: null,
+    websiteListingStatus: "no_website_listed",
     address: {
       postalCode: null,
       houseNumber: null,

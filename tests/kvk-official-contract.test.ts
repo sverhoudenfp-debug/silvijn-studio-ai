@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { KvkIdentityVerifier } from "../lib/discovery/identity/kvk-verifier";
 import type { TemporaryGoogleCandidate } from "../lib/discovery/identity/types";
 
-const candidate: TemporaryGoogleCandidate = { kind: "temporary_google", placeId: "official_contract", displayName: "Jansen & Zonen B.V.", address: { postalCode: "1012 AB", houseNumber: "10", addition: "A", street: "Dam", city: "Amsterdam", countryCode: "NL" } };
+const candidate: TemporaryGoogleCandidate = { kind: "temporary_google", placeId: "official_contract", displayName: "Jansen & Zonen B.V.", websiteUrl: null, websiteListingStatus: "no_website_listed", address: { postalCode: "1012 AB", houseNumber: "10", addition: "A", street: "Dam", city: "Amsterdam", countryCode: "NL" } };
 
 test("official KVK field names and nested address shape verify without undocumented search parameters", async () => {
   const requests: { url: URL; headers: Headers }[] = [];

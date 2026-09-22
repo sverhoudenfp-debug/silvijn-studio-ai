@@ -3,6 +3,8 @@ export interface TemporaryGoogleCandidate {
   readonly kind: "temporary_google";
   placeId: string;
   displayName: string;
+  websiteUrl: string | null;
+  websiteListingStatus: "website_listed" | "no_website_listed";
   address: {
     postalCode: string | null;
     houseNumber: string | null;

@@ -33,6 +33,7 @@ const googlePlaceSchema = z.object({
     languageCode: z.string().optional(),
   }),
   addressComponents: z.array(googleAddressComponentSchema).optional(),
+  websiteUri: z.string().nullable().optional(),
 });
 
 const googlePlacesResponseSchema = z.object({
@@ -47,7 +48,7 @@ export interface GooglePlacesProviderOptions {
 }
 
 const GOOGLE_PLACES_TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText";
-const REQUIRED_FIELD_MASK = "places.id,places.displayName,places.addressComponents,nextPageToken";
+const REQUIRED_FIELD_MASK = "places.id,places.displayName,places.addressComponents,places.websiteUri,nextPageToken";
 const MAX_RESPONSE_BODY_SIZE = 256 * 1024; // 256 KB
 
 export class GooglePlacesDiscoveryProvider {
@@ -233,6 +234,18 @@ export class GooglePlacesDiscoveryProvider {
     }
   }
 
+  private usableWebsiteUrl(value: string | null | undefined): string | null {
+    const trimmed = value?.trim();
+    if (!trimmed) return null;
+    try {
+      const parsed = new URL(trimmed);
+      if ((parsed.protocol !== "https:" && parsed.protocol !== "http:") || !parsed.hostname) return null;
+      return parsed.toString();
+    } catch {
+      return null;
+    }
+  }
+
   private mapPlaceToCandidate(
     place: z.infer<typeof googlePlaceSchema>
   ): TemporaryGoogleCandidate | null {
@@ -276,10 +289,14 @@ export class GooglePlacesDiscoveryProvider {
       return null;
     }
 
+    const websiteUrl = this.usableWebsiteUrl(place.websiteUri);
+
     return {
       kind: "temporary_google",
       placeId: place.id,
       displayName: place.displayName.text.trim(),
+      websiteUrl,
+      websiteListingStatus: websiteUrl ? "website_listed" : "no_website_listed",
       address: {
         postalCode,
         houseNumber,

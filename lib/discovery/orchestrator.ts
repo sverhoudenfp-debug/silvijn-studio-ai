@@ -188,7 +188,12 @@ export class DiscoveryOrchestrator {
         const reason = candidate.reason ?? "duplicaat";
         duplicateReasons[reason] = (duplicateReasons[reason] ?? 0) + 1;
       }
-      const summary: DiscoveryRunSummary = { created: createdLeadSummaries, duplicateReasons, ...(result.identity ? { identity: result.identity } : {}) };
+      const summary: DiscoveryRunSummary = {
+        created: createdLeadSummaries,
+        duplicateReasons,
+        ...(result.identity ? { identity: result.identity } : {}),
+        ...(result.preKvk ? { preKvk: result.preKvk } : {}),
+      };
 
       const durationMs = Date.now() - started;
       // Eerlijke run-status: fouten (providerfout of mislukte kandidaten) markeren
@@ -216,6 +221,12 @@ export class DiscoveryOrchestrator {
         found: result.totalFound,
         created: result.createdLeads,
           ...(result.identity ? { verifiedCandidates: result.identity.persisted, quotaMet: result.identity.quotaMet } : {}),
+          ...(result.preKvk ? {
+            googleCandidates: result.preKvk.googleCandidates,
+            noWebsiteListed: result.preKvk.noWebsiteListed,
+            websiteListedSkipped: result.preKvk.websiteListedSkipped,
+            quotaMet: result.preKvk.quotaMet,
+          } : {}),
         duplicates: result.duplicatesSkipped,
         invalid: result.invalidCandidatesSkipped,
         durationMs,

@@ -1,4 +1,4 @@
-import { GoogleIdentityDiscoveryService } from "./identity/service";
+import { GoogleNoWebsiteListedDiscoveryService } from "./identity/pre-kvk-service";
 import type { Lead } from "@/lib/types";
 import { getLeadRepository, type LeadCreateInput } from "@/lib/repositories/lead-repository";
 import { enrichCandidate } from "./enrichment";
@@ -44,13 +44,14 @@ const DUPLICATE_LABELS: Record<DuplicateSignal, string> = {
 
 export class LeadDiscoveryService {
   async discover(request: DiscoveryRequest, context?: { runId: string }): Promise<DiscoveryResult> {
+    void context; // Reserved for run-scoped phases; pre-KVK selection persists no candidates.
     const started = Date.now();
     const max = getMaxDiscoveryResults();
     const limit = Math.max(1, Math.min(request.limit, max));
     const effectiveRequest: DiscoveryRequest = { ...request, limit, country: request.country || "NL" };
 
     const source = effectiveRequest.source;
-    if (source === "google") return new GoogleIdentityDiscoveryService().discover(effectiveRequest, context?.runId ?? "");
+    if (source === "google") return new GoogleNoWebsiteListedDiscoveryService().discover(effectiveRequest);
     const provider = getDiscoveryProvider(source);
     const errors: string[] = [];
     const candidates: DiscoveryCandidateResult[] = [];

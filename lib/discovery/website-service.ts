@@ -1,4 +1,8 @@
 import type { WebsiteStatus } from "@/lib/types";
+import {
+  fetchSafeWebsite,
+  type WebsiteNetworkDependencies,
+} from "./website-network-safety";
 
 /**
  * WebsiteDiscoveryService — technische basiscontrole van websites.
@@ -14,8 +18,9 @@ import type { WebsiteStatus } from "@/lib/types";
  * Dit is een TECHNISCHE CHECK — de uitgebreide AI-businessanalyse hoort
  * bij de AI-laag en wordt nooit automatisch in bulk uitgevoerd.
  *
- * Beveiliging: één gecontroleerd GET-request met timeout, max ~64KB body,
- * geen login-pages, geen auth-bypass, geen agressieve crawling.
+ * Beveiliging: DNS-validatie en IP-pinning per request, alleen publieke
+ * HTTP(S)-doelen op standaardpoorten, handmatig gevalideerde redirects,
+ * totale timeout, HTML content-type en een harde 64KB streamed bodylimiet.
  */
 
 export interface WebsiteCheckResult {
@@ -44,7 +49,8 @@ export class WebsiteDiscoveryService {
     if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
     try {
       const parsed = new URL(url);
-      if (!parsed.hostname.includes(".")) return null;
+      if ((parsed.protocol !== "http:" && parsed.protocol !== "https:") || !parsed.hostname.includes(".")) return null;
+      if (parsed.username || parsed.password) return null;
       parsed.hash = "";
       const normalized = parsed.toString().replace(/\/$/, "");
       return normalized;
@@ -67,8 +73,12 @@ export class WebsiteDiscoveryService {
     }
   }
 
-  /** Gecontroleerde technische check. Gooit nooit — onbereikbaar is een valide uitkomst. */
-  static async checkWebsite(url: string, timeoutMs = 5000): Promise<WebsiteCheckResult> {
+  /** Gecontroleerde technische check. Gooit nooit — onbereikbaar/onveilig is een valide uitkomst. */
+  static async checkWebsite(
+    url: string,
+    timeoutMs = 5000,
+    dependencies?: WebsiteNetworkDependencies
+  ): Promise<WebsiteCheckResult> {
     const normalized = this.normalizeUrl(url);
     const empty: WebsiteCheckResult = {
       reachable: false, httpStatus: null, https: false, redirected: false,
@@ -78,16 +88,9 @@ export class WebsiteDiscoveryService {
     if (!normalized) return empty;
 
     try {
-      const response = await fetch(normalized, {
-        method: "GET",
-        redirect: "follow",
-        signal: AbortSignal.timeout(timeoutMs),
-        headers: { "User-Agent": "SilvijnStudioDiscoveryBot/1.0 (basis-websitecheck)" },
-      });
-      const https = response.url.startsWith("https://");
-      const redirected = response.url.replace(/\/$/, "") !== normalized.replace(/\/$/, "");
-      const body = (await response.text()).slice(0, 64_000).toLowerCase();
-
+      const response = await fetchSafeWebsite(new URL(normalized), timeoutMs, dependencies);
+      const body = response.body.toLowerCase();
+      const https = response.finalUrl.protocol === "https:";
       const hasTitle = /<title[^>]*>\s*\S+/.test(body);
       const hasBasicHtml = body.includes("<body") || body.includes("<!doctype html");
       const hasViewport = body.includes("width=device-width");
@@ -98,10 +101,10 @@ export class WebsiteDiscoveryService {
       const looksBroken = !hasBasicHtml || contentLength < 200;
 
       return {
-        reachable: response.ok,
-        httpStatus: response.status,
+        reachable: response.statusCode >= 200 && response.statusCode < 300,
+        httpStatus: response.statusCode,
         https,
-        redirected,
+        redirected: response.redirected,
         hasTitle,
         hasBasicHtml,
         hasViewport,

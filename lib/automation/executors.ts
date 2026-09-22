@@ -1,5 +1,4 @@
 import { scoreLead, type ScorableLead } from "@/lib/agents/lead-scoring";
-import { LeadDiscoveryService } from "@/lib/discovery/service";
 import { getLeadRepository } from "@/lib/repositories/lead-repository";
 import { OutreachService } from "@/lib/outreach/service";
 import { ProjectService } from "@/lib/projects/service";
@@ -7,7 +6,6 @@ import { getPriceIndicationRepository } from "@/lib/pricing/repository";
 import { QualityControlService } from "@/lib/qc/service";
 import { SalesService } from "@/lib/sales/service";
 import { WebsiteGenerationService } from "@/lib/websites/service";
-import { getAutomationLimits } from "./limits";
 import type { StepExecutionResult } from "./types";
 
 /**
@@ -49,37 +47,18 @@ function requireEntity(context: StepContext): string {
   return context.entityId;
 }
 
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, stepName: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error(`Step "${stepName}" overschreed de timeout (${timeoutMs}ms)`)), timeoutMs);
-    }),
-  ]);
-}
-
-/**
- * DISCOVER_LEADS — gebruikt LeadDiscoveryService (inclusief dedup, enrich,
- * validatie, opslag, MAX_DISCOVERY_RESULTS). Demo-generatie en outreach
- * horen hier NOOIT bij.
- */
+/** DISCOVER_LEADS — geblokkeerd; zie toelichting in de functie (G6). */
 export async function executeDiscoverLeads(context: StepContext): Promise<StepExecutionResult> {
-  void context; // discovery draait run-breed, niet op één entity
-  const limits = getAutomationLimits();
-  const result = await withTimeout(
-    new LeadDiscoveryService().discover({
-      country: "NL",
-      limit: limits.maxLeadsPerDiscoveryRun,
-      source: "mock",
-    }),
-    120_000,
-    "discover_leads"
-  );
-  const createdLeadIds = result.candidates.filter((c) => c.leadId).map((c) => c.leadId as string);
+  void context;
+  // G6 (2026-09-22): lead discovery is een expliciete owner-opdracht met branche,
+  // plaats en bron (Google) op /lead-discovery. Deze automation-stap heeft die
+  // parameters niet en mag NOOIT stil op een mock-bron terugvallen (mock is in
+  // productie hard geweigerd). Daarom: geen discovery-call, geen leadcreatie,
+  // expliciet geblokkeerd met een duidelijke reden voor Silvijn.
   return {
-    outcome: "success",
-    result: `${result.totalFound} kandidaten gevonden, ${result.duplicatesSkipped} duplicates overgeslagen, ${result.createdLeads} leads opgeslagen (bron: ${result.source}).`,
-    context: { createdLeadIds },
+    outcome: "blocked",
+    result:
+      "Lead discovery draait uitsluitend via de owner-opdracht op /lead-discovery (bron Google, branche + plaats verplicht). Deze automation-stap start geen discovery en maakt geen leads aan.",
   };
 }
 

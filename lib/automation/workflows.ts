@@ -38,7 +38,7 @@ export const QUALIFIED_LEAD_TO_WEBSITE_STEPS: AutomationStepDefinition[] = [
 
 /** Workflow 2: Lead Discovery (discovery-draai; verstuur nooit automatisch outreach). */
 export const LEAD_DISCOVERY_STEPS: AutomationStepDefinition[] = [
-  step("discover", "discover_leads", "Leads ontdekken", "Bestaande LeadDiscoveryService: zoeken + dedupliceren + verrijken + opslaan in één gecontroleerde run."),
+  step("discover", "discover_leads", "Leads ontdekken", "Geblokkeerd: discovery is een owner-opdracht op /lead-discovery (Google, branche + plaats). Deze stap start geen discovery."),
   step("analyze", "analyze_lead", "Leads analyseren", "Deterministische analyse van de gevonden leads (geen AI-call)."),
   step("score", "score_lead", "Leads scoren", "Deterministische rule-based scoring per lead (geen AI-call)."),
 ];

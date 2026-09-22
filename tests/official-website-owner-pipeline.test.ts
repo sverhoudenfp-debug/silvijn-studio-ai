@@ -111,6 +111,7 @@ test("owner-triggered Google pipeline aggregates all four website outcomes and c
     googleCandidates: 5,
     noWebsiteListed: 4,
     websiteListedSkipped: 1,
+    industryMismatchSkipped: 0,
     officialWebsiteVerified: 1,
     officialWebsiteAmbiguous: 1,
     officialWebsiteNotFound: 1,

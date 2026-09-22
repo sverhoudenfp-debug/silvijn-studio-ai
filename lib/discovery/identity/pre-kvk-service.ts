@@ -3,6 +3,7 @@ import { OfficialWebsiteDiscoveryService, type OfficialWebsiteDiscoveryResult } 
 import { GooglePlacesDiscoveryProvider } from "../providers/google-places-provider";
 import type { DiscoveryRequest, DiscoveryResult, GooglePreKvkSummary } from "../types";
 import type { GoogleDiscoveryPage, TemporaryGoogleCandidate } from "./types";
+import { assessIndustryRelevance } from "./industry-relevance";
 
 interface Dependencies {
   provider: { searchPage(request: DiscoveryRequest, token?: string | null): Promise<GoogleDiscoveryPage> };
@@ -47,6 +48,7 @@ export class GoogleNoWebsiteListedDiscoveryService {
       googleCandidates: 0,
       noWebsiteListed: 0,
       websiteListedSkipped: 0,
+      industryMismatchSkipped: 0,
       officialWebsiteVerified: 0,
       officialWebsiteAmbiguous: 0,
       officialWebsiteNotFound: 0,
@@ -100,6 +102,13 @@ export class GoogleNoWebsiteListedDiscoveryService {
         if (seenPlaces.has(candidate.placeId)) continue;
         seenPlaces.add(candidate.placeId);
         summary.googleCandidates++;
+
+        // Deterministic relevance first: a provable trade mismatch never costs a
+        // web search and never becomes a lead. Unknown stays in (no proof).
+        if (assessIndustryRelevance(request.industry, candidate.googleTypes) === "mismatch") {
+          summary.industryMismatchSkipped = (summary.industryMismatchSkipped ?? 0) + 1;
+          continue;
+        }
 
         if (candidate.websiteListingStatus === "website_listed") {
           summary.websiteListedSkipped++;

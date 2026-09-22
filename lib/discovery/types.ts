@@ -73,6 +73,8 @@ export interface GooglePreKvkSummary {
   googleCandidates: number;
   noWebsiteListed: number;
   websiteListedSkipped: number;
+  /** Kandidaten waarvan Google-types aantoonbaar niet bij de gevraagde branche passen (alleen geteld). */
+  industryMismatchSkipped?: number;
   officialWebsiteVerified: number;
   officialWebsiteAmbiguous: number;
   officialWebsiteNotFound: number;

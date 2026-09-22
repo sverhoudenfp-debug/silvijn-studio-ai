@@ -307,7 +307,7 @@ export function DiscoveryView({ recentRuns }: { recentRuns: DiscoveryRunRecord[]
                 <EmptyState
                   title={discovery.preKvk ? "Geen nieuwe leads uit deze run" : "Geen kandidaten gevonden"}
                   description={discovery.preKvk
-                    ? `${discovery.preKvk.googleCandidates} Google-kandidaten, ${discovery.preKvk.websiteListedSkipped} met vermelde website, ${discovery.preKvk.officialWebsiteNotFound} zonder gevonden website; er zijn geen leads aangemaakt.`
+                    ? `${discovery.preKvk.googleCandidates} Google-kandidaten, ${discovery.preKvk.websiteListedSkipped} met vermelde website, ${discovery.preKvk.industryMismatchSkipped ?? 0} buiten de branche, ${discovery.preKvk.officialWebsiteNotFound} zonder gevonden website; er zijn geen leads aangemaakt.`
                     : "Probeer andere filters of een grotere limiet."}
                 />
               ) : (

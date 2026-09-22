@@ -19,6 +19,8 @@ export interface TemporaryGoogleCandidate {
   phone?: string | null;
   rating?: number | null;
   reviewCount?: number | null;
+  /** Google place types (primaryType first). Used only for deterministic industry relevance; never persisted. */
+  googleTypes?: string[];
 }
 export interface GoogleDiscoveryPage {
   candidates: TemporaryGoogleCandidate[];

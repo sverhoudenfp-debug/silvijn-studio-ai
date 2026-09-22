@@ -231,6 +231,7 @@ export class DiscoveryOrchestrator {
             googleCandidates: result.preKvk.googleCandidates,
             noWebsiteListed: result.preKvk.noWebsiteListed,
             websiteListedSkipped: result.preKvk.websiteListedSkipped,
+            industryMismatchSkipped: result.preKvk.industryMismatchSkipped ?? 0,
             officialWebsiteVerified: result.preKvk.officialWebsiteVerified,
             officialWebsiteAmbiguous: result.preKvk.officialWebsiteAmbiguous,
             officialWebsiteNotFound: result.preKvk.officialWebsiteNotFound,

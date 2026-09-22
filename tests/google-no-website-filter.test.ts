@@ -105,6 +105,7 @@ test("pre-KVK step keeps only no_website_listed candidates and records counts on
     googleCandidates: 3,
     noWebsiteListed: 2,
     websiteListedSkipped: 1,
+    industryMismatchSkipped: 0,
     officialWebsiteVerified: 0,
     officialWebsiteAmbiguous: 0,
     officialWebsiteNotFound: 2,

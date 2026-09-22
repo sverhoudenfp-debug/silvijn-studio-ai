@@ -37,6 +37,8 @@ const googlePlaceSchema = z.object({
   nationalPhoneNumber: z.string().nullable().optional(),
   rating: z.number().min(0).max(5).nullable().optional(),
   userRatingCount: z.number().int().min(0).nullable().optional(),
+  primaryType: z.string().nullable().optional(),
+  types: z.array(z.string()).optional(),
 });
 
 const googlePlacesResponseSchema = z.object({
@@ -52,7 +54,7 @@ export interface GooglePlacesProviderOptions {
 
 const GOOGLE_PLACES_TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText";
 const GOOGLE_PLACES_PAGE_SIZE = 20;
-const REQUIRED_FIELD_MASK = "places.id,places.displayName,places.addressComponents,places.websiteUri,places.nationalPhoneNumber,places.rating,places.userRatingCount,nextPageToken";
+const REQUIRED_FIELD_MASK = "places.id,places.displayName,places.addressComponents,places.websiteUri,places.nationalPhoneNumber,places.rating,places.userRatingCount,places.primaryType,places.types,nextPageToken";
 const MAX_RESPONSE_BODY_SIZE = 256 * 1024; // 256 KB
 
 export class GooglePlacesDiscoveryProvider {
@@ -320,6 +322,7 @@ export class GooglePlacesDiscoveryProvider {
       phone: place.nationalPhoneNumber?.trim() || null,
       rating: typeof place.rating === "number" ? place.rating : null,
       reviewCount: typeof place.userRatingCount === "number" ? place.userRatingCount : null,
+      googleTypes: Array.from(new Set([place.primaryType?.trim() || null, ...(place.types ?? [])].filter((t): t is string => Boolean(t)))),
     };
   }
 }

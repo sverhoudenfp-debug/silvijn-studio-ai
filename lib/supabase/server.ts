@@ -23,7 +23,18 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 let cachedClient: SupabaseClient | null = null;
 
+/**
+ * Unit-tests onder de Node test runner (NODE_TEST_CONTEXT) mogen NOOIT de
+ * productiedatabase raken, ook niet wanneer de shell toevallig Supabase-
+ * variabelen bevat. Productie (NODE_ENV=production) zet deze variabele nooit,
+ * dus de productie-fail-loud hieronder blijft ongewijzigd.
+ */
+function runningUnderNodeTestRunner(): boolean {
+  return process.env.NODE_ENV !== "production" && Boolean(process.env.NODE_TEST_CONTEXT);
+}
+
 export function isSupabaseConfigured(): boolean {
+  if (runningUnderNodeTestRunner()) return false;
   const configured = Boolean(
     (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim() &&
     (process.env.SUPABASE_SECRET_KEY ?? "").trim()

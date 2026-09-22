@@ -7,6 +7,11 @@ import { LeadDiscoveryService } from "../lib/discovery/service";
 import type { DiscoveryRequest } from "../lib/discovery/types";
 import type { TemporaryGoogleCandidate } from "../lib/discovery/identity/types";
 
+// Force the test-only in-memory repositories. Never touch production data.
+delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+delete process.env.SUPABASE_SECRET_KEY;
+delete process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+
 const request: DiscoveryRequest = {
   country: "NL",
   city: "Eindhoven",
@@ -70,6 +75,7 @@ function temporary(placeId: string, listed: boolean): TemporaryGoogleCandidate {
       addition: null,
       street: "Teststraat",
       city: "Eindhoven",
+      province: "Noord-Brabant",
       countryCode: "NL",
     },
   };
@@ -111,14 +117,16 @@ test("pre-KVK step keeps only no_website_listed candidates and records counts on
   const result = await service.discover(request);
   assert.deepEqual(result.candidates, []);
   assert.equal(result.createdLeads, 0);
-  assert.doesNotMatch(JSON.stringify(result), /Temporary listed|Temporary missing|https:\/\//);
+  assert.doesNotMatch(JSON.stringify(result), /Temporary listed|https:\/\//);
 });
 
-test("production Google branch stops before KVK, repositories, lead creation, scoring and outreach", async () => {
+test("pre-KVK selection service itself stays free of KVK, repositories, scoring and outreach; lead creation happens only in LeadDiscoveryService", async () => {
   const google = new GoogleNoWebsiteListedDiscoveryService({
     provider: {
       async searchPage() {
-        return { candidates: [temporary("missing-production", false)], nextPageToken: null };
+        // Unique name: the earlier test already created "Temporary missing-*" leads in the shared memory repository,
+        // and the existing duplicate detector (name + city) must keep working unchanged.
+        return { candidates: [{ ...temporary("missing-production", false), displayName: "Schildersbedrijf Productiecheck" }], nextPageToken: null };
       },
     },
     officialWebsite: {
@@ -133,8 +141,10 @@ test("production Google branch stops before KVK, repositories, lead creation, sc
   assert.equal(result.preKvk?.officialWebsiteNotFound, 1);
   assert.equal(result.preKvk?.potentialNoWebsiteCandidates, 1);
   assert.equal(result.preKvk?.quotaMet, true);
-  assert.equal(result.createdLeads, 0);
-  assert.deepEqual(result.candidates, []);
+  // The bounded not_found candidate is handed to the EXISTING creation chain (memory repository in tests).
+  assert.equal(result.createdLeads, 1);
+  assert.equal(result.candidates.length, 1);
+  assert.equal(result.candidates[0]?.status, "created");
   assert.deepEqual(result.errors, []);
 
   const source = readFileSync(new URL("../lib/discovery/identity/pre-kvk-service.ts", import.meta.url), "utf8");

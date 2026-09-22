@@ -33,6 +33,11 @@ export class GoogleNoWebsiteListedDiscoveryService {
     return this.result(request, selection.summary, selection.errors, Date.now() - started);
   }
 
+  /** Aggregate DiscoveryResult voor een selectie; bevat nooit kandidaatwaarden. */
+  toResult(request: DiscoveryRequest, selection: GooglePreKvkSelection, durationMs: number): DiscoveryResult {
+    return this.result(request, selection.summary, selection.errors, durationMs);
+  }
+
   /** Internal in-memory handoff. Retains only bounded not_found outcomes. */
   async select(request: DiscoveryRequest): Promise<GooglePreKvkSelection> {
     const requested = Math.max(1, Math.min(200, Math.floor(request.limit)));

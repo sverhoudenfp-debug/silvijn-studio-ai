@@ -9,7 +9,10 @@ import type {
   DiscoveryCandidateResult,
   DiscoveryRequest,
   DiscoveryResult,
+  DiscoverySource,
+  GooglePreKvkSummary,
 } from "./types";
+import { GOOGLE_NOT_FOUND_LEAD_NOTE, temporaryGoogleCandidateToDiscoveryCandidate } from "./identity/lead-candidate-mapping";
 import { WebsiteDiscoveryService } from "./website-service";
 
 /**
@@ -53,15 +56,11 @@ export class LeadDiscoveryService {
     const effectiveRequest: DiscoveryRequest = { ...request, limit, country: request.country || "NL" };
 
     const source = effectiveRequest.source;
-    if (source === "google") {
-      return (this.dependencies.google ?? new GoogleNoWebsiteListedDiscoveryService()).discover(effectiveRequest);
-    }
-    const provider = getDiscoveryProvider(source);
     const errors: string[] = [];
     const candidates: DiscoveryCandidateResult[] = [];
 
     logDiscoveryEvent("DISCOVERY_STARTED", {
-      source: provider.id,
+      source,
       country: effectiveRequest.country,
       city: effectiveRequest.city ?? null,
       province: effectiveRequest.province ?? null,
@@ -69,25 +68,51 @@ export class LeadDiscoveryService {
       limit,
     });
 
+    // Google v2: Places → no_website_listed → begrensde officiële-websitecheck.
+    // Alleen kandidaten met uitkomst `not_found` gaan de bestaande creatieketen in;
+    // verified/ambiguous/technical_error worden uitsluitend geteld.
+    let preKvk: GooglePreKvkSummary | undefined;
     let found: DiscoveryCandidate[] = [];
-    try {
-      found = await provider.search(effectiveRequest);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Onbekende providerfout";
-      errors.push(message);
-      logDiscoveryEvent("DISCOVERY_FAILED", { source: provider.id, reason: "provider" });
-      return {
-        candidates: [],
-        totalFound: 0,
-        source: provider.id,
-        query: effectiveRequest,
-        durationMs: Date.now() - started,
-        duplicatesSkipped: 0,
-        invalidCandidatesSkipped: 0,
-        createdLeads: 0,
-        errors,
-      };
+    let providerId: DiscoverySource = source;
+    let providerLive = true;
+    let totalFound = 0;
+    if (source === "google") {
+      const googleService = this.dependencies.google ?? new GoogleNoWebsiteListedDiscoveryService();
+      // In-memory handoff binnen hetzelfde verzoek: de selectie wordt nooit geserialiseerd of opgeslagen.
+      const selection = await googleService.select(effectiveRequest);
+      const aggregate = googleService.toResult(effectiveRequest, selection, Date.now() - started);
+      preKvk = aggregate.preKvk;
+      totalFound = aggregate.totalFound;
+      errors.push(...aggregate.errors);
+      if (!preKvk || (selection.errors.length > 0 && selection.temporaryCandidates.length === 0)) {
+        return aggregate;
+      }
+      found = selection.temporaryCandidates.map((c) => temporaryGoogleCandidateToDiscoveryCandidate(c, effectiveRequest));
+    } else {
+      const provider = getDiscoveryProvider(source);
+      providerId = provider.id as DiscoverySource;
+      providerLive = provider.live;
+      try {
+        found = await provider.search(effectiveRequest);
+        totalFound = found.length;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Onbekende providerfout";
+        errors.push(message);
+        logDiscoveryEvent("DISCOVERY_FAILED", { source: provider.id, reason: "provider" });
+        return {
+          candidates: [],
+          totalFound: 0,
+          source: provider.id,
+          query: effectiveRequest,
+          durationMs: Date.now() - started,
+          duplicatesSkipped: 0,
+          invalidCandidatesSkipped: 0,
+          createdLeads: 0,
+          errors,
+        };
+      }
     }
+    const provider = { id: providerId, live: providerLive };
 
     const leadRepository = getLeadRepository();
     let existingLeads: Lead[] = [];
@@ -98,8 +123,9 @@ export class LeadDiscoveryService {
       logDiscoveryEvent("DISCOVERY_FAILED", { source: provider.id, reason: "repository" });
       return {
         candidates: [],
-        totalFound: found.length,
+        totalFound,
         source: provider.id,
+        preKvk,
         query: effectiveRequest,
         durationMs: Date.now() - started,
         duplicatesSkipped: 0,
@@ -179,7 +205,9 @@ export class LeadDiscoveryService {
           websiteStatus,
           source: candidate.source,
           notes: [
-            `Ontdekt via Lead Discovery (bron: ${candidate.source}${provider.live ? "" : " — mock data, fictief bedrijf"}).`,
+            source === "google"
+              ? GOOGLE_NOT_FOUND_LEAD_NOTE
+              : `Ontdekt via Lead Discovery (bron: ${candidate.source}${provider.live ? "" : " — mock data, fictief bedrijf"}).`,
           ],
           externalId: e.externalId,
           sourceUrl: e.sourceUrl,
@@ -217,9 +245,10 @@ export class LeadDiscoveryService {
       durationMs: Date.now() - started,
     });
 
+    if (preKvk) preKvk.leadsCreated = createdLeads;
     return {
       candidates,
-      totalFound: found.length,
+      totalFound,
       source: provider.id,
       query: effectiveRequest,
       durationMs: Date.now() - started,
@@ -227,6 +256,7 @@ export class LeadDiscoveryService {
       invalidCandidatesSkipped,
       createdLeads,
       errors,
+      ...(preKvk ? { preKvk } : {}),
     };
   }
 }

@@ -122,7 +122,7 @@ export function DiscoveryView({ recentRuns }: { recentRuns: DiscoveryRunRecord[]
       <div>
         <h2 className="text-2xl font-semibold tracking-tight text-zinc-50">Lead Discovery</h2>
         <p className="mt-1 text-sm text-zinc-400">
-          Google Places selecteert tijdelijk bedrijven zonder vermelde website. Een begrensde officiële-websitecheck houdt alleen niet-gevonden gevallen in memory; er worden nog geen leads gemaakt.
+          Google Places selecteert bedrijven zonder vermelde website. Alleen kandidaten waarvoor de begrensde officiële-websitecheck niets vindt, gaan de bestaande leadketen in (dedupe, scoring, status new). Vermelde, geverifieerde of twijfelgevallen worden uitsluitend geteld.
         </p>
       </div>
 
@@ -240,8 +240,8 @@ export function DiscoveryView({ recentRuns }: { recentRuns: DiscoveryRunRecord[]
               <div className="flex flex-wrap gap-2">
                 <Chip label="Gevonden" value={discovery.totalFound} />
                 <Chip
-                  label={discovery.preKvk ? "Potentieel zonder website" : discovery.identity ? "Nieuwe KVK-kandidaten" : "Nieuwe leads"}
-                  value={discovery.preKvk?.potentialNoWebsiteCandidates ?? discovery.identity?.persisted ?? discovery.createdLeads}
+                  label={discovery.identity ? "Nieuwe KVK-kandidaten" : "Nieuwe leads"}
+                  value={discovery.identity?.persisted ?? discovery.createdLeads}
                   tone="ok"
                 />
                 {discovery.identity && <>
@@ -305,9 +305,9 @@ export function DiscoveryView({ recentRuns }: { recentRuns: DiscoveryRunRecord[]
 
               {discovery.candidates.length === 0 ? (
                 <EmptyState
-                  title={discovery.preKvk ? "Tijdelijke selectie afgerond" : "Geen kandidaten gevonden"}
+                  title={discovery.preKvk ? "Geen nieuwe leads uit deze run" : "Geen kandidaten gevonden"}
                   description={discovery.preKvk
-                    ? `${discovery.preKvk.potentialNoWebsiteCandidates} mogelijke no-website kandidaat/kandidaten in memory; niets opgeslagen.`
+                    ? `${discovery.preKvk.googleCandidates} Google-kandidaten, ${discovery.preKvk.websiteListedSkipped} met vermelde website, ${discovery.preKvk.officialWebsiteNotFound} zonder gevonden website; er zijn geen leads aangemaakt.`
                     : "Probeer andere filters of een grotere limiet."}
                 />
               ) : (

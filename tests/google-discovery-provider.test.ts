@@ -67,7 +67,7 @@ test("searchPage sends minimal field mask, headers, and structured payload", asy
   assert.equal(headers["X-Goog-Api-Key"], "secret-api-key-123");
   assert.equal(
     headers["X-Goog-FieldMask"],
-    "places.id,places.displayName,places.addressComponents,places.websiteUri,nextPageToken"
+    "places.id,places.displayName,places.addressComponents,places.websiteUri,places.nationalPhoneNumber,places.rating,places.userRatingCount,nextPageToken"
   );
   assert.equal(headers["Content-Type"], "application/json");
 
@@ -99,6 +99,7 @@ test("searchPage sends minimal field mask, headers, and structured payload", asy
     addition: "A",
     street: "Kerkstraat",
     city: "Eindhoven",
+    province: null,
     countryCode: "NL",
   });
 });
@@ -340,12 +341,15 @@ test("ensures candidates contain ONLY TemporaryGoogleCandidate fields and no ext
   });
 
   const candidate = page.candidates[0] as unknown as Record<string, unknown>;
-  const allowedKeys = ["kind", "placeId", "displayName", "websiteUrl", "websiteListingStatus", "address"];
+  // Contact-/zichtbaarheidssignalen komen uit dezelfde Enterprise-SKU als websiteUri;
+  // ontbrekende waarden blijven eerlijk null (nooit verzonnen), geen andere extra velden.
+  const allowedKeys = ["kind", "placeId", "displayName", "websiteUrl", "websiteListingStatus", "address", "phone", "rating", "reviewCount"];
   const actualKeys = Object.keys(candidate);
 
   assert.deepEqual(actualKeys.sort(), allowedKeys.sort());
-  assert.equal(candidate.rating, undefined);
-  assert.equal(candidate.phone, undefined);
+  assert.equal(candidate.rating, null);
+  assert.equal(candidate.phone, null);
+  assert.equal(candidate.reviewCount, null);
   assert.equal(candidate.website, undefined);
   assert.equal(candidate.metadata, undefined);
 });

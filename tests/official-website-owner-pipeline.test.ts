@@ -26,8 +26,12 @@ function temporary(placeId: string, listed = false): TemporaryGoogleCandidate {
       addition: null,
       street: "Teststraat",
       city: "Utrecht",
+      province: "Utrecht",
       countryCode: "NL",
     },
+    phone: placeId === "missing" ? "030 123 4567" : null,
+    rating: placeId === "missing" ? 4.6 : null,
+    reviewCount: placeId === "missing" ? 31 : null,
   };
 }
 
@@ -35,7 +39,7 @@ function stableLeadSnapshot(value: unknown): string {
   return JSON.stringify(value);
 }
 
-test("owner-triggered Google pipeline aggregates all four website outcomes and retains only not_found", async () => {
+test("owner-triggered Google pipeline aggregates all four website outcomes and creates leads only from bounded not_found", async () => {
   const runs = new MockDiscoveryRunRepository();
   const outcomes: Record<string, OfficialWebsiteDiscoveryResult> = {
     verified: {
@@ -75,7 +79,7 @@ test("owner-triggered Google pipeline aggregates all four website outcomes and r
   const discovery = new LeadDiscoveryService({ google });
   const orchestrator = new DiscoveryOrchestrator(runs, discovery);
   const leadRepository = getLeadRepository();
-  const beforeLeads = await leadRepository.list();
+  const beforeLeads = [...(await leadRepository.list())]; // copy: the memory repository returns its live array
   const beforeSnapshot = stableLeadSnapshot(beforeLeads);
 
   const result = await orchestrator.runCommand({
@@ -90,9 +94,16 @@ test("owner-triggered Google pipeline aggregates all four website outcomes and r
   assert.equal(result.status, "completed");
   assert.equal(googleCalls, 1, "existing owner limit stops Google pagination after four unlisted candidates");
   assert.deepEqual(officialCalls, ["verified", "ambiguous", "missing", "technical"]);
-  assert.deepEqual(result.discovery?.candidates, []);
-  assert.equal(result.discovery?.createdLeads, 0);
-  assert.deepEqual(result.createdLeadSummaries, []);
+  // Only the bounded not_found candidate enters the existing enrich → dedupe → create → score chain.
+  assert.equal(result.discovery?.candidates.length, 1);
+  assert.equal(result.discovery?.candidates[0]?.status, "created");
+  assert.equal(result.discovery?.candidates[0]?.websiteStatus, "no_website");
+  assert.equal(result.discovery?.candidates[0]?.candidate.externalId, "google-place:missing");
+  assert.equal(result.discovery?.candidates[0]?.candidate.email, null, "no email is ever invented");
+  assert.equal(result.discovery?.createdLeads, 1);
+  assert.equal(result.createdLeadSummaries.length, 1);
+  assert.equal(result.createdLeadSummaries[0]?.businessName, "Temporary Business missing");
+  assert.ok(result.createdLeadSummaries[0]!.score > 0, "existing scoring ran on create");
   assert.deepEqual(result.errors, []);
   assert.deepEqual(result.discovery?.preKvk, {
     phase: "google_official_website_discovery_v2",
@@ -105,25 +116,40 @@ test("owner-triggered Google pipeline aggregates all four website outcomes and r
     officialWebsiteNotFound: 1,
     officialWebsiteTechnicalErrors: 1,
     potentialNoWebsiteCandidates: 1,
+    leadsCreated: 1,
     quotaMet: false,
     stopReason: "search_budget",
   });
 
   const [run] = await runs.list(1);
   assert.equal(run.status, "completed");
-  assert.equal(run.createdLeads, 0);
-  assert.deepEqual(run.createdLeadIds, []);
-  assert.deepEqual(run.summary.created, []);
+  assert.equal(run.createdLeads, 1);
+  assert.equal(run.createdLeadIds.length, 1);
+  assert.equal(run.summary.created.length, 1);
   assert.deepEqual(run.summary.duplicateReasons, {});
   assert.deepEqual(run.summary.preKvk, result.discovery?.preKvk);
 
+  // Listed, verified, ambiguous and technical_error candidates never reach the run record,
+  // and no search results, URLs or raw address lines are persisted.
   const serializedRun = JSON.stringify(run);
   for (const forbidden of [
-    "already-listed", "verified-private-result", "Temporary Business", "Teststraat", "3512 AB",
+    "already-listed", "verified-private-result", "Temporary Business verified", "Temporary Business ambiguous",
+    "Temporary Business technical", "Teststraat", "3512 AB", "https://",
   ]) assert.doesNotMatch(serializedRun, new RegExp(forbidden, "i"));
 
   const afterLeads = await leadRepository.list();
-  assert.equal(stableLeadSnapshot(afterLeads), beforeSnapshot, "normal leads and their scoring/outreach state remain untouched");
+  assert.equal(afterLeads.length, beforeLeads.length + 1, "exactly one new lead");
+  const created = afterLeads.find((lead) => lead.id === run.createdLeadIds[0]);
+  assert.ok(created);
+  assert.equal(created.websiteStatus, "no_website");
+  assert.equal(created.email, null);
+  assert.equal(created.phone, "030 123 4567");
+  assert.equal(created.googleRating, 4.6);
+  assert.equal(created.reviewCount, 31);
+  assert.equal(created.leadStatus, "new");
+  assert.match(created.notes.join(" "), /geen bewijs dat er geen website bestaat/i);
+  const untouched = afterLeads.filter((lead) => lead.id !== created.id);
+  assert.equal(stableLeadSnapshot(untouched), beforeSnapshot, "existing leads and their scoring/outreach state remain untouched");
 });
 
 test("technical website outcomes are aggregate-only and never become potential no-website candidates", async () => {

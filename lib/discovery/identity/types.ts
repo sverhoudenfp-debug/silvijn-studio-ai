@@ -11,8 +11,14 @@ export interface TemporaryGoogleCandidate {
     addition: string | null;
     street: string | null;
     city: string | null;
+    /** administrative_area_level_1 (provincie); nodig voor de bestaande enrichment. */
+    province?: string | null;
     countryCode: string | null;
   };
+  /** Contact-/zichtbaarheidssignalen uit dezelfde Google Enterprise-SKU als websiteUri (geen extra kosten). */
+  phone?: string | null;
+  rating?: number | null;
+  reviewCount?: number | null;
 }
 export interface GoogleDiscoveryPage {
   candidates: TemporaryGoogleCandidate[];

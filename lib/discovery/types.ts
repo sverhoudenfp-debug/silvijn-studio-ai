@@ -78,6 +78,8 @@ export interface GooglePreKvkSummary {
   officialWebsiteNotFound: number;
   officialWebsiteTechnicalErrors: number;
   potentialNoWebsiteCandidates: number;
+  /** Leads die via de bestaande creatieketen uit not_found-kandidaten zijn gemaakt (telling). */
+  leadsCreated?: number;
   quotaMet: boolean;
   stopReason: "quota_met" | "search_budget" | "results_exhausted" | "page_limit" | "candidate_limit" | "technical_error";
 }

@@ -34,6 +34,9 @@ const googlePlaceSchema = z.object({
   }),
   addressComponents: z.array(googleAddressComponentSchema).optional(),
   websiteUri: z.string().nullable().optional(),
+  nationalPhoneNumber: z.string().nullable().optional(),
+  rating: z.number().min(0).max(5).nullable().optional(),
+  userRatingCount: z.number().int().min(0).nullable().optional(),
 });
 
 const googlePlacesResponseSchema = z.object({
@@ -48,7 +51,7 @@ export interface GooglePlacesProviderOptions {
 }
 
 const GOOGLE_PLACES_TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText";
-const REQUIRED_FIELD_MASK = "places.id,places.displayName,places.addressComponents,places.websiteUri,nextPageToken";
+const REQUIRED_FIELD_MASK = "places.id,places.displayName,places.addressComponents,places.websiteUri,places.nationalPhoneNumber,places.rating,places.userRatingCount,nextPageToken";
 const MAX_RESPONSE_BODY_SIZE = 256 * 1024; // 256 KB
 
 export class GooglePlacesDiscoveryProvider {
@@ -258,6 +261,7 @@ export class GooglePlacesDiscoveryProvider {
     let street: string | null = null;
     let postalCode: string | null = null;
     let city: string | null = null;
+    let province: string | null = null;
     let countryCode: string | null = null;
 
     if (place.addressComponents && Array.isArray(place.addressComponents)) {
@@ -278,6 +282,8 @@ export class GooglePlacesDiscoveryProvider {
           if (!city) {
             city = longVal || shortVal || null;
           }
+        } else if (types.includes("administrative_area_level_1")) {
+          province = longVal || shortVal || null;
         } else if (types.includes("country")) {
           countryCode = shortVal || longVal || null;
         }
@@ -303,8 +309,12 @@ export class GooglePlacesDiscoveryProvider {
         addition,
         street,
         city,
+        province,
         countryCode,
       },
+      phone: place.nationalPhoneNumber?.trim() || null,
+      rating: typeof place.rating === "number" ? place.rating : null,
+      reviewCount: typeof place.userRatingCount === "number" ? place.userRatingCount : null,
     };
   }
 }

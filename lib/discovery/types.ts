@@ -68,6 +68,7 @@ export interface DiscoveryCandidateResult {
 }
 
 export interface DiscoveryResult {
+  identity?: import("./identity/persistence").IdentityDiscoverySummary;
   candidates: DiscoveryCandidateResult[];
   totalFound: number;
   source: string;

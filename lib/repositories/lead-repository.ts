@@ -11,6 +11,8 @@ import { getSupabaseServerClient, isSupabaseConfigured } from "@/lib/supabase/se
  */
 
 export interface LeadCreateInput {
+  kvkNumber?: string | null;
+  establishmentNumber?: string | null;
   businessName: string;
   industry: string;
   city: string;
@@ -52,6 +54,8 @@ export interface LeadRepository {
 function prepareNewLead(input: LeadCreateInput, id: string, now: string): Lead {
   const lead: Lead = {
     id,
+    kvkNumber: input.kvkNumber ?? null,
+    establishmentNumber: input.establishmentNumber ?? null,
     businessName: input.businessName,
     industry: input.industry,
     address: input.address ?? null,
@@ -83,6 +87,8 @@ function prepareNewLead(input: LeadCreateInput, id: string, now: string): Lead {
 }
 
 interface LeadRow {
+  kvk_number?: string | null;
+  kvk_establishment_number?: string | null;
   id: string;
   business_name: string;
   industry: string;
@@ -113,6 +119,8 @@ interface LeadRow {
 function rowToLead(row: LeadRow): Lead {
   return {
     id: row.id,
+    kvkNumber: row.kvk_number ?? null,
+    establishmentNumber: row.kvk_establishment_number ?? null,
     businessName: row.business_name,
     industry: row.industry,
     address: row.address,
@@ -142,6 +150,7 @@ function rowToLead(row: LeadRow): Lead {
 
 function leadToRow(lead: Lead): Record<string, unknown> {
   return {
+    ...(lead.kvkNumber ? { kvk_number: lead.kvkNumber, kvk_establishment_number: lead.establishmentNumber ?? null } : {}),
     business_name: lead.businessName,
     industry: lead.industry,
     address: lead.address,

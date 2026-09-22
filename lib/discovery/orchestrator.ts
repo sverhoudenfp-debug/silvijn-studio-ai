@@ -1,4 +1,5 @@
 import "server-only";
+import { isKnownDiscoverySource, mockDiscoveryAllowed } from "./provider-safety";
 import { getLeadRepository } from "@/lib/repositories/lead-repository";
 import {
   getDiscoveryRunRepository,
@@ -72,10 +73,13 @@ export function validateDiscoveryCommand(input: DiscoveryCommandInput): {
   effectiveLimit: number;
   command: string;
 } {
+  if (!isKnownDiscoverySource(input.source)) throw new DiscoveryInputError("UNKNOWN_DISCOVERY_PROVIDER");
+  if (input.source === "mock" && !mockDiscoveryAllowed()) throw new DiscoveryInputError("MOCK_DISCOVERY_FORBIDDEN");
   const country = (normalize(input.country) ?? "NL").toUpperCase();
   if (!/^[A-Z]{2}$/.test(country)) {
     throw new DiscoveryInputError("Land moet een ISO-landcode van 2 letters zijn");
   }
+  if (input.source === "google" && country !== "NL") throw new DiscoveryInputError("GOOGLE_IDENTITY_NL_ONLY");
   const province = normalize(input.province);
   const city = normalize(input.city);
   const industry = normalize(input.industry);
@@ -157,7 +161,7 @@ export class DiscoveryOrchestrator {
 
     const started = Date.now();
     try {
-      const result = await this.discovery.discover(request);
+      const result = await this.discovery.discover(request, { runId: run.id });
 
       // 2) Scores/prioriteiten van aangemaakte leads ophalen via de bestaande
       //    repository (score is bij creatie berekend door de scoring agent).
@@ -184,7 +188,7 @@ export class DiscoveryOrchestrator {
         const reason = candidate.reason ?? "duplicaat";
         duplicateReasons[reason] = (duplicateReasons[reason] ?? 0) + 1;
       }
-      const summary: DiscoveryRunSummary = { created: createdLeadSummaries, duplicateReasons };
+      const summary: DiscoveryRunSummary = { created: createdLeadSummaries, duplicateReasons, ...(result.identity ? { identity: result.identity } : {}) };
 
       const durationMs = Date.now() - started;
       // Eerlijke run-status: fouten (providerfout of mislukte kandidaten) markeren
@@ -211,6 +215,7 @@ export class DiscoveryOrchestrator {
         source: result.source,
         found: result.totalFound,
         created: result.createdLeads,
+          ...(result.identity ? { verifiedCandidates: result.identity.persisted, quotaMet: result.identity.quotaMet } : {}),
         duplicates: result.duplicatesSkipped,
         invalid: result.invalidCandidatesSkipped,
         durationMs,

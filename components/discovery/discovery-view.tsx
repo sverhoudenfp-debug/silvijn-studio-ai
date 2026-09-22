@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { runDiscovery, type DiscoveryFormInput } from "@/app/(dashboard)/lead-discovery/actions";
-import { DISCOVERY_SOURCES } from "@/lib/discovery/providers";
+import { DISCOVERY_SOURCES } from "@/lib/discovery/source-options";
 import type { DiscoveryCommandResult } from "@/lib/discovery/orchestrator";
 import type { DiscoveryRunRecord } from "@/lib/discovery/run-types";
 import { Badge } from "@/components/ui/badge";
@@ -92,7 +92,7 @@ export function DiscoveryView({ recentRuns }: { recentRuns: DiscoveryRunRecord[]
     city: "",
     industry: "",
     query: "",
-    source: "mock",
+    source: "google",
     limit: 20,
   });
   const [result, setResult] = useState<DiscoveryCommandResult | null>(null);
@@ -122,7 +122,7 @@ export function DiscoveryView({ recentRuns }: { recentRuns: DiscoveryRunRecord[]
       <div>
         <h2 className="text-2xl font-semibold tracking-tight text-zinc-50">Lead Discovery</h2>
         <p className="mt-1 text-sm text-zinc-400">
-          Geef een expliciete discovery-opdracht: bedrijven ontdekken, controleren op duplicaten, verrijken, scoren en opslaan als lead — nooit outreach.
+          Google + KVK verifieert bedrijfsidentiteiten en bewaart kandidaten. Phase 1 doet nog geen websitekwalificatie, scoring of outreach.
         </p>
       </div>
 
@@ -239,7 +239,13 @@ export function DiscoveryView({ recentRuns }: { recentRuns: DiscoveryRunRecord[]
             <>
               <div className="flex flex-wrap gap-2">
                 <Chip label="Gevonden" value={discovery.totalFound} />
-                <Chip label="Nieuwe leads" value={discovery.createdLeads} tone="ok" />
+                <Chip label={discovery.identity ? "Nieuwe KVK-kandidaten" : "Nieuwe leads"} value={discovery.identity?.persisted ?? discovery.createdLeads} tone="ok" />
+                {discovery.identity && <>
+                  <Chip label="Ambiguous" value={discovery.identity.ambiguous} tone="warn" />
+                  <Chip label="Unmatched" value={discovery.identity.unmatched} tone="warn" />
+                  <Chip label="Stopreden" value={discovery.identity.stopReason} />
+                  <Chip label="Quotum gehaald" value={discovery.identity.quotaMet ? "Ja" : "Nee"} />
+                </>}
                 <Chip label="Duplicaten/bestaand" value={discovery.duplicatesSkipped} tone="warn" />
                 <Chip label="Ongeldig" value={discovery.invalidCandidatesSkipped} tone="warn" />
                 <Chip label="Fouten" value={discovery.errors.length} tone={discovery.errors.length ? "error" : undefined} />
@@ -360,7 +366,7 @@ export function DiscoveryView({ recentRuns }: { recentRuns: DiscoveryRunRecord[]
                       </Badge>
                     </td>
                     <td className="px-3 py-2.5 text-zinc-300">{run.totalFound ?? "—"}</td>
-                    <td className="px-3 py-2.5 text-emerald-400">{run.createdLeads ?? "—"}</td>
+                    <td className="px-3 py-2.5 text-emerald-400">{run.summary.identity ? `${run.summary.identity.persisted} kandidaten` : `${run.createdLeads ?? "—"} leads`}</td>
                     <td className="px-3 py-2.5 text-amber-400">{run.duplicatesSkipped ?? "—"}</td>
                     <td className="px-3 py-2.5 text-zinc-400">{formatDateTime(run.startedAt)}</td>
                   </tr>

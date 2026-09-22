@@ -29,9 +29,10 @@ const KNOWN_SOURCES: DiscoverySource[] = ["mock", "google", "directory"];
 export async function runDiscovery(input: DiscoveryFormInput): Promise<DiscoveryCommandResult> {
   await requireStudioOwner();
   const { user } = await requireStudioOwner();
-  const source = KNOWN_SOURCES.includes(input.source as DiscoverySource)
-    ? (input.source as DiscoverySource)
-    : "mock";
+  if (!KNOWN_SOURCES.includes(input.source as DiscoverySource)) {
+    return { runId: null, command: "", status: "rejected", discovery: null, createdLeadSummaries: [], errors: ["UNKNOWN_DISCOVERY_PROVIDER"] };
+  }
+  const source = input.source as DiscoverySource;
 
   const orchestrator = new DiscoveryOrchestrator();
   try {

@@ -28,6 +28,9 @@ export interface LeadAiAnalysis {
 
 export interface Lead {
   id: string;
+  /** Additive enterprise identity; legacy leads remain null/unidentified. */
+  kvkNumber?: string | null;
+  establishmentNumber?: string | null;
   businessName: string;
   industry: string;
   address: string | null;

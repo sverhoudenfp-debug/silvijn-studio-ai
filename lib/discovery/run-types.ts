@@ -28,6 +28,7 @@ export interface DiscoveryRunLeadSummary {
 }
 
 export interface DiscoveryRunSummary {
+  identity?: import("./identity/persistence").IdentityDiscoverySummary;
   created: DiscoveryRunLeadSummary[];
   duplicateReasons: Record<string, number>;
 }

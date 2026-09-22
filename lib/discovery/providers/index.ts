@@ -1,56 +1,28 @@
+import "server-only";
 import type { DiscoverySource, LeadDiscoveryProvider } from "../types";
 import { MockDiscoveryProvider } from "./mock-provider";
-
-/**
- * Provider-registry — kiest de discovery-bron op request.source.
- * Echte providers (google, directory) melden MISSING CONFIGURATION
- * in plaats van nepdata te leveren of te crashen.
- */
-
+import { GooglePlacesDiscoveryProvider } from "./google-places-provider";
+import { mockDiscoveryAllowed } from "../provider-safety";
+export { DISCOVERY_SOURCES } from "../source-options";
 export class DiscoveryConfigurationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "DiscoveryConfigurationError";
-  }
+  constructor(message: string) { super(message); this.name = "DiscoveryConfigurationError"; }
 }
-
-class GoogleBusinessProviderStub {
-  readonly id = "google";
-  readonly name = "Google Business Provider (nog niet geconfigureerd)";
-  readonly live = true;
-
-  async search(): Promise<never> {
-    throw new DiscoveryConfigurationError(
-      "MISSING CONFIGURATION: GOOGLE_PLACES_API_KEY — de Google-provider is nog niet geconfigureerd."
-    );
-  }
-}
-
-class DirectoryProviderStub {
+class DirectoryProviderStub implements LeadDiscoveryProvider {
   readonly id = "directory";
-  readonly name = "Bedrijfsdirectory Provider (nog niet geconfigureerd)";
+  readonly name = "Bedrijfsdirectory (niet geconfigureerd)";
   readonly live = true;
-
-  async search(): Promise<never> {
-    throw new DiscoveryConfigurationError(
-      "MISSING CONFIGURATION: DIRECTORY_API_KEY — de directory-provider is nog niet geconfigureerd."
-    );
-  }
+  async search(): Promise<never> { throw new DiscoveryConfigurationError("DIRECTORY_NOT_CONFIGURED"); }
 }
-
-export function getDiscoveryProvider(source: DiscoverySource): LeadDiscoveryProvider {
+export function getDiscoveryProvider(source: "google"): GooglePlacesDiscoveryProvider;
+export function getDiscoveryProvider(source: "mock" | "directory"): LeadDiscoveryProvider;
+export function getDiscoveryProvider(source: DiscoverySource): LeadDiscoveryProvider | GooglePlacesDiscoveryProvider;
+export function getDiscoveryProvider(source: DiscoverySource): LeadDiscoveryProvider | GooglePlacesDiscoveryProvider {
   switch (source) {
-    case "google":
-      return new GoogleBusinessProviderStub() as unknown as LeadDiscoveryProvider;
-    case "directory":
-      return new DirectoryProviderStub() as unknown as LeadDiscoveryProvider;
-    default:
+    case "google": return new GooglePlacesDiscoveryProvider();
+    case "directory": return new DirectoryProviderStub();
+    case "mock":
+      if (!mockDiscoveryAllowed()) throw new DiscoveryConfigurationError("MOCK_DISCOVERY_FORBIDDEN");
       return new MockDiscoveryProvider();
+    default: throw new DiscoveryConfigurationError("UNKNOWN_DISCOVERY_PROVIDER");
   }
 }
-
-export const DISCOVERY_SOURCES: { id: DiscoverySource; label: string; available: boolean }[] = [
-  { id: "mock", label: "Mock (fictieve testbedrijven)", available: true },
-  { id: "google", label: "Google Business (vereist configuratie)", available: false },
-  { id: "directory", label: "Bedrijfsdirectory (vereist configuratie)", available: false },
-];

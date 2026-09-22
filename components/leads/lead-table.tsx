@@ -9,6 +9,7 @@ import {
   websiteStatusMeta,
 } from "@/lib/mock-data";
 import type { Lead } from "@/lib/types";
+import { needsManualContact } from "@/lib/outreach/contactability";
 import { scoreCategory, scoreVariant } from "@/lib/utils";
 
 export function LeadTable({ leads }: { leads: Lead[] }) {
@@ -68,9 +69,16 @@ export function LeadTable({ leads }: { leads: Lead[] }) {
                   </Badge>
                 </td>
                 <td className="px-3 py-3">
-                  <Badge variant={outreachStatusMeta[lead.outreachStatus].variant}>
-                    {outreachStatusMeta[lead.outreachStatus].label}
-                  </Badge>
+                  <span className="flex flex-wrap gap-1">
+                    <Badge variant={outreachStatusMeta[lead.outreachStatus].variant}>
+                      {outreachStatusMeta[lead.outreachStatus].label}
+                    </Badge>
+                    {needsManualContact(lead) && (
+                      <span title="Geen e-mailadres bekend: outreach slaat deze lead over">
+                        <Badge variant="warning">Handmatig contact</Badge>
+                      </span>
+                    )}
+                  </span>
                 </td>
                 <td className="px-3 py-3">
                   <Badge variant={demoStatusMeta[lead.demoStatus].variant}>

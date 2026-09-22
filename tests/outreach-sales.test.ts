@@ -108,6 +108,27 @@ test("review campaign creates drafts for human review without sending or state c
   assert.equal(after!.outreachStatus, "not_contacted");
 });
 
+test("leads without e-mail are reported as skipped with a manual-contact reason and never get a draft", async () => {
+  const noEmail = await seedLead({ email: null, phone: "040 987 6543" });
+  const orchestrator = new OutreachOrchestrator();
+  const result = await orchestrator.runCommand({ ownerUserId: owner, mode: "auto", limit: 25 });
+
+  assert.equal(result.command.status, "completed");
+  const entry = result.summary.leads.find((l) => l.leadId === noEmail.id);
+  assert.ok(entry, "no-email lead must be visible in the command summary");
+  assert.equal(entry!.outcome, "skipped");
+  assert.match(entry!.detail ?? "", /handmatig contact/i);
+  assert.match(entry!.detail ?? "", /040 987 6543/);
+  assert.ok((result.command.skipped ?? 0) >= 1);
+  assert.ok(!result.command.selectedLeadIds?.includes(noEmail.id), "never selected for outreach");
+
+  const drafts = (await getOutreachRepository().list()).filter((d) => d.leadId === noEmail.id);
+  assert.equal(drafts.length, 0, "no draft, no invented address");
+  const after = await getLeadRepository().get(noEmail.id);
+  assert.equal(after!.email, null);
+  assert.equal(after!.outreachStatus, "not_contacted");
+});
+
 // ---------------------------------------------------------------------------
 // Auto-modus: autonoom verzenden binnen de expliciete opdracht
 // ---------------------------------------------------------------------------

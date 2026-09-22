@@ -1,4 +1,5 @@
 import "server-only";
+import { manualContactDetail, needsManualContact } from "./contactability";
 import { isOutreachSuppressed } from "@/lib/leads/lifecycle";
 import { automatedLeadTransition } from "@/lib/leads/automated";
 import { getLeadRepository } from "@/lib/repositories/lead-repository";
@@ -145,6 +146,19 @@ export class OutreachOrchestrator {
         )
         .sort((a, b) => (b.leadScore ?? 0) - (a.leadScore ?? 0))
         .slice(0, effectiveLimit);
+
+      // Honest reporting: leads outreach would take but cannot e-mail. Never
+      // guess an address; surface them as skipped so Silvijn contacts them.
+      const MAX_MANUAL_CONTACT_REPORTS = 25;
+      for (const lead of leads.filter(needsManualContact).sort((a, b) => (b.leadScore ?? 0) - (a.leadScore ?? 0)).slice(0, MAX_MANUAL_CONTACT_REPORTS)) {
+        leadSummaries.push({
+          leadId: lead.id,
+          businessName: lead.businessName,
+          leadStatus: lead.leadStatus,
+          outcome: "skipped",
+          detail: manualContactDetail(lead),
+        });
+      }
 
       for (const lead of selected) {
         try {

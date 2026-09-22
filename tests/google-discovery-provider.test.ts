@@ -79,7 +79,7 @@ test("searchPage sends minimal field mask, headers, and structured payload", asy
     payload.textQuery,
     "Bakkerij ambachtelijk Eindhoven Noord-Brabant Nederland"
   );
-  assert.equal(payload.pageSize, 10);
+  assert.equal(payload.pageSize, 20, "owner limit is a search budget, never the Google page size");
   assert.equal(payload.regionCode, "NL");
   assert.equal(payload.languageCode, "nl");
   assert.equal(payload.pageToken, undefined);
@@ -104,7 +104,7 @@ test("searchPage sends minimal field mask, headers, and structured payload", asy
   });
 });
 
-test("pageSize is capped at 20 and pageToken is passed when provided", async () => {
+test("pageSize is always the Google maximum of 20 and pageToken is passed when provided", async () => {
   let capturedPayload: Record<string, unknown> = {};
 
   const fakeFetcher: typeof fetch = async (_url, init) => {
@@ -126,7 +126,7 @@ test("pageSize is capped at 20 and pageToken is passed when provided", async () 
 
   await provider.searchPage(request, "page_token_xyz");
 
-  assert.equal(capturedPayload.pageSize, 20); // capped at 20
+  assert.equal(capturedPayload.pageSize, 20);
   assert.equal(capturedPayload.pageToken, "page_token_xyz");
 });
 

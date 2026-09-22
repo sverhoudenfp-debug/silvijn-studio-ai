@@ -51,6 +51,7 @@ export interface GooglePlacesProviderOptions {
 }
 
 const GOOGLE_PLACES_TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText";
+const GOOGLE_PLACES_PAGE_SIZE = 20;
 const REQUIRED_FIELD_MASK = "places.id,places.displayName,places.addressComponents,places.websiteUri,places.nationalPhoneNumber,places.rating,places.userRatingCount,nextPageToken";
 const MAX_RESPONSE_BODY_SIZE = 256 * 1024; // 256 KB
 
@@ -95,7 +96,11 @@ export class GooglePlacesDiscoveryProvider {
     queryParts.push("Nederland");
 
     const textQuery = queryParts.join(" ").trim();
-    const pageSize = Math.max(1, Math.min(request.limit || 20, 20));
+    // Always request the maximum page size. Google bills per request, not per
+    // result, and the owner limit is a lead/search budget, not a page size:
+    // most top-ranked businesses already list a website, so small pages would
+    // exhaust the page limit before any no_website_listed candidate appears.
+    const pageSize = GOOGLE_PLACES_PAGE_SIZE;
 
     const payload: Record<string, unknown> = {
       textQuery,

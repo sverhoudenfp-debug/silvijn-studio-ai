@@ -1,6 +1,8 @@
 
 import { requireStudioOwner } from "@/lib/auth/server";
 import { ActivityList } from "@/components/dashboard/activity-list";
+import { NeedsSilvijnList } from "@/components/dashboard/needs-silvijn-list";
+import { loadNeedsSilvijn } from "@/lib/dashboard/needs-silvijn";
 import { AutomationStatus } from "@/components/dashboard/automation-status";
 import { LeadPipeline } from "@/components/dashboard/lead-pipeline";
 import { OpportunityList } from "@/components/dashboard/opportunity-list";
@@ -22,12 +24,13 @@ import { getLeadRepository } from "@/lib/repositories/lead-repository";
 
 export default async function DashboardPage() {
   await requireStudioOwner();
-  const [analytics, activities, outreachDrafts, automations, leads] = await Promise.all([
+  const [analytics, activities, outreachDrafts, automations, leads, needsSilvijn] = await Promise.all([
     getAgencyAnalytics(),
     getAIActivityRepository().listRecent(8),
     getOutreachRepository().list(),
     getAutomationRepository().list(),
     getLeadRepository().list(),
+    loadNeedsSilvijn(),
   ]);
 
   // AI-mode veilig lezen (fail-loud config in productie vangbaar tonen).
@@ -73,6 +76,7 @@ export default async function DashboardPage() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
+          <NeedsSilvijnList items={needsSilvijn.items} unavailable={needsSilvijn.unavailable} />
           <ActivityList activities={activities} />
           <OpportunityList leads={leads} />
           <OutreachList drafts={outreachDrafts} />

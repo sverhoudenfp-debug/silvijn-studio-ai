@@ -165,21 +165,27 @@ export class DiscoveryOrchestrator {
 
       // 2) Scores/prioriteiten van aangemaakte leads ophalen via de bestaande
       //    repository (score is bij creatie berekend door de scoring agent).
-      const leadRepository = getLeadRepository();
       const createdLeadSummaries: DiscoveryRunLeadSummary[] = [];
-      for (const candidate of result.candidates) {
-        if (candidate.status !== "created" || !candidate.leadId) continue;
-        const lead = await leadRepository.get(candidate.leadId);
-        if (!lead) continue;
-        createdLeadSummaries.push({
-          leadId: lead.id,
-          businessName: lead.businessName,
-          industry: lead.industry,
-          city: lead.city,
-          websiteStatus: lead.websiteStatus,
-          score: lead.leadScore,
-          priority: scorePriority(lead.leadScore),
-        });
+      const createdCandidates = result.candidates.filter(
+        (candidate) => candidate.status === "created" && Boolean(candidate.leadId)
+      );
+      // Google official-website discovery never enters the lead repository or
+      // scoring path because it returns no created candidates.
+      if (createdCandidates.length > 0) {
+        const leadRepository = getLeadRepository();
+        for (const candidate of createdCandidates) {
+          const lead = await leadRepository.get(candidate.leadId as string);
+          if (!lead) continue;
+          createdLeadSummaries.push({
+            leadId: lead.id,
+            businessName: lead.businessName,
+            industry: lead.industry,
+            city: lead.city,
+            websiteStatus: lead.websiteStatus,
+            score: lead.leadScore,
+            priority: scorePriority(lead.leadScore),
+          });
+        }
       }
 
       const duplicateReasons: Record<string, number> = {};
@@ -225,6 +231,11 @@ export class DiscoveryOrchestrator {
             googleCandidates: result.preKvk.googleCandidates,
             noWebsiteListed: result.preKvk.noWebsiteListed,
             websiteListedSkipped: result.preKvk.websiteListedSkipped,
+            officialWebsiteVerified: result.preKvk.officialWebsiteVerified,
+            officialWebsiteAmbiguous: result.preKvk.officialWebsiteAmbiguous,
+            officialWebsiteNotFound: result.preKvk.officialWebsiteNotFound,
+            officialWebsiteTechnicalErrors: result.preKvk.officialWebsiteTechnicalErrors,
+            potentialNoWebsiteCandidates: result.preKvk.potentialNoWebsiteCandidates,
             quotaMet: result.preKvk.quotaMet,
           } : {}),
         duplicates: result.duplicatesSkipped,

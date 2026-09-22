@@ -68,13 +68,18 @@ export interface DiscoveryCandidateResult {
 }
 
 export interface GooglePreKvkSummary {
-  phase: "google_no_website_listed_v1";
+  phase: "google_official_website_discovery_v2";
   requested: number;
   googleCandidates: number;
   noWebsiteListed: number;
   websiteListedSkipped: number;
+  officialWebsiteVerified: number;
+  officialWebsiteAmbiguous: number;
+  officialWebsiteNotFound: number;
+  officialWebsiteTechnicalErrors: number;
+  potentialNoWebsiteCandidates: number;
   quotaMet: boolean;
-  stopReason: "quota_met" | "results_exhausted" | "page_limit" | "candidate_limit" | "technical_error";
+  stopReason: "quota_met" | "search_budget" | "results_exhausted" | "page_limit" | "candidate_limit" | "technical_error";
 }
 
 export interface DiscoveryResult {

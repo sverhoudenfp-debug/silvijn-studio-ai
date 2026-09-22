@@ -85,17 +85,25 @@ test("pre-KVK step keeps only no_website_listed candidates and records counts on
         };
       },
     },
+    officialWebsite: {
+      async discover() { return { status: "not_found" as const, inspectedCandidates: 0 }; },
+    },
   });
 
   const selection = await service.select(request);
   assert.deepEqual(selection.temporaryCandidates.map((candidate) => candidate.placeId), ["missing-1", "missing-2"]);
   assert.ok(selection.temporaryCandidates.every((candidate) => candidate.websiteListingStatus === "no_website_listed"));
   assert.deepEqual(selection.summary, {
-    phase: "google_no_website_listed_v1",
+    phase: "google_official_website_discovery_v2",
     requested: 2,
     googleCandidates: 3,
     noWebsiteListed: 2,
     websiteListedSkipped: 1,
+    officialWebsiteVerified: 0,
+    officialWebsiteAmbiguous: 0,
+    officialWebsiteNotFound: 2,
+    officialWebsiteTechnicalErrors: 0,
+    potentialNoWebsiteCandidates: 2,
     quotaMet: true,
     stopReason: "quota_met",
   });
@@ -107,24 +115,30 @@ test("pre-KVK step keeps only no_website_listed candidates and records counts on
 });
 
 test("production Google branch stops before KVK, repositories, lead creation, scoring and outreach", async () => {
-  const originalKey = process.env.GOOGLE_PLACES_API_KEY;
-  const originalFetch = globalThis.fetch;
-  process.env.GOOGLE_PLACES_API_KEY = "test-key";
-  globalThis.fetch = (async () => googleResponse()) as typeof fetch;
-  try {
-    const result = await new LeadDiscoveryService().discover({ ...request, limit: 1 }, { runId: "run-not-used" });
-    assert.equal(result.preKvk?.noWebsiteListed, 1);
-    assert.equal(result.preKvk?.quotaMet, true);
-    assert.equal(result.createdLeads, 0);
-    assert.deepEqual(result.candidates, []);
-    assert.deepEqual(result.errors, []);
-  } finally {
-    globalThis.fetch = originalFetch;
-    if (originalKey === undefined) delete process.env.GOOGLE_PLACES_API_KEY;
-    else process.env.GOOGLE_PLACES_API_KEY = originalKey;
-  }
+  const google = new GoogleNoWebsiteListedDiscoveryService({
+    provider: {
+      async searchPage() {
+        return { candidates: [temporary("missing-production", false)], nextPageToken: null };
+      },
+    },
+    officialWebsite: {
+      async discover() { return { status: "not_found" as const, inspectedCandidates: 0 }; },
+    },
+  });
+  const result = await new LeadDiscoveryService({ google }).discover(
+    { ...request, limit: 1 },
+    { runId: "run-not-used" }
+  );
+  assert.equal(result.preKvk?.noWebsiteListed, 1);
+  assert.equal(result.preKvk?.officialWebsiteNotFound, 1);
+  assert.equal(result.preKvk?.potentialNoWebsiteCandidates, 1);
+  assert.equal(result.preKvk?.quotaMet, true);
+  assert.equal(result.createdLeads, 0);
+  assert.deepEqual(result.candidates, []);
+  assert.deepEqual(result.errors, []);
 
   const source = readFileSync(new URL("../lib/discovery/identity/pre-kvk-service.ts", import.meta.url), "utf8");
-  assert.doesNotMatch(source, /from ["'][^"']*(kvk|repository|website-service|scor|outreach)[^"']*["']/i);
+  const importPaths = Array.from(source.matchAll(/from ["']([^"']+)["']/g), (match) => match[1]).join("\n");
+  assert.doesNotMatch(importPaths, /kvk|repositor|scor|outreach/i);
   assert.doesNotMatch(source, /\.(create|persist|verify|determineStatus|score|send)\s*\(/);
 });

@@ -122,7 +122,7 @@ export function DiscoveryView({ recentRuns }: { recentRuns: DiscoveryRunRecord[]
       <div>
         <h2 className="text-2xl font-semibold tracking-tight text-zinc-50">Lead Discovery</h2>
         <p className="mt-1 text-sm text-zinc-400">
-          Google + KVK verifieert bedrijfsidentiteiten en bewaart kandidaten. Phase 1 doet nog geen websitekwalificatie, scoring of outreach.
+          Google Places selecteert tijdelijk bedrijven zonder vermelde website. Een begrensde officiële-websitecheck houdt alleen niet-gevonden gevallen in memory; er worden nog geen leads gemaakt.
         </p>
       </div>
 
@@ -239,12 +239,23 @@ export function DiscoveryView({ recentRuns }: { recentRuns: DiscoveryRunRecord[]
             <>
               <div className="flex flex-wrap gap-2">
                 <Chip label="Gevonden" value={discovery.totalFound} />
-                <Chip label={discovery.identity ? "Nieuwe KVK-kandidaten" : "Nieuwe leads"} value={discovery.identity?.persisted ?? discovery.createdLeads} tone="ok" />
+                <Chip
+                  label={discovery.preKvk ? "Potentieel zonder website" : discovery.identity ? "Nieuwe KVK-kandidaten" : "Nieuwe leads"}
+                  value={discovery.preKvk?.potentialNoWebsiteCandidates ?? discovery.identity?.persisted ?? discovery.createdLeads}
+                  tone="ok"
+                />
                 {discovery.identity && <>
                   <Chip label="Ambiguous" value={discovery.identity.ambiguous} tone="warn" />
                   <Chip label="Unmatched" value={discovery.identity.unmatched} tone="warn" />
                   <Chip label="Stopreden" value={discovery.identity.stopReason} />
                   <Chip label="Quotum gehaald" value={discovery.identity.quotaMet ? "Ja" : "Nee"} />
+                </>}
+                {discovery.preKvk && <>
+                  <Chip label="Google zonder vermelding" value={discovery.preKvk.noWebsiteListed} />
+                  <Chip label="Officiële website gevonden" value={discovery.preKvk.officialWebsiteVerified} />
+                  <Chip label="Ambiguous" value={discovery.preKvk.officialWebsiteAmbiguous} tone="warn" />
+                  <Chip label="Technische fouten" value={discovery.preKvk.officialWebsiteTechnicalErrors} tone={discovery.preKvk.officialWebsiteTechnicalErrors ? "error" : undefined} />
+                  <Chip label="Stopreden" value={discovery.preKvk.stopReason} />
                 </>}
                 <Chip label="Duplicaten/bestaand" value={discovery.duplicatesSkipped} tone="warn" />
                 <Chip label="Ongeldig" value={discovery.invalidCandidatesSkipped} tone="warn" />
@@ -293,7 +304,12 @@ export function DiscoveryView({ recentRuns }: { recentRuns: DiscoveryRunRecord[]
               )}
 
               {discovery.candidates.length === 0 ? (
-                <EmptyState title="Geen kandidaten gevonden" description="Probeer andere filters of een grotere limiet." />
+                <EmptyState
+                  title={discovery.preKvk ? "Tijdelijke selectie afgerond" : "Geen kandidaten gevonden"}
+                  description={discovery.preKvk
+                    ? `${discovery.preKvk.potentialNoWebsiteCandidates} mogelijke no-website kandidaat/kandidaten in memory; niets opgeslagen.`
+                    : "Probeer andere filters of een grotere limiet."}
+                />
               ) : (
                 <div className="overflow-x-auto rounded-xl border border-zinc-800">
                   <table className="w-full text-sm">
@@ -349,7 +365,7 @@ export function DiscoveryView({ recentRuns }: { recentRuns: DiscoveryRunRecord[]
                   <th className="px-3 py-2.5 font-medium">Opdracht</th>
                   <th className="px-3 py-2.5 font-medium">Status</th>
                   <th className="px-3 py-2.5 font-medium">Gevonden</th>
-                  <th className="px-3 py-2.5 font-medium">Nieuw</th>
+                  <th className="px-3 py-2.5 font-medium">Resultaat</th>
                   <th className="px-3 py-2.5 font-medium">Duplicaten</th>
                   <th className="px-3 py-2.5 font-medium">Gestart</th>
                 </tr>

@@ -43,6 +43,8 @@ const DUPLICATE_LABELS: Record<DuplicateSignal, string> = {
 };
 
 export class LeadDiscoveryService {
+  constructor(private readonly dependencies: { google?: GoogleNoWebsiteListedDiscoveryService } = {}) {}
+
   async discover(request: DiscoveryRequest, context?: { runId: string }): Promise<DiscoveryResult> {
     void context; // Reserved for run-scoped phases; pre-KVK selection persists no candidates.
     const started = Date.now();
@@ -51,7 +53,9 @@ export class LeadDiscoveryService {
     const effectiveRequest: DiscoveryRequest = { ...request, limit, country: request.country || "NL" };
 
     const source = effectiveRequest.source;
-    if (source === "google") return new GoogleNoWebsiteListedDiscoveryService().discover(effectiveRequest);
+    if (source === "google") {
+      return (this.dependencies.google ?? new GoogleNoWebsiteListedDiscoveryService()).discover(effectiveRequest);
+    }
     const provider = getDiscoveryProvider(source);
     const errors: string[] = [];
     const candidates: DiscoveryCandidateResult[] = [];

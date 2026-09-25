@@ -10,11 +10,14 @@ import "server-only";
  *  - GMAIL_TOKEN_ENCRYPTION_KEY (32 bytes, base64 of hex — AES-256-GCM
  *                                sleutel voor de versleutelde refresh token)
  * Optioneel:
- *  - GMAIL_ACCOUNT_KEY          (standaard info@silvijnstudio.com) — het VEREISTE
- *                                studio-account voor outreach. Dit is géén afzender-
- *                                override: de OAuth-callback weigert elk Google-account
- *                                dat niet dit adres is, en de From-header bij verzenden
- *                                is altijd het werkelijk geautoriseerde Gmail-account.
+ *  - GMAIL_ACCOUNT_KEY          (standaard silvijn@silvijnstudio.com) — het PRIMAIRE
+ *                                Google Workspace-account dat via OAuth wordt gekoppeld.
+ *                                De callback weigert elk ander Google-account.
+ *  - GMAIL_SEND_AS              (standaard info@silvijnstudio.com) — het "Verzenden als"-
+ *                                alias van dat account dat het zichtbare From-adres van
+ *                                outreach is. Geen hardcoded From: bij elke verzending
+ *                                valideert de Gmail API (settings.sendAs) dat het alias
+ *                                bestaat en geverifieerd is; anders faalt verzenden luid.
  *  - GMAIL_REDIRECT_URI         (standaard afgeleid van de request-host)
  */
 
@@ -37,7 +40,13 @@ export const GMAIL_SCOPES = [
   "https://www.googleapis.com/auth/gmail.settings.basic",
 ] as const;
 export const GMAIL_SETTINGS_SCOPE = "https://www.googleapis.com/auth/gmail.settings.basic";
-export const DEFAULT_GMAIL_ACCOUNT_KEY = "info@silvijnstudio.com";
+export const DEFAULT_GMAIL_ACCOUNT_KEY = "silvijn@silvijnstudio.com";
+export const DEFAULT_GMAIL_SEND_AS = "info@silvijnstudio.com";
+
+/** Het vereiste "Verzenden als"-alias voor outreach (GMAIL_SEND_AS). */
+export function gmailSendAsEmail(): string {
+  return (process.env.GMAIL_SEND_AS ?? DEFAULT_GMAIL_SEND_AS).trim().toLowerCase();
+}
 
 /** Productie-hosts waarop de OAuth-callback mag landen. */
 export const GMAIL_REDIRECT_HOST_ALLOWLIST = [
@@ -50,6 +59,8 @@ export interface GmailConfig {
   readonly clientSecret: string;
   readonly encryptionKey: Buffer;
   readonly accountKey: string;
+  /** Vereist "Verzenden als"-alias (zichtbaar From-adres van outreach). */
+  readonly sendAsEmail: string;
 }
 
 export function isGmailConfigured(): boolean {
@@ -83,6 +94,7 @@ export function requireGmailConfig(): GmailConfig {
     clientSecret,
     encryptionKey,
     accountKey: ((process.env.GMAIL_ACCOUNT_KEY ?? DEFAULT_GMAIL_ACCOUNT_KEY).trim().toLowerCase()),
+    sendAsEmail: gmailSendAsEmail(),
   };
 }
 

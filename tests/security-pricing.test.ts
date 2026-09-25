@@ -39,7 +39,7 @@ test("every exported protected server action awaits owner authorization first", 
       assert.match(n.body.statements[0].getText(source),/^await requireStudioOwner\(\);$/,`${f}:${n.name?.text}`); checked++;
     }
   }
-  assert.equal(checked,74); // 56 + Fase E: 5 + Fase I.1: 5 + Fase I.2 fixture: 3 + theme-ZIP-download: 1 + C3b content-plans: 3 + 0028 settings: 1
+  assert.equal(checked, 75); // 56 + Fase E: 5 + Fase I.1: 5 + Fase I.2 fixture: 3 + theme-ZIP-download: 1 + C3b content-plans: 3 + 0028 settings: 1 + Gmail send-as hercontrole: 1
 });
 test("all protected pages and layouts authorize before reads", () => {
   for(const f of files(path.join(root,"app/(dashboard)")).filter(f=>/\/(page|layout)\.tsx$/.test(f))){

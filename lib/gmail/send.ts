@@ -1,9 +1,11 @@
 import "server-only";
 import { z } from "zod";
 import { getSupabaseServerClient, isSupabaseConfigured } from "@/lib/supabase/server";
-import { requireGmailConfig, GMAIL_SETTINGS_SCOPE } from "./config";
+import { requireGmailConfig } from "./config";
 import { getGmailAccessToken } from "./tokens";
-import { gmailSend, gmailGetSendAsSignature, signatureHtmlToText } from "./client";
+import { gmailSend, signatureHtmlToText } from "./client";
+import { buildFromHeader } from "./send-as";
+import { checkSendAsAlias } from "./send-as-check";
 import { newOutreachMessageIdHeader } from "./provider";
 import { buildReplyThreadHeaders, type ReplyThreadHeaders } from "./threading";
 
@@ -108,14 +110,26 @@ export async function sendOutreachViaGmail(draftId: string): Promise<SentOutreac
   const threadHeaders = await resolveReplyThreadHeaders(client, draft.conversation_id);
 
   const { accessToken, connection } = await getGmailAccessToken(config.accountKey);
-  // Afzender = het werkelijk geautoriseerde Gmail-account (OAuth-callback
-  // slaat uitsluitend het vereiste studio-account op). Nooit een env- of
-  // code-waarde die de provider kan overrulen.
-  const senderAddress = connection.account_key.toLowerCase();
-  if (senderAddress !== config.accountKey) {
-    throw new Error(`Gekoppeld Gmail-account (${senderAddress}) is niet het vereiste outreach-account (${config.accountKey})`);
+  // Het gekoppelde account is het primaire OAuth-account (silvijn@); de
+  // callback slaat geen ander account op. Het zichtbare From-adres is het
+  // "Verzenden als"-alias (info@), maar uitsluitend nadat de Gmail API het
+  // alias bij deze verzending live als aanwezig én geverifieerd bevestigt.
+  // Geen hardcoded From: adres, weergavenaam en handtekening komen uit Gmail.
+  const accountEmail = connection.account_key.toLowerCase();
+  if (accountEmail !== config.accountKey) {
+    throw new Error(`Gekoppeld Gmail-account (${accountEmail}) is niet het vereiste primaire account (${config.accountKey})`);
   }
-  const signature = await resolveSenderSignature(accessToken, connection.scopes, senderAddress, draft.body);
+  const sendAs = await checkSendAsAlias({
+    accessToken,
+    grantedScopes: connection.scopes,
+    accountEmail,
+    sendAsEmail: config.sendAsEmail,
+  });
+  if (!sendAs.ok) {
+    throw new Error(`SEND_AS_ALIAS_UNAVAILABLE (${sendAs.status}): ${sendAs.reason}`);
+  }
+  const fromHeader = buildFromHeader(sendAs.alias);
+  const signature = resolveAliasSignature(sendAs.alias.signatureHtml, draft.body);
   const messageIdHeader = newOutreachMessageIdHeader();
   // Dubbelverzend-slot: claim het draft atomair vóór de provider-call. Alleen
   // een approved draft zónder provider_message_id kan geclaimd worden; een
@@ -136,7 +150,7 @@ export async function sendOutreachViaGmail(draftId: string): Promise<SentOutreac
   let gmailResult: Awaited<ReturnType<typeof gmailSend>>;
   try {
     gmailResult = await gmailSend(accessToken, {
-      from: senderAddress,
+      from: fromHeader,
       to,
       subject: draft.subject,
       body: draft.body,
@@ -167,25 +181,17 @@ export async function sendOutreachViaGmail(draftId: string): Promise<SentOutreac
 }
 
 /**
- * Gmail-handtekening van het verzendende account, precies één keer. Gmail
- * voegt bij API-sends nooit zelf een handtekening toe; wij lezen de bestaande
- * "Send as"-handtekening en plakken die aan. Staat (een herkenbaar deel van)
- * die handtekening al in de tekst, of ontbreekt de settings-scope of de
- * handtekening, dan wordt niets toegevoegd — nooit dubbel, nooit verzonnen.
+ * Gmail-handtekening van het "Verzenden als"-alias, precies één keer. Gmail
+ * voegt bij API-sends nooit zelf een handtekening toe; wij plakken de
+ * bestaande alias-handtekening aan. Staat (een herkenbaar deel van) die
+ * handtekening al in de tekst, of heeft het alias er geen, dan wordt niets
+ * toegevoegd — nooit dubbel, nooit verzonnen.
  */
-export async function resolveSenderSignature(
-  accessToken: string,
-  grantedScopes: string,
-  senderAddress: string,
+export function resolveAliasSignature(
+  signatureHtml: string | null,
   body: string
-): Promise<{ html: string | null; reason: "applied" | "already_present" | "none_configured" | "scope_missing" | "lookup_failed" }> {
-  if (!grantedScopes.split(/\s+/).includes(GMAIL_SETTINGS_SCOPE)) return { html: null, reason: "scope_missing" };
-  let html: string | null;
-  try {
-    html = await gmailGetSendAsSignature(accessToken, senderAddress);
-  } catch {
-    return { html: null, reason: "lookup_failed" };
-  }
+): { html: string | null; reason: "applied" | "already_present" | "none_configured" } {
+  const html = (signatureHtml ?? "").trim();
   if (!html) return { html: null, reason: "none_configured" };
   if (signatureAlreadyPresent(body, html)) return { html: null, reason: "already_present" };
   return { html, reason: "applied" };

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { disconnectGmail, startGmailConnect, syncGmailInbox } from "@/app/actions/gmail";
+import { disconnectGmail, recheckGmailSendAs, startGmailConnect, syncGmailInbox } from "@/app/actions/gmail";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { buttonClasses } from "@/components/ui/button";
@@ -18,7 +18,15 @@ interface FlashState {
   connected: string | null;
   authorized?: string | null;
   required?: string | null;
+  sendAsStatus?: string | null;
 }
+
+const SEND_AS_LABEL: Record<string, string> = {
+  verified: "Send-as alias geverifieerd",
+  pending: "Send-as alias nog niet geverifieerd",
+  not_listed: "Send-as alias ontbreekt",
+  unknown: "Send-as alias niet controleerbaar",
+};
 
 export function GmailSettingsCard({
   gmail,
@@ -31,6 +39,8 @@ export function GmailSettingsCard({
     lastIngestAt: string | null;
     requiredAccountKey: string;
     signatureScope: boolean;
+    sendAsEmail: string;
+    sendAs: { status: "verified" | "pending" | "not_listed" | "unknown"; displayName: string | null; reason: string | null; checkedAt: string } | null;
   };
   flash: FlashState;
 }) {
@@ -46,6 +56,9 @@ export function GmailSettingsCard({
       if (result && typeof result === "object" && "ingested" in result) {
         const r = result as { scanned: number; ingested: number; unmatched: number };
         setMessage(`Synchronisatie klaar: ${r.ingested} nieuwe reactie(s) opgeslagen van ${r.scanned} gescand (${r.unmatched} geen match).`);
+      } else if (result && typeof result === "object" && "status" in result) {
+        const r = result as { ok: boolean; status: string; reason?: string };
+        setMessage(r.ok ? `Gmail bevestigt: ${SEND_AS_LABEL[r.status]}.` : `${SEND_AS_LABEL[r.status] ?? r.status}: ${r.reason ?? ""}`);
       }
       router.refresh();
     } catch (error) {
@@ -70,20 +83,49 @@ export function GmailSettingsCard({
             )}
           </div>
           <p className="mt-1 text-xs text-zinc-500">
-            Outreach-afzender: <span className="text-zinc-300">{gmail.requiredAccountKey}</span>. Verzenden en inkomende reacties lopen via het
-            gekoppelde Gmail-account{gmail.accountKey ? ` (${gmail.accountKey})` : ""}; de Gmail-API bepaalt de afzender, nooit een code-instelling.
-            Nooit wachtwoorden; alleen geautoriseerde OAuth-tokens (versleuteld opgeslagen).
+            Eén Google OAuth-koppeling met het primaire Workspace-account; outreach gaat uit met het &quot;Verzenden als&quot;-alias van dat account
+            (Gmail API settings.sendAs). Antwoorden komen in dezelfde Gmail-inbox en thread terug. Geen aparte gebruiker of tweede login nodig;
+            nooit wachtwoorden, alleen geautoriseerde OAuth-tokens (versleuteld opgeslagen).
           </p>
+          <dl className="mt-2 grid gap-1 text-xs">
+            <div className="flex gap-2">
+              <dt className="w-52 shrink-0 text-zinc-500">Verbonden Gmail-account:</dt>
+              <dd className="text-zinc-200">{gmail.connected ? gmail.accountKey : `— (vereist: ${gmail.requiredAccountKey})`}</dd>
+            </div>
+            <div className="flex gap-2">
+              <dt className="w-52 shrink-0 text-zinc-500">Outreach verzenden als:</dt>
+              <dd className="text-zinc-200">
+                {gmail.sendAsEmail}
+                {gmail.sendAs?.status === "verified" && gmail.sendAs.displayName ? ` (weergavenaam: ${gmail.sendAs.displayName})` : ""}
+              </dd>
+            </div>
+            <div className="flex gap-2">
+              <dt className="w-52 shrink-0 text-zinc-500">Status:</dt>
+              <dd data-testid="send-as-status" className={gmail.sendAs?.status === "verified" ? "text-emerald-400" : "text-amber-400"}>
+                {!gmail.connected
+                  ? "Niet verbonden"
+                  : gmail.sendAs
+                    ? `${SEND_AS_LABEL[gmail.sendAs.status]} (gecontroleerd ${new Date(gmail.sendAs.checkedAt).toLocaleString("nl-NL")})`
+                    : "Send-as alias nog niet gecontroleerd"}
+              </dd>
+            </div>
+          </dl>
+          {gmail.connected && gmail.sendAs && gmail.sendAs.status !== "verified" && gmail.sendAs.reason && (
+            <p role="alert" className="mt-1 text-xs text-amber-400">
+              Outreach verzenden is geblokkeerd tot dit is opgelost: {gmail.sendAs.reason}
+            </p>
+          )}
           {!gmail.connected && gmail.configured && (
             <p className="mt-1 text-xs text-amber-400">
-              Koppel het Google-account {gmail.requiredAccountKey} zelf (log in Google in met dát account, niet met een ander adres). Een ander
-              account wordt geweigerd. Na koppelen wordt de bestaande Gmail-handtekening van dit account automatisch één keer onder elke mail gezet.
+              Log bij Google in met {gmail.requiredAccountKey} (het primaire account; niet met {gmail.sendAsEmail}, dat is een alias en geen
+              login). Na koppelen controleert het systeem via de Gmail API of {gmail.sendAsEmail} als geverifieerd &quot;Verzenden als&quot;-alias op
+              dat account staat; de bijbehorende Gmail-handtekening van het alias wordt dan één keer onder elke mail gezet.
             </p>
           )}
           {gmail.connected && !gmail.signatureScope && (
             <p className="mt-1 text-xs text-amber-400">
-              Deze koppeling mist de instellingen-scope: de Gmail-handtekening kan niet gelezen worden en wordt dus niet toegevoegd. Verbreek de
-              verbinding en koppel opnieuw om de handtekening mee te sturen.
+              Deze koppeling mist de instellingen-scope: de &quot;Verzenden als&quot;-lijst en handtekening kunnen niet gelezen worden. Verbreek de
+              verbinding en koppel opnieuw.
             </p>
           )}
           {gmail.lastIngestAt && (
@@ -96,14 +138,20 @@ export function GmailSettingsCard({
           )}
           {flash.error === "wrong_account" ? (
             <p role="alert" className="mt-1 text-xs text-amber-400">
-              Verkeerd Google-account: je autoriseerde {flash.authorized ?? "een ander adres"}, maar de outreach-afzender moet{" "}
-              {flash.required ?? gmail.requiredAccountKey} zijn. Er is niets opgeslagen. Log bij Google in met {flash.required ?? gmail.requiredAccountKey}{" "}
-              (bestaat dat adres alleen als alias of groep, maak er dan eerst een eigen Google Workspace-gebruiker van) en probeer opnieuw.
+              Verkeerd Google-account: je autoriseerde {flash.authorized ?? "een ander adres"}, maar het primaire account moet{" "}
+              {flash.required ?? gmail.requiredAccountKey} zijn. Er is niets opgeslagen. Log bij Google in met {flash.required ?? gmail.requiredAccountKey} en
+              probeer opnieuw; {gmail.sendAsEmail} blijft daarvan het &quot;Verzenden als&quot;-alias.
             </p>
           ) : (
             flash.error && <p role="alert" className="mt-1 text-xs text-amber-400">Gmail-actie mislukt ({flash.error}). Probeer het opnieuw.</p>
           )}
-          {flash.connected && !flash.error && <p role="status" className="mt-1 text-xs text-emerald-400">Gmail-account verbonden.</p>}
+          {flash.connected && !flash.error && (
+            <p role="status" className={`mt-1 text-xs ${flash.sendAsStatus ? "text-amber-400" : "text-emerald-400"}`}>
+              {flash.sendAsStatus
+                ? `Gmail-account verbonden, maar ${SEND_AS_LABEL[flash.sendAsStatus] ?? flash.sendAsStatus} (zie de reden hierboven).`
+                : `Gmail-account verbonden; ${gmail.sendAsEmail} is als geverifieerd "Verzenden als"-alias bevestigd.`}
+            </p>
+          )}
           {message && <p role="status" className="mt-1 text-xs text-zinc-300">{message}</p>}
         </div>
         <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
@@ -117,6 +165,9 @@ export function GmailSettingsCard({
             </button>
           ) : (
             <>
+              <button className={buttonClasses("secondary")} disabled={pending} onClick={() => run(recheckGmailSendAs)}>
+                {pending ? "Bezig" : "Controleer send-as alias"}
+              </button>
               <button className={buttonClasses("primary")} disabled={pending} onClick={() => run(syncGmailInbox)}>
                 {pending ? "Bezig…" : "Inbox synchroniseren"}
               </button>

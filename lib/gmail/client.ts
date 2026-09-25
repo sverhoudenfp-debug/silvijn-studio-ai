@@ -1,4 +1,5 @@
 import "server-only";
+import { parseSendAsList, type GmailSendAsAlias } from "./send-as";
 
 /**
  * Minimale Gmail REST-client (geen extra dependency): verzenden via
@@ -150,17 +151,13 @@ export async function gmailGetProfile(accessToken: string): Promise<{ emailAddre
 }
 
 /**
- * De bestaande "Send as"-handtekening van het account (HTML zoals Gmail die
- * opslaat), of null wanneer er geen is ingesteld. Gmail voegt handtekeningen
- * bij API-sends nooit zelf toe; de aanroeper plakt deze precies één keer aan.
+ * Alle "Verzenden als"-adressen van het gekoppelde account (settings.sendAs.list("me")),
+ * inclusief verificatiestatus en de per-alias Gmail-handtekening. Puur lezen;
+ * scope gmail.settings.basic volstaat.
  */
-export async function gmailGetSendAsSignature(accessToken: string, sendAsEmail: string): Promise<string | null> {
-  const data = (await gmailFetch(
-    accessToken,
-    `${GMAIL_API}/settings/sendAs/${encodeURIComponent(sendAsEmail.trim().toLowerCase())}`
-  )) as { signature?: string };
-  const signature = (data.signature ?? "").trim();
-  return signature.length > 0 ? signature : null;
+export async function gmailListSendAs(accessToken: string): Promise<GmailSendAsAlias[]> {
+  const data = await gmailFetch(accessToken, `${GMAIL_API}/settings/sendAs`);
+  return parseSendAsList(data);
 }
 
 /** HTML-handtekening naar leesbare platte tekst (voor het text/plain-deel). */

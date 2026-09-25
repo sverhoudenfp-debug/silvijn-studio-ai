@@ -48,11 +48,20 @@ export function decryptTokenPayload(encoded: string, key: Buffer): StoredToken {
   return JSON.parse(plaintext.toString("utf8")) as StoredToken;
 }
 
+export interface GmailSendAsSnapshot {
+  readonly sendAsEmail: string;
+  readonly status: "verified" | "pending" | "not_listed" | "unknown";
+  readonly displayName: string | null;
+  readonly reason: string | null;
+  readonly checkedAt: string;
+}
+
 export async function saveGmailConnection(input: {
   accountKey: string;
   ownerUserId: string;
   refreshToken: string;
   scope: string;
+  sendAs?: GmailSendAsSnapshot;
 }): Promise<void> {
   const config = requireGmailConfig();
   const tokenCiphertext = encryptTokenPayload({ refreshToken: input.refreshToken, scope: input.scope }, config.encryptionKey);
@@ -66,10 +75,31 @@ export async function saveGmailConnection(input: {
         token_ciphertext: tokenCiphertext,
         token_updated_at: new Date().toISOString(),
         scopes: input.scope,
+        ...(input.sendAs ? sendAsSnapshotColumns(input.sendAs) : {}),
       },
       { onConflict: "account_key" }
     );
   if (error) throw new Error("Gmail-verbinding kon niet worden opgeslagen");
+}
+
+function sendAsSnapshotColumns(snapshot: GmailSendAsSnapshot) {
+  return {
+    send_as_email: snapshot.sendAsEmail,
+    send_as_status: snapshot.status,
+    send_as_display_name: snapshot.displayName,
+    send_as_reason: snapshot.reason,
+    send_as_checked_at: snapshot.checkedAt,
+  };
+}
+
+/** Legt de laatste live Send-As-controle vast op de verbinding (alleen status, nooit tokens). */
+export async function updateGmailSendAsSnapshot(accountKey: string, snapshot: GmailSendAsSnapshot): Promise<void> {
+  const client = getSupabaseServerClient();
+  const { error } = await client
+    .from("gmail_connections")
+    .update({ ...sendAsSnapshotColumns(snapshot), updated_at: snapshot.checkedAt })
+    .eq("account_key", accountKey.toLowerCase());
+  if (error) throw new Error(`Send-as-status kon niet worden vastgelegd: ${error.message}`);
 }
 
 export async function getGmailConnection(accountKey?: string): Promise<GmailConnectionRow | null> {

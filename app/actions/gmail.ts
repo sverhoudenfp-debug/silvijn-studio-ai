@@ -8,7 +8,10 @@ import { requireStudioOwner } from "@/lib/auth/server";
 import { buildGmailAuthUrl } from "@/lib/gmail/oauth";
 import { isGmailConfigured, gmailRedirectUriForHost, GMAIL_REDIRECT_HOST_ALLOWLIST } from "@/lib/gmail/config";
 import { GMAIL_STATE_COOKIE } from "@/lib/gmail/oauth-state";
-import { disconnectGmailConnection } from "@/lib/gmail/tokens";
+import { disconnectGmailConnection, getGmailAccessToken } from "@/lib/gmail/tokens";
+import { requireGmailConfig } from "@/lib/gmail/config";
+import { checkSendAsAlias } from "@/lib/gmail/send-as-check";
+import type { SendAsResolution } from "@/lib/gmail/send-as";
 import { ingestGmailInbox, gmailIngestStatus } from "@/lib/gmail/ingest";
 import { sendOutreachViaGmail } from "@/lib/gmail/send";
 import type { GmailIngestResult, GmailIngestStatus } from "@/lib/gmail/ingest";
@@ -52,6 +55,25 @@ export async function disconnectGmail(): Promise<void> {
   await requireStudioOwner();
   await disconnectGmailConnection();
   revalidatePath("/settings");
+}
+
+/**
+ * Live hercontrole van het "Verzenden als"-alias (settings.sendAs.list) op het
+ * gekoppelde primaire account; legt de uitkomst vast op de verbinding. Puur
+ * lezen bij Google, nooit aanmaken of wijzigen.
+ */
+export async function recheckGmailSendAs(): Promise<SendAsResolution> {
+  await requireStudioOwner();
+  const config = requireGmailConfig();
+  const { accessToken, connection } = await getGmailAccessToken(config.accountKey);
+  const result = await checkSendAsAlias({
+    accessToken,
+    grantedScopes: connection.scopes,
+    accountEmail: connection.account_key.toLowerCase(),
+    sendAsEmail: config.sendAsEmail,
+  });
+  revalidatePath("/settings");
+  return result;
 }
 
 export async function syncGmailInbox(): Promise<GmailIngestResult> {

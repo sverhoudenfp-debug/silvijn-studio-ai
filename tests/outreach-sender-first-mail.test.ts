@@ -19,28 +19,120 @@ const ai = () => import("../lib/ai/service");
 
 const SIGNATURE_HTML = '<div dir="ltr"><b>Silvijn Verhouden</b><br>Silvijn Studio<br><a href="https://silvijnstudio.com">silvijnstudio.com</a></div>';
 
-test("sender: the OAuth callback stores the authorized Gmail profile and refuses any account other than the required one", () => {
-  const src = readFileSync("app/auth/gmail/callback/route.ts", "utf8");
-  assert.match(src, /gmailGetProfile\(tokens\.accessToken\)/);
-  assert.match(src, /if \(emailAddress !== required\)/);
-  assert.match(src, /gmail_error: "wrong_account"/);
-  assert.match(src, /accountKey: emailAddress/);
-  assert.doesNotMatch(src, /silvijn@silvijnstudio\.com/, "login-adres is nooit meer de opgeslagen account_key");
+const sendAs = () => import("../lib/gmail/send-as");
+
+const SEND_AS_LIST = {
+  sendAs: [
+    { sendAsEmail: "silvijn@silvijnstudio.com", displayName: "Silvijn Verhouden", isPrimary: true, isDefault: false, signature: "" },
+    {
+      sendAsEmail: "Info@SilvijnStudio.com",
+      displayName: "Silvijn Studio",
+      isDefault: true,
+      treatAsAlias: true,
+      verificationStatus: "accepted",
+      signature: SIGNATURE_HTML,
+    },
+  ],
+};
+
+test("send-as: primary OAuth account is silvijn@, outreach alias is info@ (both overridable via env, never hardcoded From)", async () => {
+  const { DEFAULT_GMAIL_ACCOUNT_KEY, DEFAULT_GMAIL_SEND_AS, gmailSendAsEmail } = await import("../lib/gmail/config");
+  assert.equal(DEFAULT_GMAIL_ACCOUNT_KEY, "silvijn@silvijnstudio.com");
+  assert.equal(DEFAULT_GMAIL_SEND_AS, "info@silvijnstudio.com");
+  const prev = process.env.GMAIL_SEND_AS;
+  try {
+    delete process.env.GMAIL_SEND_AS;
+    assert.equal(gmailSendAsEmail(), "info@silvijnstudio.com");
+    process.env.GMAIL_SEND_AS = " Sales@SilvijnStudio.com ";
+    assert.equal(gmailSendAsEmail(), "sales@silvijnstudio.com");
+  } finally {
+    if (prev === undefined) delete process.env.GMAIL_SEND_AS;
+    else process.env.GMAIL_SEND_AS = prev;
+  }
 });
 
-test("sender: send uses the connected account as From and refuses a connection that is not the required account", () => {
+test("send-as: settings.sendAs.list is parsed and the alias resolves only when present and verified", async () => {
+  const { parseSendAsList, resolveSendAsAlias, buildFromHeader } = await sendAs();
+  const aliases = parseSendAsList(SEND_AS_LIST);
+  assert.equal(aliases.length, 2);
+  assert.equal(aliases[1].sendAsEmail, "info@silvijnstudio.com", "adres genormaliseerd naar lowercase");
+  assert.equal(aliases[1].signatureHtml, SIGNATURE_HTML);
+  assert.equal(aliases[0].signatureHtml, null);
+  assert.deepEqual(parseSendAsList({}), []);
+  assert.deepEqual(parseSendAsList(null), []);
+
+  const ok = resolveSendAsAlias(aliases, "info@silvijnstudio.com", "silvijn@silvijnstudio.com");
+  assert.equal(ok.ok, true);
+  if (ok.ok) {
+    assert.equal(ok.alias.displayName, "Silvijn Studio");
+    assert.equal(buildFromHeader(ok.alias), '"Silvijn Studio" <info@silvijnstudio.com>');
+  }
+  // Primaire adres zelf telt altijd als geverifieerd (Gmail geeft er geen verificationStatus voor).
+  assert.equal(resolveSendAsAlias(aliases, "silvijn@silvijnstudio.com", "silvijn@silvijnstudio.com").ok, true);
+  // Weergavenaam zonder injectie van header-regels; zonder naam alleen het adres.
+  assert.equal(buildFromHeader({ sendAsEmail: "info@silvijnstudio.com", displayName: 'X"\r\nBcc: a@b' }), '"XBcc: a@b" <info@silvijnstudio.com>');
+  assert.equal(buildFromHeader({ sendAsEmail: "info@silvijnstudio.com", displayName: null }), "info@silvijnstudio.com");
+
+  const notListed = resolveSendAsAlias(aliases.slice(0, 1), "info@silvijnstudio.com", "silvijn@silvijnstudio.com");
+  assert.equal(notListed.ok, false);
+  if (!notListed.ok) {
+    assert.equal(notListed.status, "not_listed");
+    assert.match(notListed.reason, /Accounts en import/);
+    assert.match(notListed.reason, /Behandelen als alias/);
+    assert.match(notListed.reason, /Google Workspace Admin/);
+    assert.match(notListed.reason, /niets automatisch aangemaakt/);
+  }
+  const pending = resolveSendAsAlias(
+    parseSendAsList({ sendAs: [{ ...SEND_AS_LIST.sendAs[1], verificationStatus: "pending" }] }),
+    "info@silvijnstudio.com",
+    "silvijn@silvijnstudio.com"
+  );
+  assert.equal(pending.ok, false);
+  if (!pending.ok) {
+    assert.equal(pending.status, "pending");
+    assert.match(pending.reason, /verificationStatus=pending/);
+  }
+  const unspecified = resolveSendAsAlias(
+    parseSendAsList({ sendAs: [{ ...SEND_AS_LIST.sendAs[1], verificationStatus: "verificationStatusUnspecified" }] }),
+    "info@silvijnstudio.com",
+    "silvijn@silvijnstudio.com"
+  );
+  assert.equal(unspecified.ok, false);
+  if (!unspecified.ok) assert.equal(unspecified.status, "unknown");
+});
+
+test("send-as: the OAuth callback requires the primary account, checks the alias live and stores the outcome (never creates anything)", () => {
+  const src = readFileSync("app/auth/gmail/callback/route.ts", "utf8");
+  assert.match(src, /gmailGetProfile\(tokens\.accessToken\)/);
+  assert.match(src, /if \(emailAddress !== config\.accountKey\)/);
+  assert.match(src, /gmail_error: "wrong_account"/);
+  assert.match(src, /resolveSendAsAlias\(await gmailListSendAs\(tokens\.accessToken\), config\.sendAsEmail, emailAddress\)/);
+  assert.match(src, /accountKey: emailAddress/);
+  assert.match(src, /sendAs: toSnapshot\(/);
+  assert.doesNotMatch(src, /silvijn@silvijnstudio\.com|info@silvijnstudio\.com/, "geen hardcoded adressen in de callback");
+  assert.doesNotMatch(src, /settings\/sendAs[^"]*method: "POST"|sendAs\.create|sendAs\.patch/, "nooit aliassen aanmaken of wijzigen");
+});
+
+test("send-as: sending validates the alias live via the Gmail API on every send and uses it as From; blocked with the exact reason otherwise", () => {
   const src = readFileSync("lib/gmail/send.ts", "utf8");
-  assert.match(src, /const senderAddress = connection\.account_key\.toLowerCase\(\)/);
-  assert.match(src, /if \(senderAddress !== config\.accountKey\)/);
-  assert.match(src, /from: senderAddress/);
-  assert.doesNotMatch(src, /from: config\.accountKey/);
+  assert.match(src, /getGmailAccessToken\(config\.accountKey\)/);
+  assert.match(src, /if \(accountEmail !== config\.accountKey\)/);
+  assert.match(src, /checkSendAsAlias\(\{[\s\S]*sendAsEmail: config\.sendAsEmail/);
+  assert.match(src, /SEND_AS_ALIAS_UNAVAILABLE \(\$\{sendAs\.status\}\): \$\{sendAs\.reason\}/);
+  assert.match(src, /const fromHeader = buildFromHeader\(sendAs\.alias\)/);
+  assert.match(src, /from: fromHeader/);
+  assert.match(src, /resolveAliasSignature\(sendAs\.alias\.signatureHtml, draft\.body\)/);
+  assert.doesNotMatch(src, /from: config\./);
   assert.doesNotMatch(src, /from: "[^"]*@/, "geen hardcoded afzender");
+  const check = readFileSync("lib/gmail/send-as-check.ts", "utf8");
+  assert.match(check, /gmailListSendAs\(input\.accessToken\)/);
+  assert.doesNotMatch(check, /method: "POST"|PATCH|PUT/, "puur lezen bij Google");
 });
 
 test("signature: Gmail 'Send as' signature is appended exactly once, as multipart/alternative; threading headers untouched", async () => {
   const { buildGmailMime, signatureHtmlToText } = await client();
   const base = {
-    from: "info@silvijnstudio.com",
+    from: '"Silvijn Studio" <info@silvijnstudio.com>',
     to: "klant@example.nl",
     subject: "Website voor uw bedrijf",
     body: "Goedendag,\n\nKorte tekst.\n\nMet vriendelijke groet,",
@@ -53,7 +145,7 @@ test("signature: Gmail 'Send as' signature is appended exactly once, as multipar
   assert.doesNotMatch(plain, /multipart/);
 
   const withSig = buildGmailMime({ ...base, signatureHtml: SIGNATURE_HTML });
-  assert.match(withSig, /From: info@silvijnstudio\.com/);
+  assert.match(withSig, /From: "Silvijn Studio" <info@silvijnstudio\.com>/);
   assert.match(withSig, /In-Reply-To: <klant-1@example\.nl>/);
   assert.match(withSig, /References: <outreach-0@silvijnstudio\.com> <klant-1@example\.nl>/);
   assert.match(withSig, /Content-Type: multipart\/alternative; boundary="sig_/);
@@ -63,28 +155,23 @@ test("signature: Gmail 'Send as' signature is appended exactly once, as multipar
   assert.equal(signatureHtmlToText("<p>A&amp;B</p><br><p>C</p>"), "A&B\n\nC");
 });
 
-test("signature: never duplicated and never invented", async () => {
-  const { resolveSenderSignature, signatureAlreadyPresent } = await send();
-  const settingsScope = "https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.settings.basic";
+test("signature: alias signature never duplicated and never invented", async () => {
+  const { resolveAliasSignature, signatureAlreadyPresent } = await send();
   assert.equal(signatureAlreadyPresent("Groet,\n\nSilvijn Verhouden\nSilvijn Studio", SIGNATURE_HTML), true);
   assert.equal(signatureAlreadyPresent("Groet,", SIGNATURE_HTML), false);
-  // Zonder settings-scope: niets toevoegen (en zeker geen eigen handtekening verzinnen).
-  const noScope = await resolveSenderSignature("t", "https://www.googleapis.com/auth/gmail.send", "info@silvijnstudio.com", "Groet,");
-  assert.deepEqual(noScope, { html: null, reason: "scope_missing" });
-  const originalFetch = globalThis.fetch;
-  try {
-    globalThis.fetch = (async () => new Response(JSON.stringify({ signature: SIGNATURE_HTML }), { status: 200 })) as typeof fetch;
-    const applied = await resolveSenderSignature("t", settingsScope, "info@silvijnstudio.com", "Groet,");
-    assert.equal(applied.reason, "applied");
-    assert.equal(applied.html, SIGNATURE_HTML);
-    const present = await resolveSenderSignature("t", settingsScope, "info@silvijnstudio.com", "Groet,\nSilvijn Verhouden");
-    assert.deepEqual(present, { html: null, reason: "already_present" });
-    globalThis.fetch = (async () => new Response(JSON.stringify({ signature: "" }), { status: 200 })) as typeof fetch;
-    const none = await resolveSenderSignature("t", settingsScope, "info@silvijnstudio.com", "Groet,");
-    assert.deepEqual(none, { html: null, reason: "none_configured" });
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+  assert.deepEqual(resolveAliasSignature(SIGNATURE_HTML, "Groet,"), { html: SIGNATURE_HTML, reason: "applied" });
+  assert.deepEqual(resolveAliasSignature(SIGNATURE_HTML, "Groet,\nSilvijn Verhouden"), { html: null, reason: "already_present" });
+  assert.deepEqual(resolveAliasSignature(null, "Groet,"), { html: null, reason: "none_configured" });
+  assert.deepEqual(resolveAliasSignature("  ", "Groet,"), { html: null, reason: "none_configured" });
+});
+
+test("send-as: settings card explains account, alias and status in the owner's words", () => {
+  const src = readFileSync("components/settings/gmail-settings-card.tsx", "utf8");
+  assert.match(src, /Verbonden Gmail-account:/);
+  assert.match(src, /Outreach verzenden als:/);
+  assert.match(src, /Send-as alias geverifieerd/);
+  assert.match(src, /recheckGmailSendAs/);
+  assert.doesNotMatch(src, /Google Workspace-gebruiker van/, "nooit meer adviseren een aparte gebruiker aan te maken");
 });
 
 test("first mail: quality rules forbid demo/link/price/contact block and require the free-demo invitation and a bare greeting close", async () => {

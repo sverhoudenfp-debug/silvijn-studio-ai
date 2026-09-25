@@ -43,8 +43,9 @@ test("gmail oauth configuration: fail-loud zonder credentials, geldig met creden
   assert.equal(isGmailConfigured(), true);
   const config = requireGmailConfig();
   assert.equal(config.clientId, "test-client-id.apps.googleusercontent.com");
-  // Vereist outreach-account sinds 2026-09-25: info@silvijnstudio.com (geen afzender-override; zie callback-test).
-  assert.equal(config.accountKey, "info@silvijnstudio.com");
+  // Primair OAuth-account = silvijn@ (Workspace-gebruiker); info@ is daarvan het "Verzenden als"-alias (GMAIL_SEND_AS).
+  assert.equal(config.accountKey, "silvijn@silvijnstudio.com");
+  assert.equal(config.sendAsEmail, "info@silvijnstudio.com");
 
   // Redirect-allowlist: productiehosts en localhost gelden; anders wordt
   // er expliciet geweigerd (open-redirect voorkomen).
@@ -70,7 +71,7 @@ test("gmail auth url: oauth 2.0, offline access, scope, state, login-hint", asyn
   assert.equal(url.searchParams.get("response_type"), "code");
   assert.equal(url.searchParams.get("access_type"), "offline");
   assert.equal(url.searchParams.get("prompt"), "consent");
-  assert.equal(url.searchParams.get("login_hint"), "info@silvijnstudio.com");
+  assert.equal(url.searchParams.get("login_hint"), "silvijn@silvijnstudio.com", "login met het primaire account, niet met het alias");
   assert.ok(url.searchParams.get("scope")!.includes("gmail.send"));
   assert.ok(url.searchParams.get("scope")!.includes("gmail.readonly"));
   assert.ok(url.searchParams.get("scope")!.includes("gmail.settings.basic"), "handtekening lezen vereist settings.basic");

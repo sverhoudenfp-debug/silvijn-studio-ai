@@ -110,7 +110,8 @@ export type { OutreachDraftCreateInput };
 
 const URL_PATTERN = /https?:\/\/|www\.|\b[a-z0-9-]+\.(nl|com|be|eu|net|org|shop|store|io)\b/i;
 const DEMO_LINK_PATTERN = /\b(demo|preview|voorbeeld)[- ]?(link|url|website|site|pagina)\b.*?(bekijk|bijgevoegd|hieronder|hierbij|zie)|(bekijk|zie|hieronder|hierbij|bijgevoegd).*?\b(demo|preview|voorbeeld)[- ]?(link|url|website|site|pagina)\b/i;
-const PRICE_PATTERN = /€|\beur(o)?\b|\bprijs\b|\btarief\b|\bkost(en|t)\b|\bkorting\b/i;
+// "zonder kosten"/"gratis" is precies de gewenste formulering; alleen echte prijsindicaties zijn verboden.
+const PRICE_PATTERN = /€|\beur(o)?\b|\bprijs\b|\bprijzen\b|\btarie(f|ven)\b|\bkorting\b|\bofferte\b|(?<!zonder |geen )\bkosten\b|\bkost\b/i;
 const CLOSING_PATTERN = /groet(en)?[,.!]?$|hartelijk[,.!]?$|vriendelijke groet[,.!]?$/i;
 const CONTACT_BLOCK_PATTERN = /(\+31|06[- ]?\d{8}|\b0\d{1,3}[- ]?\d{6,8}\b|@)/;
 

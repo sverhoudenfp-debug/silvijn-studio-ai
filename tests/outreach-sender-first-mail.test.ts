@@ -96,6 +96,9 @@ test("first mail: quality rules forbid demo/link/price/contact block and require
   assert.ok(checkFirstOutreach(withLink).some((i) => /URL of link/.test(i)));
   const withPrice = good.replace("laat het gerust weten", "de prijs is 895 euro");
   assert.ok(checkFirstOutreach(withPrice).some((i) => /prijs/.test(i)));
+  assert.ok(checkFirstOutreach(good.replace("laat het gerust weten", "dit kost u 895")).some((i) => /prijs/.test(i)));
+  // Live-les 2026-09-25: "zonder kosten" is de gewenste formulering, geen prijsindicatie.
+  assert.deepEqual(checkFirstOutreach(good.replace("vrijblijvend en gratis", "geheel vrijblijvend en zonder kosten")), []);
   const withName = `${good}\nSilvijn Verhouden\nSilvijn Studio | 06-12345678`;
   const nameIssues = checkFirstOutreach(withName);
   assert.ok(nameIssues.some((i) => /groetregel/.test(i)));

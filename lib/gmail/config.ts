@@ -10,7 +10,11 @@ import "server-only";
  *  - GMAIL_TOKEN_ENCRYPTION_KEY (32 bytes, base64 of hex — AES-256-GCM
  *                                sleutel voor de versleutelde refresh token)
  * Optioneel:
- *  - GMAIL_ACCOUNT_KEY          (standaard silvijn@silvijnstudio.com)
+ *  - GMAIL_ACCOUNT_KEY          (standaard info@silvijnstudio.com) — het VEREISTE
+ *                                studio-account voor outreach. Dit is géén afzender-
+ *                                override: de OAuth-callback weigert elk Google-account
+ *                                dat niet dit adres is, en de From-header bij verzenden
+ *                                is altijd het werkelijk geautoriseerde Gmail-account.
  *  - GMAIL_REDIRECT_URI         (standaard afgeleid van de request-host)
  */
 
@@ -21,11 +25,19 @@ export class GmailConfigurationError extends Error {
   }
 }
 
-/** Scopes: verzenden (gmail.send) + lezen (gmail.readonly). Minimaal en voldoende. */
+/**
+ * Scopes: verzenden (gmail.send) + lezen (gmail.readonly) + basisinstellingen
+ * (gmail.settings.basic: nodig om de bestaande Gmail-handtekening van het
+ * account te lezen — de Gmail API voegt handtekeningen bij API-sends nooit
+ * zelf toe; wij plakken de eigen "Send as"-handtekening precies één keer aan).
+ */
 export const GMAIL_SCOPES = [
   "https://www.googleapis.com/auth/gmail.send",
   "https://www.googleapis.com/auth/gmail.readonly",
+  "https://www.googleapis.com/auth/gmail.settings.basic",
 ] as const;
+export const GMAIL_SETTINGS_SCOPE = "https://www.googleapis.com/auth/gmail.settings.basic";
+export const DEFAULT_GMAIL_ACCOUNT_KEY = "info@silvijnstudio.com";
 
 /** Productie-hosts waarop de OAuth-callback mag landen. */
 export const GMAIL_REDIRECT_HOST_ALLOWLIST = [
@@ -70,7 +82,7 @@ export function requireGmailConfig(): GmailConfig {
     clientId,
     clientSecret,
     encryptionKey,
-    accountKey: ((process.env.GMAIL_ACCOUNT_KEY ?? "silvijn@silvijnstudio.com").trim().toLowerCase()),
+    accountKey: ((process.env.GMAIL_ACCOUNT_KEY ?? DEFAULT_GMAIL_ACCOUNT_KEY).trim().toLowerCase()),
   };
 }
 

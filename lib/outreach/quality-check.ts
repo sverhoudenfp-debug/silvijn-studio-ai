@@ -17,6 +17,12 @@ export interface QualityCheckOptions {
    * (Fase 6-eis). In live mode blijven die markeringen uiteraard verboden.
    */
   allowMockMarkers?: boolean;
+  /**
+   * true voor de eerste (koude) outreachmail: geen links/demo/prijs, kort en
+   * persoonlijk, afsluiting alleen met een groetregel (de Gmail-handtekening
+   * van het verzendende account wordt bij verzenden toegevoegd).
+   */
+  firstOutreach?: boolean;
 }
 
 /** Patronen die duidelijke ongefundeerde/fake claims markeren. */
@@ -86,6 +92,8 @@ export function checkOutreachQuality(
   const claimHit = UNVERIFIED_CLAIM_PATTERNS.find((pattern) => pattern.test(body));
   if (claimHit) issues.push("Mogelijk ongefundeerde claim — claims moeten uit de leaddata volgen");
 
+  if (options?.firstOutreach) issues.push(...checkFirstOutreach(body));
+
   return { passed: issues.length === 0, issues };
 }
 
@@ -99,3 +107,30 @@ export function checkOutreachInputQuality(input: {
 }
 
 export type { OutreachDraftCreateInput };
+
+const URL_PATTERN = /https?:\/\/|www\.|\b[a-z0-9-]+\.(nl|com|be|eu|net|org|shop|store|io)\b/i;
+const DEMO_LINK_PATTERN = /\b(demo|preview|voorbeeld)[- ]?(link|url|website|site|pagina)\b.*?(bekijk|bijgevoegd|hieronder|hierbij|zie)|(bekijk|zie|hieronder|hierbij|bijgevoegd).*?\b(demo|preview|voorbeeld)[- ]?(link|url|website|site|pagina)\b/i;
+const PRICE_PATTERN = /€|\beur(o)?\b|\bprijs\b|\btarief\b|\bkost(en|t)\b|\bkorting\b/i;
+const CLOSING_PATTERN = /groet(en)?[,.!]?$|hartelijk[,.!]?$|vriendelijke groet[,.!]?$/i;
+const CONTACT_BLOCK_PATTERN = /(\+31|06[- ]?\d{8}|\b0\d{1,3}[- ]?\d{6,8}\b|@)/;
+
+/** Deterministische regels voor de eerste (koude) outreachmail. */
+export function checkFirstOutreach(body: string): string[] {
+  const issues: string[] = [];
+  const text = body.trim();
+  const words = text.split(/\s+/).filter(Boolean).length;
+  if (words > 160) issues.push("Eerste mail is te lang (maximaal 160 woorden; doel is een reactie, geen uitleg)");
+  if (URL_PATTERN.test(text)) issues.push("Eerste mail bevat een URL of link — geen demo-, preview- of websitelinks in de eerste mail");
+  if (DEMO_LINK_PATTERN.test(text)) issues.push("Eerste mail verwijst naar een meegestuurde demo of preview — alleen het vrijblijvende aanbod is toegestaan");
+  if (PRICE_PATTERN.test(text)) issues.push("Eerste mail noemt prijs of kosten — niet toegestaan");
+  if (!/\bdemo\b|\bvoorbeeld(website|site)?\b/i.test(text)) {
+    issues.push("Eerste mail mist de natuurlijke uitnodiging om vrijblijvend een gratis demo/voorbeeld te laten maken");
+  }
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  const last = lines[lines.length - 1] ?? "";
+  if (!CLOSING_PATTERN.test(last)) {
+    issues.push("Eerste mail moet eindigen met alleen een groetregel — geen naam, bedrijfsnaam of contactgegevens (Gmail-handtekening volgt automatisch)");
+  }
+  if (CONTACT_BLOCK_PATTERN.test(text)) issues.push("Eerste mail bevat contactgegevens (telefoon/e-mail) — die komen uit de Gmail-handtekening");
+  return issues;
+}

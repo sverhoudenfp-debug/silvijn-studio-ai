@@ -21,7 +21,7 @@ const sections = [
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ gmail_error?: string; gmail_connected?: string }>;
+  searchParams: Promise<{ gmail_error?: string; gmail_connected?: string; authorized?: string; required?: string }>;
 }) {
   await requireStudioOwner();
   const [params, gmail, environment, replyMode] = await Promise.all([searchParams, gmailIngestStatus(), loadEnvironmentStatus(), getReplyHandlingMode()]);
@@ -33,7 +33,7 @@ export default async function SettingsPage({
           Configuratie van de studio — secties worden fase voor fase geactiveerd.
         </p>
       </div>
-      <GmailSettingsCard gmail={gmail} flash={{ error: params.gmail_error ?? null, connected: params.gmail_connected ?? null }} />
+      <GmailSettingsCard gmail={gmail} flash={{ error: params.gmail_error ?? null, connected: params.gmail_connected ?? null, authorized: params.authorized ?? null, required: params.required ?? null }} />
       <ReplyHandlingCard mode={replyMode} options={REPLY_HANDLING_LABELS} />
       <EnvironmentStatusCard checks={environment.checks} unavailable={environment.unavailable} />
       <div className="grid gap-4 md:grid-cols-2">

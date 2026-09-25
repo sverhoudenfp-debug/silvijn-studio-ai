@@ -3,6 +3,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requireStudioOwner } from "@/lib/auth/server";
 import { exchangeGmailCode, verifyGmailStateCookie } from "@/lib/gmail/oauth";
 import { saveGmailConnection } from "@/lib/gmail/tokens";
+import { gmailGetProfile } from "@/lib/gmail/client";
+import { requireGmailConfig } from "@/lib/gmail/config";
 import { GMAIL_STATE_COOKIE } from "@/lib/gmail/oauth-state";
 
 /**
@@ -37,8 +39,18 @@ export async function GET(request: NextRequest) {
     if (!tokens.refreshToken) {
       return NextResponse.redirect(new URL("/settings?gmail_error=no_refresh_token", url));
     }
+    // Het gekoppelde account is het Google-account dat werkelijk geautoriseerd
+    // is (Gmail-profiel), niet het dashboard-loginadres. Alleen het vereiste
+    // studio-account (GMAIL_ACCOUNT_KEY, standaard info@silvijnstudio.com) mag
+    // worden opgeslagen; elk ander account wordt geweigerd met duidelijke uitleg.
+    const { emailAddress } = await gmailGetProfile(tokens.accessToken);
+    const required = requireGmailConfig().accountKey;
+    if (emailAddress !== required) {
+      const params = new URLSearchParams({ gmail_error: "wrong_account", authorized: emailAddress, required });
+      return NextResponse.redirect(new URL(`/settings?${params.toString()}`, url));
+    }
     await saveGmailConnection({
-      accountKey: user.email ?? "silvijn@silvijnstudio.com",
+      accountKey: emailAddress,
       ownerUserId: user.id,
       refreshToken: tokens.refreshToken,
       scope: tokens.scope,

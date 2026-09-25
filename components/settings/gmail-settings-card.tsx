@@ -16,13 +16,22 @@ import { buttonClasses } from "@/components/ui/button";
 interface FlashState {
   error: string | null;
   connected: string | null;
+  authorized?: string | null;
+  required?: string | null;
 }
 
 export function GmailSettingsCard({
   gmail,
   flash,
 }: {
-  gmail: { configured: boolean; connected: boolean; accountKey: string | null; lastIngestAt: string | null };
+  gmail: {
+    configured: boolean;
+    connected: boolean;
+    accountKey: string | null;
+    lastIngestAt: string | null;
+    requiredAccountKey: string;
+    signatureScope: boolean;
+  };
   flash: FlashState;
 }) {
   const [pending, setPending] = useState(false);
@@ -61,9 +70,22 @@ export function GmailSettingsCard({
             )}
           </div>
           <p className="mt-1 text-xs text-zinc-500">
-            Studio-account: {gmail.accountKey ?? "silvijn@silvijnstudio.com"} — verzenden en inkomende reacties via de Gmail-API.
+            Outreach-afzender: <span className="text-zinc-300">{gmail.requiredAccountKey}</span>. Verzenden en inkomende reacties lopen via het
+            gekoppelde Gmail-account{gmail.accountKey ? ` (${gmail.accountKey})` : ""}; de Gmail-API bepaalt de afzender, nooit een code-instelling.
             Nooit wachtwoorden; alleen geautoriseerde OAuth-tokens (versleuteld opgeslagen).
           </p>
+          {!gmail.connected && gmail.configured && (
+            <p className="mt-1 text-xs text-amber-400">
+              Koppel het Google-account {gmail.requiredAccountKey} zelf (log in Google in met dát account, niet met een ander adres). Een ander
+              account wordt geweigerd. Na koppelen wordt de bestaande Gmail-handtekening van dit account automatisch één keer onder elke mail gezet.
+            </p>
+          )}
+          {gmail.connected && !gmail.signatureScope && (
+            <p className="mt-1 text-xs text-amber-400">
+              Deze koppeling mist de instellingen-scope: de Gmail-handtekening kan niet gelezen worden en wordt dus niet toegevoegd. Verbreek de
+              verbinding en koppel opnieuw om de handtekening mee te sturen.
+            </p>
+          )}
           {gmail.lastIngestAt && (
             <p className="mt-1 text-xs text-zinc-500">Laatste synchronisatie: {new Date(gmail.lastIngestAt).toLocaleString("nl-NL")}</p>
           )}
@@ -72,7 +94,15 @@ export function GmailSettingsCard({
               BLOCKED_EXTERNAL_CONFIGURATION: GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET en GMAIL_TOKEN_ENCRYPTION_KEY ontbreken (Vercel Environment Variables).
             </p>
           )}
-          {flash.error && <p role="alert" className="mt-1 text-xs text-amber-400">Gmail-actie mislukt ({flash.error}). Probeer het opnieuw.</p>}
+          {flash.error === "wrong_account" ? (
+            <p role="alert" className="mt-1 text-xs text-amber-400">
+              Verkeerd Google-account: je autoriseerde {flash.authorized ?? "een ander adres"}, maar de outreach-afzender moet{" "}
+              {flash.required ?? gmail.requiredAccountKey} zijn. Er is niets opgeslagen. Log bij Google in met {flash.required ?? gmail.requiredAccountKey}{" "}
+              (bestaat dat adres alleen als alias of groep, maak er dan eerst een eigen Google Workspace-gebruiker van) en probeer opnieuw.
+            </p>
+          ) : (
+            flash.error && <p role="alert" className="mt-1 text-xs text-amber-400">Gmail-actie mislukt ({flash.error}). Probeer het opnieuw.</p>
+          )}
           {flash.connected && !flash.error && <p role="status" className="mt-1 text-xs text-emerald-400">Gmail-account verbonden.</p>}
           {message && <p role="status" className="mt-1 text-xs text-zinc-300">{message}</p>}
         </div>

@@ -20,10 +20,10 @@ const mockBusinessAnalysis = `{
 
 const mockOutreachMessage = `{
   "personalizationReason": "TESTDATA (mock): \${BUSINESS_TOKEN} heeft op basis van de beschikbare leaddata momenteel geen eigen website, terwijl de lokale reputatie sterk is.",
-  "approach": "TESTDATA (mock): korte, concrete introductie met verwijzing naar de beperkte online aanwezigheid en een voorbeeldwebsite.",
-  "subject": "Voorbeeldwebsite voor \${BUSINESS_TOKEN}",
-  "body": "Hallo,\\n\\nTESTDATA (mock): ik kwam \${BUSINESS_TOKEN} tegen bij het bekijken van \${CITY_TOKEN}-bedrijven in de \${INDUSTRY_TOKEN}. Wat opviel: jullie online aanwezigheid is momenteel beperkt, terwijl een website juist kan helpen om nieuwe klanten uit de regio aan te trekken.\\n\\nOm concreet te maken wat ik bedoel, heb ik vrijblijvend een voorbeeldwebsite opgesteld op basis van jullie bedrijf. Bekijk gerust of de stijl en invulling bij jullie past — volledig zonder verplichtingen.\\n\\nHartelijke groet,\\nSilvijn Studio",
-  "callToAction": "TESTDATA (mock): bekijk de voorbeeldwebsite en reageer als je interesse heeft."
+  "approach": "TESTDATA (mock): korte, persoonlijke eerste mail zonder demo of link; alleen het vrijblijvende aanbod om een gratis voorbeeld te maken, doel is een reactie.",
+  "subject": "Website voor \${BUSINESS_TOKEN}",
+  "body": "Goedendag,\\n\\nTESTDATA (mock): ik kwam \${BUSINESS_TOKEN} tegen bij het bekijken van \${CITY_TOKEN}-bedrijven in de \${INDUSTRY_TOKEN} en dacht dat er mogelijk kansen liggen om de online presentatie te versterken.\\n\\nIk maak vrijblijvend en gratis een voorbeeld van hoe een moderne website voor \${BUSINESS_TOKEN} eruit zou kunnen zien. Als dat interessant is, laat het gerust weten; dan stuur ik het toe zodra het klaar is.\\n\\nMet vriendelijke groet,",
+  "callToAction": "TESTDATA (mock): laat gerust weten of een gratis voorbeeld interessant is."
 }`;
 
 const mockSalesAnalysis = `{

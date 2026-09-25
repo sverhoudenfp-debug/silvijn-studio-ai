@@ -1,9 +1,9 @@
 import "server-only";
 import { z } from "zod";
 import { getSupabaseServerClient, isSupabaseConfigured } from "@/lib/supabase/server";
-import { requireGmailConfig } from "./config";
+import { requireGmailConfig, GMAIL_SETTINGS_SCOPE } from "./config";
 import { getGmailAccessToken } from "./tokens";
-import { gmailSend } from "./client";
+import { gmailSend, gmailGetSendAsSignature, signatureHtmlToText } from "./client";
 import { newOutreachMessageIdHeader } from "./provider";
 import { buildReplyThreadHeaders, type ReplyThreadHeaders } from "./threading";
 
@@ -107,7 +107,15 @@ export async function sendOutreachViaGmail(draftId: string): Promise<SentOutreac
   // niet: dat start terecht een nieuwe thread.
   const threadHeaders = await resolveReplyThreadHeaders(client, draft.conversation_id);
 
-  const { accessToken } = await getGmailAccessToken(config.accountKey);
+  const { accessToken, connection } = await getGmailAccessToken(config.accountKey);
+  // Afzender = het werkelijk geautoriseerde Gmail-account (OAuth-callback
+  // slaat uitsluitend het vereiste studio-account op). Nooit een env- of
+  // code-waarde die de provider kan overrulen.
+  const senderAddress = connection.account_key.toLowerCase();
+  if (senderAddress !== config.accountKey) {
+    throw new Error(`Gekoppeld Gmail-account (${senderAddress}) is niet het vereiste outreach-account (${config.accountKey})`);
+  }
+  const signature = await resolveSenderSignature(accessToken, connection.scopes, senderAddress, draft.body);
   const messageIdHeader = newOutreachMessageIdHeader();
   // Dubbelverzend-slot: claim het draft atomair vóór de provider-call. Alleen
   // een approved draft zónder provider_message_id kan geclaimd worden; een
@@ -128,11 +136,12 @@ export async function sendOutreachViaGmail(draftId: string): Promise<SentOutreac
   let gmailResult: Awaited<ReturnType<typeof gmailSend>>;
   try {
     gmailResult = await gmailSend(accessToken, {
-      from: config.accountKey,
+      from: senderAddress,
       to,
       subject: draft.subject,
       body: draft.body,
       messageIdHeader,
+      signatureHtml: signature.html,
       ...threadHeaders,
     });
   } catch (error) {
@@ -155,4 +164,40 @@ export async function sendOutreachViaGmail(draftId: string): Promise<SentOutreac
   if (updateError) throw new Error(`Verzonden draft kon niet worden vastgelegd: ${updateError.message}`);
 
   return { draftId: id, messageIdHeader, gmailMessageId: gmailResult.gmailMessageId, sentAt };
+}
+
+/**
+ * Gmail-handtekening van het verzendende account, precies één keer. Gmail
+ * voegt bij API-sends nooit zelf een handtekening toe; wij lezen de bestaande
+ * "Send as"-handtekening en plakken die aan. Staat (een herkenbaar deel van)
+ * die handtekening al in de tekst, of ontbreekt de settings-scope of de
+ * handtekening, dan wordt niets toegevoegd — nooit dubbel, nooit verzonnen.
+ */
+export async function resolveSenderSignature(
+  accessToken: string,
+  grantedScopes: string,
+  senderAddress: string,
+  body: string
+): Promise<{ html: string | null; reason: "applied" | "already_present" | "none_configured" | "scope_missing" | "lookup_failed" }> {
+  if (!grantedScopes.split(/\s+/).includes(GMAIL_SETTINGS_SCOPE)) return { html: null, reason: "scope_missing" };
+  let html: string | null;
+  try {
+    html = await gmailGetSendAsSignature(accessToken, senderAddress);
+  } catch {
+    return { html: null, reason: "lookup_failed" };
+  }
+  if (!html) return { html: null, reason: "none_configured" };
+  if (signatureAlreadyPresent(body, html)) return { html: null, reason: "already_present" };
+  return { html, reason: "applied" };
+}
+
+export function signatureAlreadyPresent(body: string, signatureHtml: string): boolean {
+  const normalize = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
+  const text = normalize(signatureHtmlToText(signatureHtml));
+  if (!text) return false;
+  const haystack = normalize(body);
+  if (haystack.includes(text)) return true;
+  // Eerste betekenisvolle regel van de handtekening (meestal naam of bedrijf) als vingerafdruk.
+  const firstLine = signatureHtmlToText(signatureHtml).split("\n").map((l) => l.trim()).find((l) => l.length >= 6);
+  return firstLine ? haystack.includes(normalize(firstLine)) : false;
 }

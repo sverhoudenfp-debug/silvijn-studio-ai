@@ -2,7 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { getSupabaseServerClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { getGmailAccessToken, markGmailIngested } from "./tokens";
-import { isGmailConfigured } from "./config";
+import { isGmailConfigured, DEFAULT_GMAIL_ACCOUNT_KEY, GMAIL_SETTINGS_SCOPE } from "./config";
 import { gmailGetMessage, gmailListMessages } from "./client";
 import { findReplyTarget, loadMatchContext } from "./matching";
 
@@ -115,23 +115,38 @@ export interface GmailIngestStatus {
   readonly connected: boolean;
   readonly accountKey: string | null;
   readonly lastIngestAt: string | null;
+  /** Het vereiste studio-account voor outreach (GMAIL_ACCOUNT_KEY, standaard info@silvijnstudio.com). */
+  readonly requiredAccountKey: string;
+  /** Of de koppeling de settings-scope heeft om de Gmail-handtekening te lezen. */
+  readonly signatureScope: boolean;
 }
 
 const connectionStatusSchema = z.object({
   account_key: z.string(),
   last_ingest_at: z.string().nullable(),
+  scopes: z.string().nullable().optional(),
 });
 
 export async function gmailIngestStatus(): Promise<GmailIngestStatus> {
   const configured = isGmailConfigured();
-  if (!isSupabaseConfigured()) return { configured, connected: false, accountKey: null, lastIngestAt: null };
+  const requiredAccountKey = (process.env.GMAIL_ACCOUNT_KEY ?? DEFAULT_GMAIL_ACCOUNT_KEY).trim().toLowerCase();
+  if (!isSupabaseConfigured()) {
+    return { configured, connected: false, accountKey: null, lastIngestAt: null, requiredAccountKey, signatureScope: false };
+  }
   const client = getSupabaseServerClient();
-  const { data } = await client.from("gmail_connections").select("account_key,last_ingest_at").limit(1).maybeSingle();
+  const { data } = await client
+    .from("gmail_connections")
+    .select("account_key,last_ingest_at,scopes")
+    .eq("account_key", requiredAccountKey)
+    .limit(1)
+    .maybeSingle();
   const row = data ? connectionStatusSchema.parse(data) : null;
   return {
     configured,
     connected: row !== null,
     accountKey: row?.account_key ?? null,
     lastIngestAt: row?.last_ingest_at ?? null,
+    requiredAccountKey,
+    signatureScope: (row?.scopes ?? "").split(/\s+/).includes(GMAIL_SETTINGS_SCOPE),
   };
 }

@@ -87,9 +87,13 @@ export class OutreachService {
     if (!lead) throw new OutreachNotFoundError("Lead niet gevonden");
     if (isOutreachSuppressed(lead.leadStatus,lead.outreachStatus)) throw new Error("OUTREACH_SUPPRESSED");
 
-    // 2) Demo-data indien beschikbaar (alleen een bestaande READY demo mag genoemd worden)
+    // 2) Demo-data indien beschikbaar (alleen een bestaande READY demo mag genoemd worden).
+    //    De EERSTE outreachmail bevat nooit een demo/link (besluit 2026-09-25): demo's
+    //    maakt Silvijn handmatig en voegt hij later zelf aan de conversatie toe. Er wordt
+    //    hier nooit een demo gegenereerd; alleen gelezen, en voor "initial" zelfs dat niet.
+    const purpose = options?.purpose ?? "initial";
     const demoRepository = getDemoRepository();
-    const demo = await demoRepository.findByLeadId(leadId);
+    const demo = purpose === "initial" ? null : await demoRepository.findByLeadId(leadId);
     const readyDemo =
       demo && demo.status === "ready" && demo.previewUrl
         ? {
@@ -131,7 +135,7 @@ export class OutreachService {
         body: result.data.body,
         callToAction: result.data.callToAction,
       },
-      { allowMockMarkers: result.mode === "mock" }
+      { allowMockMarkers: result.mode === "mock", firstOutreach: purpose === "initial" }
     );
 
     // 6) Draft opslaan — bij geslaagde check READY_FOR_REVIEW, anders DRAFT

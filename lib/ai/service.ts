@@ -1465,7 +1465,18 @@ function buildOutreachPrompt(input: OutreachMessageInput): string {
       ? "Schrijf een KORTE, natuurlijke follow-up (80-150 woorden) naar aanleiding van het eerder verzonden bericht waarop nog geen reactie is gekomen. Verwijs beleefd naar het eerdere bericht, voeg ÉÉN nieuw relevant voordeel of voorbeeld toe en houd de toon ontspannen — geen druk, geen schuldvraag."
       : kind === "demo_offer"
         ? "Schrijf een gepersonaliseerd demo-aanbod (e-mail) voor het volgende bedrijf: bied concreet een gratis voorbeeldwebsite/demo aan en beschrijf wat ze ervan mogen verwachten."
-        : "Schrijf een gepersonaliseerd outreach-concept (e-mail) voor het volgende bedrijf.";
+        : [
+          "Schrijf de EERSTE outreach-e-mail (koude kennismaking) voor het volgende bedrijf. Doel: een reactie krijgen, niets meer.",
+          "Vereisten voor deze eerste mail:",
+          "- Kort en persoonlijk: 60-120 woorden, maximaal 4 korte alinea's, geen opsommingen.",
+          "- Richting van de boodschap (niet letterlijk overnemen; maak het natuurlijk en pas het aan op de leaddata): je zag het bedrijf en denkt dat er mogelijk kansen liggen om de online presentatie te verbeteren; je maakt vrijblijvend en gratis een voorbeeld/demo van hoe een moderne website voor dit bedrijf eruit zou kunnen zien; als dat interessant is, mogen ze het gerust laten weten.",
+          "- Noem het gratis, vrijblijvende demo-aanbod als mogelijkheid; stuur GEEN demo, link, preview of afbeelding mee en beschrijf geen bestaande demo.",
+          "- Geen URL's in de tekst (ook niet van de huidige website van het bedrijf).",
+          "- Niet pushy, geen verkooppraatje, geen lange uitleg over diensten of werkwijze, geen prijs, geen cijfers of beloften.",
+          "- Baseer de persoonlijke noot uitsluitend op wat er in de leaddata staat (branche, plaats, websitestatus); verzin niets over het bedrijf.",
+          "- Laagdrempelige, duidelijke call-to-action: een korte reactie volstaat (bijv. 'laat het gerust weten' of een korte vraag).",
+          "- Sluit af met uitsluitend een korte groetregel (bijv. 'Met vriendelijke groet,') en zet daar NIETS onder: geen naam, bedrijfsnaam, telefoonnummer of website. De Gmail-handtekening van het verzendende account wordt automatisch toegevoegd.",
+        ].join("\n");
 
   const lines: string[] = [
     opening,
@@ -1484,7 +1495,7 @@ function buildOutreachPrompt(input: OutreachMessageInput): string {
   if (input.leadSource) lines.push(`Bron: ${input.leadSource}`);
   if (input.discoveryNotes?.length) lines.push(`Discovery-notities: ${input.discoveryNotes.join("; ")}`);
 
-  if (input.demo) {
+  if (input.demo && kind !== "initial") {
     lines.push(
       "",
       "BESCHIKBARE DEMO-WEBSITE (bestaat echt en mag genoemd worden):",
@@ -1492,6 +1503,8 @@ function buildOutreachPrompt(input: OutreachMessageInput): string {
       `Headline: ${input.demo.headline}`,
       `Template: ${input.demo.template}`
     );
+  } else if (kind === "initial") {
+    lines.push("", "Er wordt GEEN demo meegestuurd in deze eerste mail: noem geen bestaande demo, link of preview; alleen het aanbod om er vrijblijvend één te maken.");
   } else {
     lines.push("", "Er is GEEN demo-website beschikbaar — noem geen demo of voorbeeldwebsite.");
   }
@@ -1507,7 +1520,7 @@ function buildOutreachPrompt(input: OutreachMessageInput): string {
 
   lines.push(
     "",
-    'Output: JSON met de velden "personalizationReason" (waarom dit bedrijf relevant is, uitsluitend gebaseerd op de data), "approach" (gedachte achter de aanpak), "subject" (onderwerpregel), "body" (e-mailtekst, 150-400 woorden, gewone tekst met regeleinden als \\n) en "callToAction" (de concrete volgende stap).'
+    `Output: JSON met de velden "personalizationReason" (waarom dit bedrijf relevant is, uitsluitend gebaseerd op de data), "approach" (gedachte achter de aanpak), "subject" (onderwerpregel), "body" (e-mailtekst, ${kind === "initial" ? "60-120" : "150-400"} woorden, gewone tekst met regeleinden als \\n) en "callToAction" (de concrete volgende stap).`
   );
 
   return lines.join("\n");

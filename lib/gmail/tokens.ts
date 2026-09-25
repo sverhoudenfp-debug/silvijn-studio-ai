@@ -1,7 +1,7 @@
 import "server-only";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { getSupabaseServerClient, isSupabaseConfigured } from "@/lib/supabase/server";
-import { requireGmailConfig, isGmailConfigured } from "./config";
+import { requireGmailConfig, isGmailConfigured, DEFAULT_GMAIL_ACCOUNT_KEY } from "./config";
 import { refreshGmailAccessToken } from "./oauth";
 
 /**
@@ -74,7 +74,7 @@ export async function saveGmailConnection(input: {
 
 export async function getGmailConnection(accountKey?: string): Promise<GmailConnectionRow | null> {
   if (!isSupabaseConfigured()) return null;
-  const key = (accountKey ?? (process.env.GMAIL_ACCOUNT_KEY ?? "silvijn@silvijnstudio.com").trim().toLowerCase());
+  const key = (accountKey ?? (process.env.GMAIL_ACCOUNT_KEY ?? DEFAULT_GMAIL_ACCOUNT_KEY).trim().toLowerCase());
   const client = getSupabaseServerClient();
   const { data, error } = await client
     .from("gmail_connections")
@@ -115,7 +115,7 @@ export async function getGmailAccessToken(accountKey?: string): Promise<{ access
 }
 
 export async function disconnectGmailConnection(accountKey?: string): Promise<void> {
-  const key = (accountKey ?? (process.env.GMAIL_ACCOUNT_KEY ?? "silvijn@silvijnstudio.com").trim().toLowerCase());
+  const key = (accountKey ?? (process.env.GMAIL_ACCOUNT_KEY ?? DEFAULT_GMAIL_ACCOUNT_KEY).trim().toLowerCase());
   TOKEN_STORE.delete(key.toLowerCase());
   const client = getSupabaseServerClient();
   const { error } = await client.from("gmail_connections").delete().eq("account_key", key.toLowerCase());

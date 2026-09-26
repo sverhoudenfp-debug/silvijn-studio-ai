@@ -33,7 +33,7 @@ export interface SentOutreachResult {
  * Puur leesactie; zonder conversation_id of zonder Gmail-bewijs →
  * alle headers null (ongewijzigd gedrag).
  */
-async function resolveReplyThreadHeaders(
+export async function resolveReplyThreadHeaders(
   client: ReturnType<typeof getSupabaseServerClient>,
   conversationId: string | null
 ): Promise<ReplyThreadHeaders> {

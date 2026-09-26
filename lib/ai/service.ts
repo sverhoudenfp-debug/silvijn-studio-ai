@@ -335,8 +335,13 @@ export class AIService {
           leadId: leadId ?? null,
           system: OUTREACH_SYSTEM,
           prompt: buildOutreachPrompt(input),
-          maxTokens: 1500,
-          temperature: 0.5,
+          // claude-sonnet-5 denkt standaard en thinking telt mee voor max_tokens;
+          // 1500 ging live volledig aan thinking op (2026-09-26, fixture-draft:
+          // stop_reason max_tokens vóór enige output). Zelfde faalklasse als de
+          // questionnaire-completion (55fee85) en designplanning (be34860):
+          // ruim budget + expliciete lage reasoning-cap (geen temperature bij effort).
+          maxTokens: 6000,
+          thinkingEffort: "low",
         },
         OutreachMessageSchema
       );

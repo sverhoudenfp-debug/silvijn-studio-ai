@@ -198,6 +198,46 @@ export async function processInboundReply(input: z.input<typeof pipelineInput>):
  * Verwerkt alle nog niet-geanalyseerde confirmed reacties binnen één
  * expliciete eigenaarsronde (na Gmail-sync of vanaf het dashboard).
  */
+/**
+ * Bouwt de audit_events-rij voor één reply_pipeline_run (puur, testbaar).
+ * Regressie 2026-09-28: entity_id was null, maar audit_events.entity_id is
+ * text NOT NULL — elke reply_pipeline_run-audit viel stilletjes weg
+ * (AUDIT_WRITE_FAILED, 0 rijen ooit). Minimale fix: het concrete lead-id van
+ * de eerste verwerkte outcome als entity_id; de pipeline-flow zelf, guards
+ * en modusgedrag zijn onveranderd.
+ */
+export function buildReplyPipelineAuditEvent(input: {
+  ownerUserId: string | null;
+  trigger: "owner_command" | "gmail_ingest";
+  mode: "review" | "auto";
+  outcomes: ReplyPipelineOutcome[];
+  errors: string[];
+}): {
+  actor_id: string | null;
+  action: "reply_pipeline_run";
+  entity_type: "reply_pipeline";
+  entity_id: string;
+  details: Record<string, unknown>;
+} {
+  const { ownerUserId, trigger, mode, outcomes, errors } = input;
+  if (outcomes.length === 0) throw new Error("AUDIT_ROW_REQUIRES_OUTCOMES");
+  return {
+    actor_id: ownerUserId,
+    action: "reply_pipeline_run",
+    entity_type: "reply_pipeline",
+    entity_id: outcomes[0].leadId,
+    details: {
+      trigger,
+      mode,
+      processed: outcomes.length,
+      answered: outcomes.filter((o) => o.outcome === "answered").length,
+      escalated: outcomes.filter((o) => o.outcome === "escalated").length,
+      optedOut: outcomes.filter((o) => o.outcome === "opted_out").length,
+      errors: errors.length,
+    },
+  };
+}
+
 export async function processPendingReplies(input: {
   /** Eigenaar bij een dashboardronde; null bij de Gmail-ingest-tick (trigger verplicht). */
   ownerUserId: string | null;
@@ -241,21 +281,15 @@ export async function processPendingReplies(input: {
   if (isSupabaseConfigured() && outcomes.length > 0) {
     try {
       const client = getSupabaseServerClient();
-      const { error } = await client.from("audit_events").insert({
-        actor_id: input.ownerUserId,
-        action: "reply_pipeline_run",
-        entity_type: "reply_pipeline",
-        entity_id: null,
-        details: {
+      const { error } = await client.from("audit_events").insert(
+        buildReplyPipelineAuditEvent({
+          ownerUserId: input.ownerUserId,
           trigger,
           mode: input.mode,
-          processed: outcomes.length,
-          answered: outcomes.filter((o) => o.outcome === "answered").length,
-          escalated: outcomes.filter((o) => o.outcome === "escalated").length,
-          optedOut: outcomes.filter((o) => o.outcome === "opted_out").length,
-          errors: errors.length,
-        },
-      });
+          outcomes,
+          errors,
+        })
+      );
       if (error) throw error;
     } catch {
       console.warn("[ReplyPipeline] AUDIT_WRITE_FAILED");

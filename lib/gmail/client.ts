@@ -267,14 +267,33 @@ export async function gmailSend(
 }
 
 /** Inbox doorzoeken: berichten aan het studio-account, niet van onszelf. */
+/**
+ * Zoekquery voor de inbox-ingest: berichten gericht aan het primaire account
+ * OF aan het geconfigureerde "Verzenden als"-outreach-adres. Prospects
+ * antwoorden op de afzender van outreach, en die afzender is het send-as-
+ * adres — een reply "To:" is dus het outreach-adres, niet het account.
+ * Eigen studio-mail ("-from:me") blijft altijd uitgesloten: de ingest mag
+ * verzonden outreach en self-replies nooit als klantreactie inlezen.
+ */
+export function buildIngestSearchQuery(input: {
+  accountKey: string;
+  sendAsEmail?: string | null;
+  afterEpochSeconds?: number | null;
+}): string {
+  const account = input.accountKey.trim().toLowerCase();
+  const sendAs = (input.sendAsEmail ?? "").trim().toLowerCase();
+  const toPart = sendAs && sendAs !== account ? `to:${account} OR to:${sendAs}` : `to:${account}`;
+  const parts = [toPart, "-from:me"];
+  if (input.afterEpochSeconds) parts.push(`after:${input.afterEpochSeconds}`);
+  return parts.join(" ");
+}
+
 export async function gmailListMessages(
   accessToken: string,
-  input: { accountKey: string; afterEpochSeconds?: number | null; maxResults?: number; pageToken?: string | null }
+  input: { accountKey: string; sendAsEmail?: string | null; afterEpochSeconds?: number | null; maxResults?: number; pageToken?: string | null }
 ): Promise<{ messages: GmailMessageSummary[]; nextPageToken: string | null; resultSizeEstimate: number }> {
-  const parts = [`to:${input.accountKey}`, "-from:me"];
-  if (input.afterEpochSeconds) parts.push(`after:${input.afterEpochSeconds}`);
   const params = new URLSearchParams({
-    q: parts.join(" "),
+    q: buildIngestSearchQuery(input),
     maxResults: String(Math.min(Math.max(input.maxResults ?? 25, 1), 100)),
   });
   if (input.pageToken) params.set("pageToken", input.pageToken);

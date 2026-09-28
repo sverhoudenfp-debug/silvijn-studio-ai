@@ -48,6 +48,11 @@ export async function ingestGmailInbox(): Promise<GmailIngestResult> {
   do {
     const page = await gmailListMessages(accessToken, {
       accountKey,
+      // Replies van prospects zijn gericht aan het outreach-afzenderadres
+      // (GMAIL_SEND_AS); de ingest moet die mail in dezelfde mailbox dus
+      // óók meenemen in de zoekopdracht. Alleen de zoekbreedte verandert:
+      // self-uitsluiting en matching blijven exact zoals ze zijn.
+      sendAsEmail: gmailSendAsEmail(),
       afterEpochSeconds: after,
       maxResults: 25,
       pageToken,

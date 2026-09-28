@@ -187,7 +187,13 @@ export class AIService {
                 : "generate_structured";
     const model = getModelForTier(call.tier ?? agent.defaultTier);
     const started = Date.now();
-    let designValidationFeedback = "";
+    // Validatiefeedback-retry: bij een schema-afwijzing krijgt de volgende
+    // poging de concrete Zod-diagnostiek als feedback (diagnostische data,
+    // geen instructies; het oorspronkelijke systeem/contract blijft leidend).
+    // Bestond al voor design_planning (D3-regressie); sales heeft hetzelfde
+    // nodig: het live model moet het output-contract exact volgen.
+    const supportsValidationFeedback = call.agent === "design_planning" || call.agent === "sales";
+    let validationFeedback = "";
 
     try {
       this.guardSafetyLimit();
@@ -197,7 +203,7 @@ export class AIService {
             task,
             model,
             system: call.system,
-            prompt: call.prompt + designValidationFeedback,
+            prompt: call.prompt + validationFeedback,
             maxTokens: call.maxTokens ?? 1500,
             temperature: call.thinkingEffort !== undefined ? undefined : (call.temperature ?? 0.4),
             thinkingEffort: call.thinkingEffort,
@@ -213,10 +219,14 @@ export class AIService {
             // D3 live regression: repeating an identical invalid request gives
             // the model no chance to correct its field confusion. Diagnostics
             // are data, not instructions; the original system/schema still win.
-            if (call.agent === "design_planning") {
-              designValidationFeedback = "\n\nVALIDATIEFEEDBACK OP VORIGE POGING (diagnostische data):\n" +
-                validated.error.issues.slice(0, 20).map(issue => `${issue.path.join(".")}: ${issue.message}`).join("\n").slice(0, 6000) +
-                "\nGeef opnieuw het VOLLEDIGE plan, gecorrigeerd volgens het oorspronkelijke contract. layout komt uit de SECTION-REGISTRY; D3-namen uitsluitend in composition.variant. motion uitsluitend none|fade_up|stagger. Verander geen bronfeiten.";
+            if (supportsValidationFeedback) {
+              const diagnostics = validated.error.issues.slice(0, 20).map(issue => `${issue.path.join(".")}: ${issue.message}`).join("\n").slice(0, 6000);
+              validationFeedback =
+                "\n\nVALIDATIEFEEDBACK OP VORIGE POGING (diagnostische data):\n" +
+                diagnostics +
+                (call.agent === "design_planning"
+                  ? "\nGeef opnieuw het VOLLEDIGE plan, gecorrigeerd volgens het oorspronkelijke contract. layout komt uit de SECTION-REGISTRY; D3-namen uitsluitend in composition.variant. motion uitsluitend none|fade_up|stagger. Verander geen bronfeiten."
+                  : "\nGeef opnieuw het VOLLEDIGE JSON-object, gecorrigeerd volgens het OUTPUT-CONTRACT. intent en objectionType uitsluitend met de toegestane waarden; qualification is een OBJECT met alle verplichte velden. Verander geen bronfeiten.");
             }
             // Volledige issue-lijst met veldpaden: productiefouten moeten
             // diagnoseerbaar zijn zonder extra reproductie.
@@ -1385,7 +1395,40 @@ function getSalesTier(): AIModelTier {
   return AI_AGENTS.sales.defaultTier;
 }
 
-function buildSalesPrompt(input: SalesAnalysisInput): string {
+/**
+ * Sales OUTPUT-CONTRACT, exact afgeleid uit het bestaande Zod-schema
+ * (SalesAnalysisSchema — dezelfde bron als de validatie). Enums en velden
+ * worden programmatisch uit het schema gelezen, zodat prompt en validatie
+ * nooit uit elkaar kunnen lopen. Het schema zelf is niet gewijzigd.
+ */
+function buildSalesOutputContract(): string {
+  const intentOptions = SalesAnalysisSchema.shape.intent.options;
+  const objectionOptions = SalesAnalysisSchema.shape.objectionType.options;
+  const qualificationShape = SalesAnalysisSchema.shape.qualification.shape;
+  const statusOptions = qualificationShape.status.options;
+  const interestOptions = qualificationShape.interestLevel.options;
+  const booleanFields = ["needsWebsite", "needsEcommerce", "wantsDemo", "wantsCall", "budgetKnown", "decisionMakerKnown", "requirementsKnown"];
+  return [
+    "OUTPUT-CONTRACT (exact volgen — dit is tevens de validatie van je antwoord):",
+    `- "intent": exact één van ${intentOptions.join(", ")}`,
+    `- "objectionType": exact één van ${objectionOptions.join(", ")}; gebruik "none" als de reactie geen bezwaar bevat`,
+    '- "qualification": een OBJECT (nooit losse tekst) met ALLE verplichte velden:',
+    `    - "status": exact één van ${statusOptions.join(", ")}`,
+    `    - "interestLevel": exact één van ${interestOptions.join(", ")}`,
+    '    - "projectType": string of null, "timeline": string of null',
+    `    - ${booleanFields.map((f) => `"${f}": boolean`).join(", ")}`,
+    '    - "missingInformation": array van strings (max 8)',
+    '    - "qualificationNotes": string van minimaal 10 tekens',
+    '    - "confidence": getal tussen 0 en 1',
+    '- "response": antwoord-concept, 50-400 woorden',
+    '- "suggestedNextAction": string van minimaal 10 tekens',
+    '- "questions": array van maximaal 3 strings (elk minimaal 5 tekens)',
+    '- "escalationRequired": boolean; "escalationReason": string of null',
+    "Geef ALLE velden, geen extra velden, als geldige JSON zonder omringende tekst.",
+  ].join("\n");
+}
+
+export function buildSalesPrompt(input: SalesAnalysisInput): string {
   const config = getAgencyConfiguration();
 
   const lines: string[] = [
@@ -1434,7 +1477,9 @@ function buildSalesPrompt(input: SalesAnalysisInput): string {
     ]),
     ...(config.forbiddenClaims?.length ? [`Verboden claims: ${config.forbiddenClaims.join("; ")}`] : []),
     "",
-    'Output: JSON met "intent", "objectionType", "qualification", "response" (antwoord-concept, 50-400 woorden), "suggestedNextAction", "questions" (max 3 relevante vervolgvragen), "escalationRequired", "escalationReason" (null als niet nodig).'
+    'Output: JSON met "intent", "objectionType", "qualification", "response" (antwoord-concept, 50-400 woorden), "suggestedNextAction", "questions" (max 3 relevante vervolgvragen), "escalationRequired", "escalationReason" (null als niet nodig).',
+    "",
+    buildSalesOutputContract()
   );
 
   return lines.join("\n");

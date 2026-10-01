@@ -101,12 +101,23 @@ export function evaluateEnvironment(env: NodeJS.ProcessEnv, obs: EnvironmentObse
   });
 
   // KVK (nog niet in de owner-flow gebruikt, wel voorbereid)
+  const contactEnrichment = envPresence(env, "GOOGLE_CSE_API_KEY") && envPresence(env, "GOOGLE_CSE_CX");
   const kvk = envPresence(env, "KVK_API_KEY");
   checks.push({
     key: "kvk",
     label: "KVK",
     level: kvk ? "ok" : "info",
     detail: kvk ? "Sleutel aanwezig (KVK-verificatie is nog niet aan de owner-flow gekoppeld)." : "Geen KVK_API_KEY; KVK-verificatie staat bewust nog uit.",
+    evidence: null,
+  });
+
+  checks.push({
+    key: "contact_enrichment",
+    label: "Contactverrijking (e-mail)",
+    level: contactEnrichment ? "ok" : "info",
+    detail: contactEnrichment
+      ? "Google Custom Search-sleutels aanwezig; leads zonder e-mail worden gecontroleerd verrijkt."
+      : "Geen GOOGLE_CSE_API_KEY/GOOGLE_CSE_CX; verrijking staat uit — leads zonder e-mail blijven handmatig contact.",
     evidence: null,
   });
 

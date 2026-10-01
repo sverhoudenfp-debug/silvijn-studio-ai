@@ -44,6 +44,17 @@ export interface LeadRepository {
   create(input: LeadCreateInput): Promise<Lead>;
   /** Conservatieve statusupdate (geen WON/LOST door de AI — Fase 7-regels). */
   updateStatuses(id: string, update: LeadStatusUpdate): Promise<Lead | null>;
+  /**
+   * Contactverrijking (2026-10-01): zet uitsluitend geverifieerde
+   * contactgegevens en audit-notities op een bestaande lead. Statussen,
+   * score en lifecycle worden hier nooit aangeraakt.
+   */
+  updateContact(id: string, update: { email?: string | null; notes?: string[] }): Promise<Lead | null>;
+}
+
+export interface LeadContactUpdate {
+  email?: string | null;
+  notes?: string[];
 }
 
 /**
@@ -204,6 +215,15 @@ export class MockLeadRepository implements LeadRepository {
     lead.updatedAt = new Date().toISOString();
     return lead;
   }
+
+  async updateContact(id: string, update: LeadContactUpdate): Promise<Lead | null> {
+    const lead = leads.find((l) => l.id === id);
+    if (!lead) return null;
+    if (update.email !== undefined) lead.email = update.email;
+    if (update.notes !== undefined) lead.notes = update.notes;
+    lead.updatedAt = new Date().toISOString();
+    return lead;
+  }
 }
 
 export class SupabaseLeadRepository implements LeadRepository {
@@ -251,6 +271,20 @@ export class SupabaseLeadRepository implements LeadRepository {
       .select("*")
       .maybeSingle();
     if (error) throw new Error(`LeadRepository: statusupdate mislukt: ${error.message}`);
+    return data ? rowToLead(data as LeadRow) : null;
+  }
+
+  async updateContact(id: string, update: LeadContactUpdate): Promise<Lead | null> {
+    const { data, error } = await getSupabaseServerClient()
+      .from("leads")
+      .update({
+        ...(update.email !== undefined ? { email: update.email } : {}),
+        ...(update.notes !== undefined ? { notes: update.notes } : {}),
+      })
+      .eq("id", id)
+      .select("*")
+      .maybeSingle();
+    if (error) throw new Error(`LeadRepository: contactupdate mislukt: ${error.message}`);
     return data ? rowToLead(data as LeadRow) : null;
   }
 }

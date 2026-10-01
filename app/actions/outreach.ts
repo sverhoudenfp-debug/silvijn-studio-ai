@@ -21,12 +21,45 @@ export async function listOutreachDrafts(leadId: string): Promise<OutreachDraft[
   return service.listByLead(leadId);
 }
 
-export async function generateOutreachDraft(leadId: string): Promise<OutreachGenerationResult> {
+/**
+ * In Next 16 mag een Server Action geen verwachte fouten throwen (React
+ * #441-crash, zie commit b35d46e). Verwachte fouten komen als getypeerd
+ * resultaat terug; de UI toont ze inline.
+ */
+export type GenerateDraftErrorCode =
+  | "OUTREACH_REQUIRES_EMAIL"
+  | "NOT_FOUND"
+  | "SUPPRESSED"
+  | "LIMIT"
+  | "UNKNOWN";
+
+export type GenerateDraftResult =
+  | { ok: true; generation: OutreachGenerationResult }
+  | { ok: false; error: string; code: GenerateDraftErrorCode };
+
+export async function generateOutreachDraft(leadId: string): Promise<GenerateDraftResult> {
   await requireStudioOwner();
   const service = new OutreachService();
-  const result = await service.generateDraftForLead(leadId);
-  revalidatePath("/outreach");
-  return result;
+  try {
+    const generation = await service.generateDraftForLead(leadId);
+    revalidatePath("/outreach");
+    return { ok: true, generation };
+  } catch (error) {
+    console.error("[outreach-generate] generatie mislukt:", error);
+    const name = error instanceof Error ? error.name : "";
+    const message = error instanceof Error ? error.message : "Generatie mislukt";
+    const code: GenerateDraftErrorCode =
+      name === "OUTREACH_REQUIRES_EMAIL"
+        ? "OUTREACH_REQUIRES_EMAIL"
+        : name === "OutreachNotFoundError"
+          ? "NOT_FOUND"
+          : message === "OUTREACH_SUPPRESSED" || name === "OUTREACH_SUPPRESSED"
+            ? "SUPPRESSED"
+            : name === "OutreachGenerationLimitError"
+              ? "LIMIT"
+              : "UNKNOWN";
+    return { ok: false, error: message, code };
+  }
 }
 
 export async function approveOutreachDraft(draftId: string): Promise<OutreachDraft> {

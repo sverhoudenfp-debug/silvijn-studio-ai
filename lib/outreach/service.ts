@@ -5,6 +5,7 @@ import { scoreLead } from "@/lib/agents/lead-scoring";
 import { MAX_AI_REQUESTS_PER_RUN_CAP } from "@/lib/ai/config";
 import { AIService } from "@/lib/ai/service";
 import { getOutreachRepository } from "./repository";
+import { contactChannelFor, manualContactDetail } from "./contactability";
 import { checkOutreachQuality } from "./quality-check";
 import type { OutreachDraft, OutreachDraftStatus, OutreachGenerationResult } from "./types";
 
@@ -26,6 +27,19 @@ import type { OutreachDraft, OutreachDraftStatus, OutreachGenerationResult } fro
 export function getMaxOutreachGenerationsPerRun(): number {
   const parsed = Number.parseInt(process.env.MAX_OUTREACH_GENERATIONS_PER_RUN ?? "", 10);
   return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 25) : 5;
+}
+
+/**
+ * E-mail-outreach is alleen mogelijk met een geverifieerd e-mailadres.
+ * Leads zonder adres blijven eerlijk "handmatig contact" (kanaal telefoon);
+ * de automatische outreach (orchestrator) slaat ze al over, en deze gate
+ * weerhoudt de per-lead knop in het dashboard van zinloze AI-generatie.
+ */
+export class OutreachContactError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "OUTREACH_REQUIRES_EMAIL";
+  }
 }
 
 export class OutreachGenerationLimitError extends Error {
@@ -86,6 +100,11 @@ export class OutreachService {
     const lead = await leadRepository.get(leadId);
     if (!lead) throw new OutreachNotFoundError("Lead niet gevonden");
     if (isOutreachSuppressed(lead.leadStatus,lead.outreachStatus)) throw new Error("OUTREACH_SUPPRESSED");
+    if (contactChannelFor(lead) !== "email") {
+      throw new OutreachContactError(
+        `Geen e-mailadres bekend voor deze lead — handmatig contact nodig. ${manualContactDetail(lead)}`
+      );
+    }
 
     // 2) Demo-data indien beschikbaar (alleen een bestaande READY demo mag genoemd worden).
     //    De EERSTE outreachmail bevat nooit een demo/link (besluit 2026-09-25): demo's

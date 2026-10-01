@@ -71,7 +71,13 @@ export function OutreachSection({
     setError(null);
     setPending(true);
     try {
-      await generateOutreachDraft(leadId);
+      const result = await generateOutreachDraft(leadId);
+      if (!result.ok) {
+        // Verwachte fouten (bijv. geen e-mailadres → handmatig contact):
+        // inline melding zonder de pagina te breken (React #441-les).
+        setError(result.error);
+        return;
+      }
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Generatie mislukt");

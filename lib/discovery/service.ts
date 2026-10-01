@@ -2,6 +2,7 @@ import { GoogleNoWebsiteListedDiscoveryService } from "./identity/pre-kvk-servic
 import type { Lead } from "@/lib/types";
 import { getLeadRepository, type LeadCreateInput } from "@/lib/repositories/lead-repository";
 import { enrichCandidate } from "./enrichment";
+import { enrichCreatedLeads } from "./contact-enrichment/service";
 import { findDuplicate, type DuplicateSignal } from "./duplicate-detector";
 import { getDiscoveryProvider } from "./providers";
 import type {
@@ -236,6 +237,23 @@ export class LeadDiscoveryService {
       }
     }
 
+    // 5) Contactverrijking (2026-10-01): alleen voor AANGEMAAKTE leads van
+    //    de live Google-bron, begrensd per run, nooit throwend. Mock-leads
+    //    zijn fictief: zoeken naar een echt bedrijf zou onzin opleveren en
+    //    zou zelfs een echt, vreemd bedrijf kunnen koppelen — daarom never.
+    let contactEnrichment: import("./contact-enrichment/service").ContactEnrichmentRunSummary | undefined;
+    if (source === "google" && batchLeads.length > 0) {
+      contactEnrichment = await enrichCreatedLeads(batchLeads);
+      logDiscoveryEvent("CONTACT_ENRICHMENT_COMPLETED", {
+        attempted: contactEnrichment.attempted,
+        emailFound: contactEnrichment.emailFound,
+        noEmailFound: contactEnrichment.noEmailFound,
+        blocked: contactEnrichment.blocked,
+        errors: contactEnrichment.errors,
+        notAttempted: contactEnrichment.notAttempted,
+      });
+    }
+
     logDiscoveryEvent("DISCOVERY_COMPLETED", {
       source: provider.id,
       found: found.length,
@@ -257,6 +275,7 @@ export class LeadDiscoveryService {
       createdLeads,
       errors,
       ...(preKvk ? { preKvk } : {}),
+      ...(contactEnrichment ? { contactEnrichment } : {}),
     };
   }
 }

@@ -98,6 +98,8 @@ export interface DiscoveryResult {
   invalidCandidatesSkipped: number;
   createdLeads: number;
   errors: string[];
+  /** Contactverrijking (2026-10-01): alleen gezet voor live bronnen (google). */
+  contactEnrichment?: import("./contact-enrichment/service").ContactEnrichmentRunSummary;
 }
 
 /**

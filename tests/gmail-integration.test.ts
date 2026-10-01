@@ -202,7 +202,10 @@ test("reply-matching: In-Reply-To eerst, daarna adres; nooit zelf of onbekend", 
     { id: "out-1", lead_id: "lead-1", provider_message_id: "<outreach-abc@silvijnstudio.com>", provider_account_key: accountKey, conversation_id: "conv-1" },
     { id: "out-2", lead_id: "lead-2", provider_message_id: "<outreach-xyz@silvijnstudio.com>", provider_account_key: accountKey, conversation_id: null },
   ];
-  const contactEmails = [{ lead_id: "lead-3", address: "bekend@example.nl" }];
+  const contactEmails = [{ contact_id: "contact-3", lead_id: "lead-3", address: "bekend@example.nl" }];
+  const conversations: {
+    id: string; lead_id: string; contact_id: string; channel: string; thread_key: string; last_reply_at: string;
+  }[] = [];
   const leadEmails = [
     { lead_id: "lead-4", email: "direct@example.nl" },
     { lead_id: "lead-5", email: null },
@@ -211,7 +214,7 @@ test("reply-matching: In-Reply-To eerst, daarna adres; nooit zelf of onbekend", 
   // 1. In-Reply-To matcht exact op het verzonden Message-ID.
   const byHeader = findReplyTarget({
     headers: { from: "een@anders.nl", inReplyTo: "<outreach-abc@silvijnstudio.com>", references: null, messageId: null, to: null, subject: "Re: Website", date: null },
-    accountKey, sentOutreach, leadEmails, contactEmails,
+    accountKey, sentOutreach, leadEmails, contactEmails, conversations,
   });
   assert.equal(byHeader?.leadId, "lead-1");
   assert.equal(byHeader?.outreachId, "out-1");
@@ -220,7 +223,7 @@ test("reply-matching: In-Reply-To eerst, daarna adres; nooit zelf of onbekend", 
   // 2. References-match werkt ook (sommige clients zetten alleen References).
   const byRefs = findReplyTarget({
     headers: { from: "twee@anders.nl", inReplyTo: null, references: "nr1 nr2 <outreach-xyz@silvijnstudio.com>", messageId: null, to: null, subject: null, date: null },
-    accountKey, sentOutreach, leadEmails, contactEmails,
+    accountKey, sentOutreach, leadEmails, contactEmails, conversations,
   });
   assert.equal(byRefs?.leadId, "lead-2");
   assert.equal(byRefs?.matchReason, "in_reply_to");
@@ -228,7 +231,7 @@ test("reply-matching: In-Reply-To eerst, daarna adres; nooit zelf of onbekend", 
   // 3. Onbekend In-Reply-To valt door naar afzendermatch op lead_contact.
   const byContact = findReplyTarget({
     headers: { from: '"B" <bekend@example.nl>', inReplyTo: "<onbekend@id>", references: null, messageId: null, to: null, subject: null, date: null },
-    accountKey, sentOutreach, leadEmails, contactEmails,
+    accountKey, sentOutreach, leadEmails, contactEmails, conversations,
   });
   assert.equal(byContact?.leadId, "lead-3");
   assert.equal(byContact?.outreachId, null);
@@ -237,7 +240,7 @@ test("reply-matching: In-Reply-To eerst, daarna adres; nooit zelf of onbekend", 
   // 4. Afzendermatch op leads.email.
   const byLeadEmail = findReplyTarget({
     headers: { from: "direct@example.nl", inReplyTo: null, references: null, messageId: null, to: null, subject: null, date: null },
-    accountKey, sentOutreach, leadEmails, contactEmails,
+    accountKey, sentOutreach, leadEmails, contactEmails, conversations,
   });
   assert.equal(byLeadEmail?.leadId, "lead-4");
   assert.equal(byLeadEmail?.matchReason, "sender_lead_email");
@@ -245,21 +248,21 @@ test("reply-matching: In-Reply-To eerst, daarna adres; nooit zelf of onbekend", 
   // 5. Volledig onbekende afzender → geen match (nooit leads verzinnen).
   const unknown = findReplyTarget({
     headers: { from: "vreemd@example.org", inReplyTo: null, references: null, messageId: null, to: null, subject: null, date: null },
-    accountKey, sentOutreach, leadEmails, contactEmails,
+    accountKey, sentOutreach, leadEmails, contactEmails, conversations,
   });
   assert.equal(unknown, null);
 
   // 6. Bericht van het studio-account zelf is nooit een prospect-reactie.
   const self = findReplyTarget({
     headers: { from: "Silvijn <silvijn@silvijnstudio.com>", inReplyTo: "<outreach-abc@silvijnstudio.com>", references: null, messageId: null, to: null, subject: null, date: null },
-    accountKey, sentOutreach, leadEmails, contactEmails,
+    accountKey, sentOutreach, leadEmails, contactEmails, conversations,
   });
   assert.equal(self, null);
 
   // 7. Subject- of snippet-gelijkenis matcht nooit op zichzelf.
   const bySubject = findReplyTarget({
     headers: { from: "anders@example.org", inReplyTo: null, references: null, messageId: null, to: null, subject: "Re: Website voor uw bedrijf", date: null },
-    accountKey, sentOutreach, leadEmails, contactEmails,
+    accountKey, sentOutreach, leadEmails, contactEmails, conversations,
   });
   assert.equal(bySubject, null);
 

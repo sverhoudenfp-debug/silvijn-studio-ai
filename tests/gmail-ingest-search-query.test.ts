@@ -27,7 +27,10 @@ const SENT_OUTREACH = [
   },
 ];
 const LEAD_EMAILS = [{ lead_id: "lead-1", email: "prospect@example.nl" }];
-const CONTACT_EMAILS: { lead_id: string; address: string }[] = [];
+const CONTACT_EMAILS: { contact_id: string; lead_id: string; address: string }[] = [];
+const CONVERSATIONS: {
+  id: string; lead_id: string; contact_id: string; channel: string; thread_key: string; last_reply_at: string;
+}[] = [];
 
 test("1. reply aan het primaire account wordt in de query gevonden", () => {
   const q = buildIngestSearchQuery({ accountKey: ACCOUNT, sendAsEmail: SEND_AS });
@@ -66,6 +69,7 @@ test("3. eigen studio-mail blijft uitgesloten: -from:me in de query én self-gua
     sentOutreach: SENT_OUTREACH,
     leadEmails: LEAD_EMAILS,
     contactEmails: CONTACT_EMAILS,
+    conversations: CONVERSATIONS,
   });
   assert.equal(self, null, "self-reply van het studio-account wordt weggefilterd");
 });
@@ -90,6 +94,7 @@ test("4. echte prospect-reply aan het send-as-adres bereikt de bestaande matcher
     sentOutreach: SENT_OUTREACH,
     leadEmails: LEAD_EMAILS,
     contactEmails: CONTACT_EMAILS,
+    conversations: CONVERSATIONS,
   });
   assert.ok(match, "prospect-reply aan info@ wordt gekoppeld");
   assert.equal(match!.matchReason, "in_reply_to");

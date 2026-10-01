@@ -72,6 +72,33 @@ export async function resolveReplyThreadHeaders(
   });
 }
 
+/**
+ * Bestemming van een outreach-draft: het adres van het eigen draft-contact
+ * (lead_contacts via contact_id), anders leads.email. Het eerste contact
+ * van de lead is nooit de bestemming: bij meerdere contactadressen zou het
+ * mail naar de verkeerde ontvanger gaan.
+ */
+export async function resolveOutreachDestination(
+  client: ReturnType<typeof getSupabaseServerClient>,
+  leadId: string,
+  contactId: string | null
+): Promise<string | null> {
+  if (contactId) {
+    const { data: contact, error } = await client
+      .from("lead_contacts")
+      .select("address")
+      .eq("id", contactId)
+      .eq("lead_id", leadId)
+      .eq("channel", "email")
+      .maybeSingle();
+    if (error) throw new Error(`Draft-contact kon niet worden gelezen: ${error.message}`);
+    if (contact?.address) return contact.address;
+  }
+  const { data: lead, error: leadError } = await client.from("leads").select("email").eq("id", leadId).maybeSingle();
+  if (leadError) throw new Error(`Lead kon niet worden gelezen: ${leadError.message}`);
+  return lead?.email ?? null;
+}
+
 export async function sendOutreachViaGmail(draftId: string): Promise<SentOutreachResult> {
   const id = z.uuid().parse(draftId);
   if (!isSupabaseConfigured()) throw new Error("BLOCKED_EXTERNAL_CONFIGURATION: database niet geconfigureerd");
@@ -80,7 +107,7 @@ export async function sendOutreachViaGmail(draftId: string): Promise<SentOutreac
 
   const { data: draft, error } = await client
     .from("outreach_drafts")
-    .select("id,lead_id,status,channel,subject,body,provider_message_id,conversation_id")
+    .select("id,lead_id,status,channel,subject,body,provider_message_id,conversation_id,contact_id")
     .eq("id", id)
     .single();
   if (error || !draft) throw new Error("Outreach-draft niet gevonden");
@@ -92,15 +119,16 @@ export async function sendOutreachViaGmail(draftId: string): Promise<SentOutreac
     throw new Error("Dit draft is al verzonden (immutable)");
   }
 
-  // Bestemming: het e-mailadres van de lead (lead_contacts of leads.email).
-  const { data: contact } = await client
-    .from("lead_contacts")
-    .select("address")
-    .eq("lead_id", draft.lead_id)
-    .eq("channel", "email")
-    .limit(1);
-  const { data: lead } = await client.from("leads").select("email").eq("id", draft.lead_id).single();
-  const to = contact?.[0]?.address ?? lead?.email ?? null;
+  // Bestemming: het e-mailadres van DIT draft-contact — nooit zomaar het
+  // eerste willekeurige lead_contact (een lead kan meerdere adressen hebben;
+  // het eerste adres kan een heel andere ontvanger zijn dan waar dit draft
+  // voor bedoeld is). Zonder draft-contact valt de bestemming terug op
+  // leads.email.
+  const to = await resolveOutreachDestination(
+    client,
+    draft.lead_id,
+    draft.contact_id ?? null
+  );
   if (!to) throw new Error("Geen e-mailadres bekend voor deze lead");
 
   // Reply-threading: als dit draft een antwoord binnen een bestaand

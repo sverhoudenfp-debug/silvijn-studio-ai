@@ -280,6 +280,8 @@ export function buildIngestSearchQuery(input: {
   sendAsEmail?: string | null;
   afterEpochSeconds?: number | null;
 }): string {
+  // N.B. Gmail sluit SPAM/Trash bij deze query standaard uit; de ingest
+  // schakelt dat via includeSpamTrash expliciet in (zie gmailListMessages).
   const account = input.accountKey.trim().toLowerCase();
   const sendAs = (input.sendAsEmail ?? "").trim().toLowerCase();
   const toPart = sendAs && sendAs !== account ? `to:${account} OR to:${sendAs}` : `to:${account}`;
@@ -290,12 +292,25 @@ export function buildIngestSearchQuery(input: {
 
 export async function gmailListMessages(
   accessToken: string,
-  input: { accountKey: string; sendAsEmail?: string | null; afterEpochSeconds?: number | null; maxResults?: number; pageToken?: string | null }
+  input: {
+    accountKey: string;
+    sendAsEmail?: string | null;
+    afterEpochSeconds?: number | null;
+    maxResults?: number;
+    pageToken?: string | null;
+    /**
+     * Spam/Trash meenemen in de inbox-scan. Gmail sluit die locaties bij
+     * zoekopdrachten standaard uit; een echte prospect-reply die door
+     * Gmail verkeerd geclassificeerd is, is en blijft een echte reactie.
+     */
+    includeSpamTrash?: boolean;
+  }
 ): Promise<{ messages: GmailMessageSummary[]; nextPageToken: string | null; resultSizeEstimate: number }> {
   const params = new URLSearchParams({
     q: buildIngestSearchQuery(input),
     maxResults: String(Math.min(Math.max(input.maxResults ?? 25, 1), 100)),
   });
+  if (input.includeSpamTrash) params.set("includeSpamTrash", "true");
   if (input.pageToken) params.set("pageToken", input.pageToken);
   const data = (await gmailFetch(accessToken, `${GMAIL_API}/messages?${params.toString()}`)) as {
     messages?: { id: string; threadId: string }[];

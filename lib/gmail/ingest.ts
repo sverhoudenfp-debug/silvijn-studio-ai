@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getSupabaseServerClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { getGmailAccessToken, markGmailIngested } from "./tokens";
 import { isGmailConfigured, DEFAULT_GMAIL_ACCOUNT_KEY, GMAIL_SETTINGS_SCOPE, gmailSendAsEmail } from "./config";
-import { gmailGetMessage, gmailListMessages } from "./client";
+import { extractEmailAddress, gmailGetMessage, gmailListMessages } from "./client";
 import { findReplyTarget, loadMatchContext } from "./matching";
 
 /**
@@ -56,6 +56,10 @@ export async function ingestGmailInbox(): Promise<GmailIngestResult> {
       afterEpochSeconds: after,
       maxResults: 25,
       pageToken,
+      // Echte reacties die Gmail in SPAM/Trash heeft gelegd zijn en blijven
+      // echte reacties: die locaties moeten in de scan zitten (Gmail sluit
+      // ze bij zoeken standaard uit).
+      includeSpamTrash: true,
     });
     for (const summary of page.messages) {
       if (scanned >= INGEST_MAX_MESSAGES) break;
@@ -79,7 +83,12 @@ export async function ingestGmailInbox(): Promise<GmailIngestResult> {
         const client = getSupabaseServerClient();
         const { data, error } = await client.rpc("ingest_gmail_reply", {
           p_lead: match.leadId,
-          p_sender: message.headers.from ?? "",
+          // Het kale e-mailadres van de afzender — niet de volledige
+          // "Naam <adres>"-header. lead_contacts.address en de afzender-
+          // matching werken op het adres; een volledige header als adres
+          // maakte dezelfde contact uit een eerdere reactie onvindbaar
+          // (2026-09-28: duplicaat-contact met weergavenaam erin).
+          p_sender: extractEmailAddress(message.headers.from) ?? message.headers.from ?? "",
           p_subject: message.headers.subject ?? "",
           p_body: body.slice(0, 50000),
           p_received: receivedAt,

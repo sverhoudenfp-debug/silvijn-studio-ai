@@ -1,6 +1,5 @@
 "use server";
 import { z } from "zod";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSessionClient } from "@/lib/auth/server";
 
@@ -8,34 +7,45 @@ import { getSessionClient } from "@/lib/auth/server";
 const OWNER_EMAIL = "silvijn@silvijnstudio.com";
 
 /**
- * Callback-URL voor de magische inloglink. Volgt de host waarop de eigenaar
- * daadwerkelijk inlogt (app.silvijnstudio.com, vercel.app of lokale dev).
- * Supabase dwingt bovendien de uri_allow_list af: niet-toegestane hosts
- * vallen automatisch terug op de geconfigureerde site_url.
+ * Inloggen met e-mailadres + wachtwoord (2026-10-01, op verzoek van de
+ * eigenaar ter vervanging van de magic-link-flow).
+ *
+ * Beveiliging blijft identiek aan voorheen:
+ *  - het e-mailadres moet exact het geautoriseerde studio-account zijn
+ *    (server-side gecontroleerd vóór enige Supabase-aanroep);
+ *  - na succes wordt dezelfde is_studio_owner-RPC gecontroleerd die de
+ *    magic-link-callback en requireStudioOwner() afdwingen;
+ *  - alle bestaande pagina-/action-guards (requireStudioOwner) zijn
+ *    onveranderd; de sessiebeveiliging (httpOnly cookies via Supabase SSR)
+ *    is ongewijzigd.
+ * Geen magic-link meer: geen verificatie-e-mail, alleen wachtwoord.
  */
-async function callbackUrl(): Promise<string> {
-  const host = (await headers()).get("host");
-  const proto = host?.startsWith("localhost") ? "http" : "https";
-  if (host) return `${proto}://${host}/auth/callback`;
-  return "https://app.silvijnstudio.com/auth/callback";
-}
-
-export async function requestLogin(form: FormData) {
+export async function loginWithPassword(form: FormData) {
   const parsed = z.string().email().safeParse(String(form.get("email") ?? "").trim().toLowerCase());
-  if (!parsed.success || parsed.data !== OWNER_EMAIL) redirect("/login?error=access_denied");
+  const password = String(form.get("password") ?? "");
+  if (!parsed.success || parsed.data !== OWNER_EMAIL || password.length === 0) redirect("/login?error=invalid");
+
   const client = await getSessionClient();
-  const { error } = await client.auth.signInWithOtp({
+  const { error } = await client.auth.signInWithPassword({
     email: parsed.data,
-    options: { shouldCreateUser: true, emailRedirectTo: await callbackUrl() },
+    password,
   });
   if (error) {
-    // Supabase limiteert ingebouwde e-mailverzending (frequentie/uur); dit is
-    // geen configuratiefout maar een korte wachttijd voor de eigenaar.
-    const retryable = error.status === 429;
-    redirect(retryable ? "/login?error=rate_limit" : "/login?error=delivery");
+    // 400 = onjuiste inloggegevens; 429 = Supabase-frequentielimiet.
+    const reason = error.status === 429 ? "rate_limit" : "invalid";
+    redirect(`/login?error=${reason}`);
   }
-  redirect("/login?sent=1");
+
+  // Zelfde eigenaar-controle als de auth-callback: een geldige sessie die
+  // geen studio-eigenaar is, krijgt geen toegang (defense in depth).
+  const { data: owner } = await client.rpc("is_studio_owner");
+  if (owner !== true) {
+    await client.auth.signOut();
+    redirect("/login?error=access_denied");
+  }
+  redirect("/dashboard");
 }
+
 export async function signOut() {
   const client = await getSessionClient();
   await client.auth.signOut();

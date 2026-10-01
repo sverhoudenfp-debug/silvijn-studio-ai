@@ -6,20 +6,28 @@ import { getInboundMessageRepository, getSalesInteractionRepository } from "@/li
 import { getLeadRepository } from "@/lib/repositories/lead-repository";
 import { SalesService } from "@/lib/sales/service";
 import { getSupabaseServerClient, isSupabaseConfigured } from "@/lib/supabase/server";
+import { isTestLead, isTestLeadLinked, resolveShowTestData, testLeadIdSet } from "@/lib/leads/test-data";
 
 /**
  * AI Sales-overzicht — echte data uit de sales-repository's (geen mockstats).
  * Recente klantreacties staan bovenaan als kaarten; klik opent de
  * volledige conversation/thread.
  */
-export default async function SalesPage() {
+export default async function SalesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await requireStudioOwner();
+  const showTestData = resolveShowTestData(await searchParams);
   const service = new SalesService();
-  const [interactions, leads, inbounds] = await Promise.all([
+  const [allInteractions, allLeads, allInbounds] = await Promise.all([
     service.listAllInteractions(),
     getLeadRepository().list(),
     getInboundMessageRepository().list(),
   ]);
+  // Testdata-scheiding (2026-10-01): reacties van mock-/fixture-leads horen
+  // niet bij de echte productiestatistieken en reacties; ?test=1 toont expliciet.
+  const testIds = testLeadIdSet(allLeads);
+  const interactions = showTestData ? allInteractions : allInteractions.filter((i) => !isTestLeadLinked(testIds, i.leadId));
+  const inbounds = showTestData ? allInbounds : allInbounds.filter((m) => !isTestLeadLinked(testIds, m.leadId));
+  const leads = showTestData ? allLeads : allLeads.filter((l) => !isTestLead(l));
   const processedInboundIds = new Set(
     (await getSalesInteractionRepository().list()).map((i) => i.inboundMessageId)
   );

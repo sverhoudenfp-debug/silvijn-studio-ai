@@ -5,6 +5,7 @@ import { getConversationPage } from "@/lib/sales/conversations";
 import { getLeadRepository } from "@/lib/repositories/lead-repository";
 import { leadLifecycleMeta } from "@/lib/leads/lifecycle";
 import { cleanMessageForDisplay } from "@/lib/sales/message-clean";
+import { resolveShowTestData, testLeadIdSet } from "@/lib/leads/test-data";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import { MarkConversationRead } from "@/components/conversations/mark-read";
@@ -43,7 +44,12 @@ export default async function ConversationsPage({ searchParams }: { searchParams
   if ((lead && !z.uuid().safeParse(lead).success) || (id && !z.uuid().safeParse(id).success)) notFound();
   const page = Math.max(0, parseInt(String(params.page ?? "0"), 10) || 0);
   const messagePage = Math.max(0, parseInt(String(params.messages ?? "0"), 10) || 0);
-  const [result, leads] = await Promise.all([getConversationPage({ leadId: lead, conversationId: id, page, messagePage }), getLeadRepository().list()]);
+  const showTestData = resolveShowTestData(params);
+  const leads = await getLeadRepository().list();
+  // Testdata-scheiding (2026-10-01): gesprekken van mock-/fixture-leads zijn
+  // verborgen in de lijst (?test=1 toont expliciet); deeplinks blijven werken.
+  const excludeLeadIds = showTestData ? [] : [...testLeadIdSet(leads)];
+  const result = await getConversationPage({ leadId: lead, conversationId: id, page, messagePage, excludeLeadIds });
   if (id && !result.active) notFound();
   const leadMap = new Map(leads.map((l) => [l.id, l]));
   const activeLead = result.active ? leadMap.get(result.active.lead_id) : undefined;

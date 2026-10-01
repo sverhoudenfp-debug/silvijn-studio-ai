@@ -1,4 +1,5 @@
 import { leadLifecycleStates } from "@/lib/leads/lifecycle";
+import { filterProductionLeads, isTestLeadLinked, isTestLeadName, testLeadIdSet } from "@/lib/leads/test-data";
 /**
  * Fase 12 §P — productie-analytics.
  * ALLE cijfers komen uit de echte repositories (live Supabase indien
@@ -132,7 +133,7 @@ export async function getAgencyAnalytics(): Promise<AgencyAnalytics> {
   const runRepo = getAIRunRepository();
   const automationRunRepo = getAutomationRunRepository();
 
-  const [leads, outreach, inbound, interactions, projects, websites, aiRuns, automationRuns] = await Promise.all([
+  const [allLeads, allOutreach, allInbound, allInteractions, allProjects, allWebsites, aiRuns, automationRuns] = await Promise.all([
     leadRepo.list(),
     outreachRepo.list(),
     inboundRepo.list(),
@@ -142,6 +143,19 @@ export async function getAgencyAnalytics(): Promise<AgencyAnalytics> {
     runRepo.listRecent(200),
     automationRunRepo.list(200),
   ]);
+
+  // Testdata-scheiding (2026-10-01): alle lead-gekoppelde cijfers tellen
+  // uitsluitend productiedata — mock-/fixture-leads en alles wat eraan
+  // gekoppeld is (drafts, inbound, interacties, projecten, websites) horen
+  // niet in de echte statistieken. AI-/automation-runs blijven systeem-
+  // breed (echte kosten en systeemgezondheid, inclusief testruns).
+  const testIds = testLeadIdSet(allLeads);
+  const leads = filterProductionLeads(allLeads);
+  const outreach = allOutreach.filter((d) => !isTestLeadLinked(testIds, d.leadId));
+  const inbound = allInbound.filter((m) => !isTestLeadLinked(testIds, m.leadId));
+  const interactions = allInteractions.filter((i) => !isTestLeadLinked(testIds, i.leadId));
+  const projects = allProjects.filter((p) => !isTestLeadLinked(testIds, p.leadId));
+  const websites = allWebsites.filter((w) => !isTestLeadLinked(testIds, w.leadId) && !isTestLeadName(w.businessName));
 
   // QC-resultaten per website (nieuwste QC per website telt)
   const latestQcResults = new Map<string, string>();

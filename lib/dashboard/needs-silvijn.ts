@@ -6,6 +6,7 @@ import type { OutreachDraft } from "@/lib/outreach/types";
 import type { Project } from "@/lib/projects/types";
 import type { Questionnaire } from "@/lib/questionnaire/repository";
 import type { ProductionGate } from "@/lib/payments/service";
+import { isTestLeadLinked, isTestLeadName, testLeadIdSet } from "@/lib/leads/test-data";
 
 /**
  * "Wacht op jou" (G7): één deterministische, read-only verzameling van alles
@@ -199,26 +200,40 @@ export async function loadNeedsSilvijn(): Promise<NeedsSilvijnResult> {
     }
   }
 
-  const [{ getGeneratedWebsiteRepository }, { getProjectRepository }, { getSalesInteractionRepository, getInboundMessageRepository }, { getOutreachRepository }, { getQuestionnaireRepository }] =
+  const [{ getGeneratedWebsiteRepository }, { getProjectRepository }, { getSalesInteractionRepository, getInboundMessageRepository }, { getOutreachRepository }, { getQuestionnaireRepository }, { getLeadRepository }] =
     await Promise.all([
       import("@/lib/websites/repository"),
       import("@/lib/projects/repository"),
       import("@/lib/sales/repository"),
       import("@/lib/outreach/repository"),
       import("@/lib/questionnaire/repository"),
+      import("@/lib/repositories/lead-repository"),
     ]);
 
-  const [websites, projects, interactions, inbound, outreach, questionnaires] = await Promise.all([
+  const [websites, projects, interactions, inbound, outreach, questionnaires, leads] = await Promise.all([
     safe("websites", () => getGeneratedWebsiteRepository().list()),
     safe("projecten", () => getProjectRepository().list()),
     safe("conversaties", () => getSalesInteractionRepository().list()),
     safe("inbox", () => getInboundMessageRepository().list()),
     safe("outreach", () => getOutreachRepository().list()),
     safe("vragenlijsten", () => getQuestionnaireRepository().list()),
+    safe("leads", () => getLeadRepository().list()),
   ]);
 
+  // Testdata-scheiding (2026-10-01): fixture-/mock-leads (en alles wat eraan
+  // gekoppeld is) verschijnen niet in de normale "Wacht op jou"-wachtrij.
+  // Silvijn bereikt testitems expliciet via de detailpagina's (?test=1-lijsten);
+  // dit paneel toont uitsluitend menselijke beslissingen voor productie.
+  const testIds = testLeadIdSet(leads);
+  const productionWebsites = websites.filter((w) => !isTestLeadLinked(testIds, w.leadId) && !isTestLeadName(w.businessName));
+  const productionProjects = projects.filter((p) => !isTestLeadLinked(testIds, p.leadId));
+  const productionInteractions = interactions.filter((i) => !isTestLeadLinked(testIds, i.leadId));
+  const productionInbound = inbound.filter((m) => !isTestLeadLinked(testIds, m.leadId));
+  const productionOutreach = outreach.filter((d) => !isTestLeadLinked(testIds, d.leadId));
+  const productionQuestionnaires = questionnaires.filter((q) => !isTestLeadLinked(testIds, q.leadId));
+
   const gates: Record<string, ProductionGate> = {};
-  const approved = projects.filter((p) => p.priceStatus === "approved" && PROJECT_OPEN_STATUSES.has(p.status));
+  const approved = productionProjects.filter((p) => p.priceStatus === "approved" && PROJECT_OPEN_STATUSES.has(p.status));
   if (approved.length > 0) {
     const { getProductionGate } = await import("@/lib/payments/service");
     await Promise.all(
@@ -232,5 +247,16 @@ export async function loadNeedsSilvijn(): Promise<NeedsSilvijnResult> {
     );
   }
 
-  return { items: buildNeedsSilvijnItems({ websites, projects, gates, interactions, inbound, outreach, questionnaires }), unavailable };
+  return {
+    items: buildNeedsSilvijnItems({
+      websites: productionWebsites,
+      projects: productionProjects,
+      gates,
+      interactions: productionInteractions,
+      inbound: productionInbound,
+      outreach: productionOutreach,
+      questionnaires: productionQuestionnaires,
+    }),
+    unavailable,
+  };
 }

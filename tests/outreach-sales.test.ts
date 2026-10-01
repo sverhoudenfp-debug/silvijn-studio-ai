@@ -43,7 +43,7 @@ async function seedLead(overrides: Record<string, unknown> = {}) {
     country: "Nederland",
     websiteStatus: "no_website",
     email: `test${seq}@example.invalid`,
-    source: "mock",
+    source: "other",
     ...overrides,
   });
 }
@@ -87,6 +87,22 @@ test("eligibility: suppressed, email-less, already-contacted leads are never sel
 // ---------------------------------------------------------------------------
 // Review-modus: bestaande menselijke flow blijft bestaan
 // ---------------------------------------------------------------------------
+
+test("productiestelling: outreach-opdrachten selecteren nooit mock- of fixture-leads", async () => {
+  // Eén productielead + één mock-bron lead + één [TEST-FIXTURE]-naam lead.
+  const production = await seedLead({ businessName: "Echte Productieklant TESTDATA" });
+  const mockSourced = await seedLead({ businessName: "Mockdatasetbedrijf TESTDATA", source: "mock" });
+  const fixtureNamed = await seedLead({ businessName: "[TEST-FIXTURE] Fixtureflow TESTDATA", source: "manual" });
+
+  const orchestrator = new OutreachOrchestrator();
+  const result = await orchestrator.runCommand({ ownerUserId: owner, mode: "review", limit: 25 });
+
+  assert.equal(result.command.status, "completed");
+  const drafts = await getOutreachRepository().list();
+  assert.ok(drafts.some((d) => d.leadId === production.id), "de productielead krijgt een draft");
+  assert.equal(drafts.some((d) => d.leadId === mockSourced.id), false, "mock-bron lead krijgt geen draft uit een opdracht");
+  assert.equal(drafts.some((d) => d.leadId === fixtureNamed.id), false, "[TEST-FIXTURE]-naam lead krijgt geen draft uit een opdracht");
+});
 
 test("review campaign creates drafts for human review without sending or state change", async () => {
   const lead = await seedLead();

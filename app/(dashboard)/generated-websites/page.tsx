@@ -5,16 +5,26 @@ import { getProjectRepository } from "@/lib/projects/repository";
 import { WebsiteGenerationService } from "@/lib/websites/service";
 import { getThemeZipArtifactRepository } from "@/lib/websites/theme-zip/repository";
 import { selectDownloadableArtifact, toArtifactSummary, type DownloadableArtifactSummary } from "@/lib/websites/theme-zip/download";
+import { getLeadRepository } from "@/lib/repositories/lead-repository";
+import { isTestLeadLinked, isTestLeadName, resolveShowTestData, testLeadIdSet } from "@/lib/leads/test-data";
 
 /**
  * Websites-overzicht (Fase 9) — echte data uit de repository.
  */
-export default async function GeneratedWebsitesPage() {
+export default async function GeneratedWebsitesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await requireStudioOwner();
-  const [websites, projects] = await Promise.all([
+  const showTestData = resolveShowTestData(await searchParams);
+  const [allWebsites, projects, allLeads] = await Promise.all([
     new WebsiteGenerationService().list(),
     getProjectRepository().list(),
+    getLeadRepository().list(),
   ]);
+  // Testdata-scheiding (2026-10-01): fixture-websites zijn verborgen in het
+  // normale overzicht; ?test=1 toont expliciet (regressietests/opruimen).
+  const testIds = testLeadIdSet(allLeads);
+  const websites = showTestData
+    ? allWebsites
+    : allWebsites.filter((w) => !isTestLeadLinked(testIds, w.leadId) && !isTestLeadName(w.businessName));
 
   const projectNames: Record<string, string> = {};
   for (const project of projects) projectNames[project.id] = project.name;

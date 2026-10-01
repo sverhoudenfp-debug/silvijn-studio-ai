@@ -1,6 +1,7 @@
 import "server-only";
 import { manualContactDetail, needsManualContact } from "./contactability";
 import { isOutreachSuppressed } from "@/lib/leads/lifecycle";
+import { isTestLead } from "@/lib/leads/test-data";
 import { automatedLeadTransition } from "@/lib/leads/automated";
 import { getLeadRepository } from "@/lib/repositories/lead-repository";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
@@ -133,8 +134,14 @@ export class OutreachOrchestrator {
         getOutreachRepository().list(),
       ]);
 
+      // Testdata-scheiding (2026-10-01): mock-/fixture-leads nemen NOOIT deel
+      // aan automatische outreach-opdrachten; alleen productieleads worden
+      // geselecteerd. Expliciete per-lead dashboardgeneratie blijft mogelijk
+      // voor bewuste fixture-tests (regressiepad).
+      const productionLeads = leads.filter((lead) => !isTestLead(lead));
+
       // Selectie: één initiële outreach per lead, alleen verse leads.
-      const selected = leads
+      const selected = productionLeads
         .filter((lead) =>
           isEligibleForInitialOutreach(
             lead,
@@ -150,7 +157,7 @@ export class OutreachOrchestrator {
       // Honest reporting: leads outreach would take but cannot e-mail. Never
       // guess an address; surface them as skipped so Silvijn contacts them.
       const MAX_MANUAL_CONTACT_REPORTS = 25;
-      for (const lead of leads.filter(needsManualContact).sort((a, b) => (b.leadScore ?? 0) - (a.leadScore ?? 0)).slice(0, MAX_MANUAL_CONTACT_REPORTS)) {
+      for (const lead of productionLeads.filter(needsManualContact).sort((a, b) => (b.leadScore ?? 0) - (a.leadScore ?? 0)).slice(0, MAX_MANUAL_CONTACT_REPORTS)) {
         leadSummaries.push({
           leadId: lead.id,
           businessName: lead.businessName,

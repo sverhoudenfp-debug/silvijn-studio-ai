@@ -17,11 +17,17 @@ export async function markConversationRead(conversationId:string):Promise<void> 
  await humanRpc("mark_conversation_read",{p_conversation:z.uuid().parse(conversationId)});
 }
 
-export async function getConversationPage(input:{leadId?:string;conversationId?:string;page:number;messagePage:number}) {
+export async function getConversationPage(input:{leadId?:string;conversationId?:string;page:number;messagePage:number;excludeLeadIds?:string[]}) {
  const {client}=await requireStudioOwner();
  const page=Math.max(0,Math.min(100000,Math.floor(input.page)||0)); const messagePage=Math.max(0,Math.min(100000,Math.floor(input.messagePage)||0));
  let query=client.from("conversations").select("id,lead_id,contact_id,channel,thread_key,first_reply_id,last_reply_at,owner_last_read_at",{count:"exact"});
  if(input.leadId) query=query.eq("lead_id",z.uuid().parse(input.leadId));
+ // Testdata-scheiding (2026-10-01): testlead-gesprekken uit de lijst houden;
+ // een expliciete conversationId-deeplink blijft altijd bereikbaar.
+ if(!input.leadId&&input.excludeLeadIds&&input.excludeLeadIds.length>0){
+  const ids=input.excludeLeadIds.filter((v)=>z.uuid().safeParse(v).success);
+  if(ids.length>0) query=query.not("lead_id","in",ids);
+ }
  const rows=await query.order("last_reply_at",{ascending:false}).order("id").range(page*30,page*30+29);
  if(rows.error) throw new Error("Conversations could not be loaded");
  const conversations=(rows.data??[]) as ConversationRow[];

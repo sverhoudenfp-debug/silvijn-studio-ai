@@ -8,16 +8,18 @@ import { getDemoRepository } from "@/lib/repositories/demo-repository";
 import { getLeadRepository } from "@/lib/repositories/lead-repository";
 import { OutreachService } from "@/lib/outreach/service";
 import { gmailIngestStatus } from "@/lib/gmail/ingest";
+import { isTestLead, isTestLeadLinked, resolveShowTestData, testLeadIdSet } from "@/lib/leads/test-data";
 
 /**
  * Outreach-overzicht — echte data uit de draft-repository (geen mockstats).
  * Mock-dashboardwidgets met verzonnen "verzonden"-cijfers zijn hier bewust
  * vervangen; de dashboard-analytics uit een latere fase pakt dit centraal op.
  */
-export default async function OutreachPage() {
+export default async function OutreachPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await requireStudioOwner();
+  const showTestData = resolveShowTestData(await searchParams);
   const service = new OutreachService();
-  const [drafts, leads, demos, gmail, commands, dueFollowups] = await Promise.all([
+  const [allDrafts, allLeads, demos, gmail, commands, allFollowups] = await Promise.all([
     service.listAll(),
     getLeadRepository().list(),
     getDemoRepository().list(),
@@ -25,6 +27,12 @@ export default async function OutreachPage() {
     getOutreachCommandRepository().list(10),
     findDueFollowups(),
   ]);
+  // Testdata-scheiding (2026-10-01): drafts/followups van mock-/fixture-leads
+  // verdwijnen uit het normale outreach-overzicht; ?test=1 toont expliciet.
+  const testIds = testLeadIdSet(allLeads);
+  const drafts = showTestData ? allDrafts : allDrafts.filter((d) => !isTestLeadLinked(testIds, d.leadId));
+  const leads = showTestData ? allLeads : allLeads.filter((l) => !isTestLead(l));
+  const dueFollowups = showTestData ? allFollowups : allFollowups.filter((d) => !isTestLeadLinked(testIds, d.leadId));
 
   const leadNames: Record<string, { name: string; hasDemo: boolean; demoUrl: string | null }> = {};
   for (const lead of leads) {

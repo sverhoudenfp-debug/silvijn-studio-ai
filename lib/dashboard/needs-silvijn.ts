@@ -7,6 +7,15 @@ import type { Project } from "@/lib/projects/types";
 import type { Questionnaire } from "@/lib/questionnaire/repository";
 import type { ProductionGate } from "@/lib/payments/service";
 import { isTestLeadLinked, isTestLeadName, testLeadIdSet } from "@/lib/leads/test-data";
+import {
+  cachedListInbound,
+  cachedListInteractions,
+  cachedListLeads,
+  cachedListOutreach,
+  cachedListProjects,
+  cachedListQuestionnaires,
+  cachedListWebsites,
+} from "@/lib/dashboard/cached-reads";
 
 /**
  * "Wacht op jou" (G7): één deterministische, read-only verzameling van alles
@@ -200,24 +209,14 @@ export async function loadNeedsSilvijn(): Promise<NeedsSilvijnResult> {
     }
   }
 
-  const [{ getGeneratedWebsiteRepository }, { getProjectRepository }, { getSalesInteractionRepository, getInboundMessageRepository }, { getOutreachRepository }, { getQuestionnaireRepository }, { getLeadRepository }] =
-    await Promise.all([
-      import("@/lib/websites/repository"),
-      import("@/lib/projects/repository"),
-      import("@/lib/sales/repository"),
-      import("@/lib/outreach/repository"),
-      import("@/lib/questionnaire/repository"),
-      import("@/lib/repositories/lead-repository"),
-    ]);
-
   const [websites, projects, interactions, inbound, outreach, questionnaires, leads] = await Promise.all([
-    safe("websites", () => getGeneratedWebsiteRepository().list()),
-    safe("projecten", () => getProjectRepository().list()),
-    safe("conversaties", () => getSalesInteractionRepository().list()),
-    safe("inbox", () => getInboundMessageRepository().list()),
-    safe("outreach", () => getOutreachRepository().list()),
-    safe("vragenlijsten", () => getQuestionnaireRepository().list()),
-    safe("leads", () => getLeadRepository().list()),
+    safe("websites", cachedListWebsites),
+    safe("projecten", cachedListProjects),
+    safe("conversaties", cachedListInteractions),
+    safe("inbox", cachedListInbound),
+    safe("outreach", cachedListOutreach),
+    safe("vragenlijsten", cachedListQuestionnaires),
+    safe("leads", cachedListLeads),
   ]);
 
   // Testdata-scheiding (2026-10-01): fixture-/mock-leads (en alles wat eraan

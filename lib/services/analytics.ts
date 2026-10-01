@@ -7,14 +7,18 @@ import { filterProductionLeads, isTestLeadLinked, isTestLeadName, testLeadIdSet 
  * Geen enkele hard-coded KPI: geen data → 0 / lege state.
  */
 
+import {
+  cachedLatestQcByWebsite,
+  cachedListAiRuns,
+  cachedListAutomationRuns,
+  cachedListInbound,
+  cachedListInteractions,
+  cachedListLeads,
+  cachedListOutreach,
+  cachedListProjects,
+  cachedListWebsites,
+} from "@/lib/dashboard/cached-reads";
 import { getLeadRepository } from "@/lib/repositories/lead-repository";
-import { getAIRunRepository } from "@/lib/repositories/ai-run-repository";
-import { getOutreachRepository } from "@/lib/outreach/repository";
-import { getInboundMessageRepository, getSalesInteractionRepository } from "@/lib/sales/repository";
-import { getProjectRepository } from "@/lib/projects/repository";
-import { getGeneratedWebsiteRepository } from "@/lib/websites/repository";
-import { getQualityControlRepository } from "@/lib/qc/repository";
-import { getAutomationRunRepository } from "@/lib/automation/repositories";
 import type { Lead, LeadStatus } from "@/lib/types";
 import type { ProjectStatus } from "@/lib/projects/types";
 import type { GeneratedWebsite } from "@/lib/websites/types";
@@ -124,24 +128,17 @@ function zeroLeadStatuses(): Record<LeadStatus, number> {
 
 export async function getAgencyAnalytics(): Promise<AgencyAnalytics> {
   const leadRepo = getLeadRepository();
-  const outreachRepo = getOutreachRepository();
-  const inboundRepo = getInboundMessageRepository();
-  const interactionRepo = getSalesInteractionRepository();
-  const projectRepo = getProjectRepository();
-  const websiteRepo = getGeneratedWebsiteRepository();
-  const qcRepo = getQualityControlRepository();
-  const runRepo = getAIRunRepository();
-  const automationRunRepo = getAutomationRunRepository();
 
-  const [allLeads, allOutreach, allInbound, allInteractions, allProjects, allWebsites, aiRuns, automationRuns] = await Promise.all([
-    leadRepo.list(),
-    outreachRepo.list(),
-    inboundRepo.list(),
-    interactionRepo.list(),
-    projectRepo.list(),
-    websiteRepo.list(),
-    runRepo.listRecent(200),
-    automationRunRepo.list(200),
+  const [allLeads, allOutreach, allInbound, allInteractions, allProjects, allWebsites, aiRuns, automationRuns, latestQc] = await Promise.all([
+    cachedListLeads(),
+    cachedListOutreach(),
+    cachedListInbound(),
+    cachedListInteractions(),
+    cachedListProjects(),
+    cachedListWebsites(),
+    cachedListAiRuns(200),
+    cachedListAutomationRuns(200),
+    cachedLatestQcByWebsite(),
   ]);
 
   // Testdata-scheiding (2026-10-01): alle lead-gekoppelde cijfers tellen
@@ -157,10 +154,11 @@ export async function getAgencyAnalytics(): Promise<AgencyAnalytics> {
   const projects = allProjects.filter((p) => !isTestLeadLinked(testIds, p.leadId));
   const websites = allWebsites.filter((w) => !isTestLeadLinked(testIds, w.leadId) && !isTestLeadName(w.businessName));
 
-  // QC-resultaten per website (nieuwste QC per website telt)
+  // QC-resultaten per website (nieuwste QC per website telt) — één batch-query
+  // via cachedLatestQcByWebsite i.p.v. een seriële query per website (N+1-fix).
   const latestQcResults = new Map<string, string>();
   for (const w of websites) {
-    const latest = await qcRepo.getLatestByWebsiteId(w.id);
+    const latest = latestQc.get(w.id);
     if (latest) latestQcResults.set(w.id, latest.overallResult);
   }
 

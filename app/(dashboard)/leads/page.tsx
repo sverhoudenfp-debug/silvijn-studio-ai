@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireStudioOwner } from "@/lib/auth/server";
 import { LeadsView } from "@/components/leads/leads-view";
-import { getLeadRepository } from "@/lib/repositories/lead-repository";
+import { cachedListLeads } from "@/lib/dashboard/cached-reads";
 import { filterProductionLeads, isTestLead, resolveShowTestData } from "@/lib/leads/test-data";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +15,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
   await requireStudioOwner();
   const params = await searchParams;
   const showTestData = resolveShowTestData(params);
-  const allLeads = await getLeadRepository().list();
+  const allLeads = await cachedListLeads();
   const testLeads = allLeads.filter(isTestLead);
   const leads = showTestData ? allLeads : filterProductionLeads(allLeads);
 

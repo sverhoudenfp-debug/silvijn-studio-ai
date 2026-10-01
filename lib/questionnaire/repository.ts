@@ -77,6 +77,8 @@ export interface QuestionnaireRepository {
     input: { answers: Record<string, string>; uploads: QuestionnaireUpload[]; round: 1 | 2 }
   ): Promise<QuestionnaireResponse>;
   listResponses(questionnaireId: string): Promise<QuestionnaireResponse[]>;
+  /** Aantal reacties per questionnaire-id in één batch (N+1-fix overzichtspagina). */
+  countResponsesByQuestionnaire(): Promise<Record<string, number>>;
 }
 
 interface QuestionnaireRow {
@@ -173,6 +175,9 @@ class MemoryQuestionnaireRepository implements QuestionnaireRepository {
   }
   listResponses(): Promise<QuestionnaireResponse[]> {
     return Promise.resolve([]);
+  }
+  countResponsesByQuestionnaire(): Promise<Record<string, number>> {
+    return Promise.resolve({});
   }
 }
 
@@ -320,6 +325,18 @@ class SupabaseQuestionnaireRepository implements QuestionnaireRepository {
       .order("created_at", { ascending: true });
     if (error) throw new Error(`QuestionnaireRepository: antwoorden ophalen mislukt: ${error.message}`);
     return (data ?? []).map((row) => rowToResponse(row as ResponseRow));
+  }
+
+  async countResponsesByQuestionnaire(): Promise<Record<string, number>> {
+    const { data, error } = await getSupabaseServerClient()
+      .from("questionnaire_responses")
+      .select("questionnaire_id");
+    if (error) throw new Error(`QuestionnaireRepository: antwoorden ophalen mislukt: ${error.message}`);
+    const counts: Record<string, number> = {};
+    for (const row of (data ?? []) as { questionnaire_id: string }[]) {
+      counts[row.questionnaire_id] = (counts[row.questionnaire_id] ?? 0) + 1;
+    }
+    return counts;
   }
 }
 

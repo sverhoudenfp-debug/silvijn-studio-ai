@@ -10,6 +10,7 @@ const titles: Record<string, string> = {
   "/outreach": "AI Outreach",
   "/sales": "AI Sales",
   "/conversations": "Conversations",
+  "/questionnaires": "Questionnaires",
   "/demo-websites": "Demo Websites",
   "/projects": "Projects",
   "/generated-websites": "Websites",

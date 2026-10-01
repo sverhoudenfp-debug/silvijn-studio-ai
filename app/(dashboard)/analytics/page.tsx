@@ -1,167 +1,187 @@
-
+import Link from "next/link";
 import { requireStudioOwner } from "@/lib/auth/server";
 import { Card } from "@/components/ui/card";
-import { StatCard } from "@/components/ui/stat-card";
-import { getAgencyAnalytics } from "@/lib/services/analytics";
+import { BarChart, FunnelChart } from "@/components/analytics/charts";
+import { parsePeriodSearchParams, type PeriodKind } from "@/lib/analytics/period";
+import { getPeriodAnalytics } from "@/lib/analytics/metrics";
 export const dynamic = "force-dynamic";
 
 /**
- * Fase 12 §P — productie-analytics met uitsluitend ECHTE data uit de
- * repositories (live Supabase of bewuste mock-laag). Geen hard-coded KPI's.
+ * Analytics (2026-10-01) — uitsluitend echte, menselijk bevestigde data:
+ * omzet komt alleen uit payment_events (bevestigde betalingen). Onbekende
+ * cijfers worden nooit als feit getoond; nul betekent hier echt nul.
  */
 
-function kpi(label: string, value: string | number, delta?: string) {
-  return { label, value: String(value), delta: delta ?? "" };
+const PERIOD_OPTIONS: { kind: PeriodKind; label: string }[] = [
+  { kind: "today", label: "Vandaag" },
+  { kind: "week", label: "Deze week" },
+  { kind: "month", label: "Deze maand" },
+  { kind: "year", label: "Dit jaar" },
+  { kind: "all", label: "Sinds start" },
+];
+
+function euro(value: number): string {
+  return `€${value.toLocaleString("nl-NL", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
 
-export default async function AnalyticsPage() {
-  await requireStudioOwner();
-  const data = await getAgencyAnalytics();
+function delta(current: number, previous: number | null): { text: string; tone: "info" | "success" | "warning" } | null {
+  if (previous === null) return null;
+  if (previous === 0) return current > 0 ? { text: "nieuw", tone: "success" } : null;
+  const pct = Math.round(((current - previous) / previous) * 100);
+  if (pct === 0) return null;
+  return { text: `${pct > 0 ? "+" : ""}${pct}%`, tone: pct > 0 ? "success" : "warning" };
+}
 
-  const hasAnyData =
-    data.leads.total > 0 ||
-    data.outreach.drafts + data.outreach.sent > 0 ||
-    data.sales.inboundMessages > 0 ||
-    data.projects.total > 0 ||
-    data.ai.totalRuns > 0 ||
-    data.automation.totalRuns > 0;
+export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  await requireStudioOwner();
+  const params = await searchParams;
+  const now = new Date();
+  const range = parsePeriodSearchParams(params, now);
+  const data = await getPeriodAnalytics(range);
+
+  const kpiCards = [
+    {
+      label: `Omzet — ${range.label.toLowerCase()}`,
+      value: euro(data.kpis.revenue.total),
+      delta: delta(data.kpis.revenue.total, data.kpis.previousRevenue ? data.kpis.previousRevenue.total : null),
+      hint: data.kpis.revenue.count > 0
+        ? `${data.kpis.revenue.count} bevestigde betaling${data.kpis.revenue.count === 1 ? "" : "en"}${data.kpis.revenue.average !== null ? ` · gem. ${euro(data.kpis.revenue.average)}` : ""}`
+        : "Nog geen bevestigde betalingen in deze periode",
+    },
+    {
+      label: "Nieuwe leads",
+      value: String(data.kpis.newLeads),
+      delta: delta(data.kpis.newLeads, data.kpis.previousNewLeads),
+      hint: "Leads aangemaakt in de geselecteerde periode",
+    },
+    {
+      label: "Reacties (inbound)",
+      value: String(data.kpis.replies),
+      delta: delta(data.kpis.replies, data.kpis.previousReplies),
+      hint: "Binnenkomende klantreacties per e-mail",
+    },
+    {
+      label: "Outreach verzonden",
+      value: String(data.kpis.outreachSent),
+      hint: "Verzonden e-mails in de geselecteerde periode",
+    },
+    {
+      label: "AI-runs",
+      value: String(data.kpis.aiRuns),
+      hint: data.kpis.aiCostUsd > 0 ? `geschatte kosten $${data.kpis.aiCostUsd.toFixed(4)}` : "alle runs bij elkaar",
+    },
+    {
+      label: "Omzet sinds start",
+      value: euro(data.lifetimeRevenue.total),
+      hint: data.lifetimeRevenue.count > 0
+        ? `${data.lifetimeRevenue.count} betaling${data.lifetimeRevenue.count === 1 ? "" : "en"} in totaal`
+        : "Nog geen bevestigde betalingen",
+    },
+  ];
 
   return (
-    <div className="space-y-10">
-      <div>
-        <h2 className="text-2xl font-semibold tracking-tight text-zinc-50">Analytics</h2>
-        <p className="mt-1 text-sm text-zinc-400">
-          Echte cijfers uit de database (bron: {data.leadSource === "supabase" ? "live Supabase" : "mock-laag (geen Supabase geconfigureerd)"}).
-        </p>
+    <div className="space-y-8">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight text-zinc-50">Analytics</h2>
+          <p className="mt-1 text-sm text-zinc-400">
+            Echte cijfers uit de database (bron: {data.leadSource === "supabase" ? "live Supabase" : "mock-laag"}). Omzet
+            telt uitsluitend door jou bevestigde betalingen.
+          </p>
+        </div>
+        {/* Periodefilter: server-side via Links, geen client-state, directe navigatie */}
+        <nav className="flex flex-wrap gap-1.5" aria-label="Periodefilter">
+          {PERIOD_OPTIONS.map((option) => {
+            const active = range.kind === option.kind;
+            return (
+              <Link
+                key={option.kind}
+                href={`/analytics?period=${option.kind}`}
+                className={
+                  active
+                    ? "rounded-lg bg-indigo-500/15 px-3 py-1.5 text-xs font-semibold text-indigo-300 ring-1 ring-indigo-500/40"
+                    : "rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-400 transition-colors hover:bg-zinc-800/70 hover:text-zinc-200"
+                }
+                aria-current={active ? "page" : undefined}
+              >
+                {option.label}
+              </Link>
+            );
+          })}
+        </nav>
       </div>
 
-      {!hasAnyData && (
+      <p className="-mt-5 text-xs text-zinc-500">Geselecteerde periode: {range.label}</p>
+
+      {!data.hasAnyProductionData ? (
         <Card>
           <div className="p-8 text-center">
-            <p className="text-sm font-medium text-zinc-200">Nog geen data</p>
+            <p className="text-sm font-medium text-zinc-200">Nog geen productiedata</p>
             <p className="mt-1 text-sm text-zinc-400">
-              Zodra er leads, AI-runs of automatiseringen zijn, verschijnen hier de echte cijfers.
+              Zodra er echte leads, outreach, reacties of betalingen zijn, verschijnen hier de cijfers. Er wordt niets
+              verzonnen of op nul gezet wat onbekend is.
             </p>
           </div>
         </Card>
-      )}
-
-      {data.leads.total > 0 && (
+      ) : (
         <>
-          <section className="space-y-4">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Leads</h3>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            <StatCard kpi={kpi("Totaal leads", data.leads.total)} />
-            <StatCard kpi={kpi("Nieuw", data.leads.new)} />
-            <StatCard kpi={kpi("Gekwalificeerd", data.leads.qualified)} />
-            <StatCard kpi={kpi("Gecontacteerd", data.leads.contacted)} />
-            <StatCard kpi={kpi("Geïnteresseerd", data.leads.interested)} />
-            <StatCard kpi={kpi("Gewonnen", data.leads.won)} />
-            <StatCard kpi={kpi("Verloren", data.leads.lost)} />
-          </div>
+          <section className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+            {kpiCards.map((kpi) => (
+              <div key={kpi.label} className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
+                <p className="text-xs font-medium text-zinc-400">{kpi.label}</p>
+                <p className="mt-2 text-2xl font-semibold tracking-tight text-zinc-50">{kpi.value}</p>
+                {kpi.delta ? (
+                  <p className={`mt-1 text-xs ${kpi.delta.tone === "success" ? "text-emerald-400" : kpi.delta.tone === "warning" ? "text-amber-400" : "text-indigo-300"}`}>
+                    {kpi.delta.text} t.o.v. vorige periode
+                  </p>
+                ) : null}
+                <p className="mt-1 text-[11px] text-zinc-500">{kpi.hint}</p>
+              </div>
+            ))}
           </section>
-        </>
-      )}
 
-      {(data.outreach.drafts > 0 || data.outreach.sent > 0) && (
-        <>
-          <section className="space-y-4">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Outreach</h3>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            <StatCard kpi={kpi("Concepten", data.outreach.drafts)} />
-            <StatCard kpi={kpi("Klaar voor review", data.outreach.readyForReview)} />
-            <StatCard kpi={kpi("Goedgekeurd (mens)", data.outreach.approved)} />
-            <StatCard kpi={kpi("Verzonden", data.outreach.sent)} />
-            <StatCard kpi={kpi("Geopend", data.outreach.opened)} />
-            <StatCard kpi={kpi("Beantwoord", data.outreach.replied)} />
-            <StatCard kpi={kpi("Geïnteresseerd", data.outreach.interested)} />
-            <StatCard kpi={kpi("Opt-outs", data.outreach.optedOut)} />
-          </div>
-          </section>
-        </>
-      )}
-
-      {data.sales.inboundMessages > 0 && (
-        <>
-          <section className="space-y-4">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Sales</h3>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            <StatCard kpi={kpi("Inkomende berichten", data.sales.inboundMessages)} />
-            <StatCard kpi={kpi("Gekwalificeerd", data.sales.qualified)} />
-            <StatCard kpi={kpi("Eis human review", data.sales.needsHuman)} />
-            <StatCard kpi={kpi("Bezwaren", data.sales.objections)} />
-            <StatCard kpi={kpi("Demo-aanvragen", data.sales.demoRequests)} />
-            <StatCard kpi={kpi("Belverzoeken", data.sales.callRequests)} />
-          </div>
-          </section>
-        </>
-      )}
-
-      {data.projects.total > 0 && (
-        <>
-          <section className="space-y-4">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Projecten</h3>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            <StatCard kpi={kpi("Totaal", data.projects.total)} />
-            <StatCard kpi={kpi("Wacht op goedkeuring", data.projects.awaitingApproval)} />
-            <StatCard kpi={kpi("In uitvoering", data.projects.inProgress)} />
-            <StatCard kpi={kpi("Klaar voor review", data.projects.readyForReview)} />
-            <StatCard kpi={kpi("Afgerond", data.projects.completed)} />
-            <StatCard kpi={kpi("Geannuleerd", data.projects.cancelled)} />
-          </div>
-          </section>
-        </>
-      )}
-
-      {data.websites.generated > 0 || data.websites.approved > 0 ? (
-        <>
-          <section className="space-y-4">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Websites</h3>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            <StatCard kpi={kpi("Gegenereerd", data.websites.generated)} />
-            <StatCard kpi={kpi("QC geslaagd", data.websites.qcPass)} />
-            <StatCard kpi={kpi("QC revisie nodig", data.websites.qcRevision)} />
-            <StatCard kpi={kpi("Klaar voor Silvijn", data.websites.readyForSilvijn)} />
-            <StatCard kpi={kpi("Goedgekeurd", data.websites.approved)} />
-          </div>
-          </section>
-        </>
-      ) : null}
-
-      {data.ai.totalRuns > 0 && (
-        <>
-          <section className="space-y-4">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">AI</h3>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            <StatCard kpi={kpi("Totaal AI-runs", data.ai.totalRuns)} />
-            <StatCard kpi={kpi("Geslaagd", data.ai.successful)} />
-            <StatCard kpi={kpi("Mislukt", data.ai.failed)} />
-            <StatCard kpi={kpi("Tokens", data.ai.totalTokens)} />
-            <StatCard kpi={kpi("Kosten (USD)", data.ai.totalCostUsd.toFixed(4))} />
-            <StatCard kpi={kpi("Kosten per lead (USD)", data.ai.costPerLead !== null ? data.ai.costPerLead.toFixed(4) : "—")} />
-            <StatCard
-              kpi={kpi(
-                "Kosten per gekwalificeerde lead (USD)",
-                data.ai.costPerQualifiedLead !== null ? data.ai.costPerQualifiedLead.toFixed(4) : "—"
-              )}
+          <section className="grid gap-4 lg:grid-cols-2">
+            <BarChart
+              title="Omzet over tijd"
+              description="Bevestigde betalingen per periode"
+              bucketLabels={data.series.buckets.map((b) => b.label)}
+              series={[{ label: "Omzet", values: data.series.revenue, tone: "primary" }]}
+              formatValue={(v) => euro(v)}
             />
-          </div>
-          </section>
-        </>
-      )}
-
-      {data.automation.totalRuns > 0 && (
-        <>
-          <section className="space-y-4">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Automatisering</h3>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            <StatCard kpi={kpi("Runs", data.automation.totalRuns)} />
-            <StatCard kpi={kpi("Geslaagd", data.automation.completed)} />
-            <StatCard kpi={kpi("Mislukt", data.automation.failed)} />
-            <StatCard kpi={kpi("Gestopt", data.automation.stopped)} />
-            <StatCard kpi={kpi("Gem. duur (ms)", data.automation.averageDurationMs ?? "—")} />
-            <StatCard kpi={kpi("AI-calls", data.automation.aiCalls)} />
-          </div>
+            <BarChart
+              title="Nieuwe leads over tijd"
+              bucketLabels={data.series.buckets.map((b) => b.label)}
+              series={[{ label: "Leads", values: data.series.leads, tone: "primary" }]}
+            />
+            <BarChart
+              title="Outreach en reacties"
+              description="Verzonden e-mails tegenover binnenkomende reacties"
+              bucketLabels={data.series.buckets.map((b) => b.label)}
+              series={[
+                { label: "Verzonden", values: data.series.outreachSent, tone: "primary" },
+                { label: "Reacties", values: data.series.replies, tone: "muted" },
+              ]}
+            />
+            <Card>
+              <div className="p-5">
+                <p className="text-sm font-semibold text-zinc-100">Lead-funnel</p>
+                <p className="mt-1 text-xs text-zinc-500">
+                  Cumulatieve lifecycle-treden (een &quot;gecontacteerde&quot; lead is ook gekwalificeerd geweest).
+                </p>
+                <div className="mt-4">
+                  <FunnelChart rows={data.leadsByStage} />
+                </div>
+              </div>
+            </Card>
+            <Card>
+              <div className="p-5">
+                <p className="text-sm font-semibold text-zinc-100">Outreach-funnel</p>
+                <p className="mt-1 text-xs text-zinc-500">Verzonden → geopend → gereageerd (per lead).</p>
+                <div className="mt-4">
+                  <FunnelChart rows={data.outreachFunnel} />
+                </div>
+              </div>
+            </Card>
           </section>
         </>
       )}

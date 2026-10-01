@@ -1,7 +1,7 @@
 import { requireStudioOwner } from "@/lib/auth/server";
-import { getLeadRepository } from "@/lib/repositories/lead-repository";
 import { getQuestionnaireRepository } from "@/lib/questionnaire/repository";
 import { listQuestionnaires } from "@/lib/questionnaire/service";
+import { cachedListLeads } from "@/lib/dashboard/cached-reads";
 import { QuestionnairesView } from "@/components/questionnaires/questionnaires-view";
 import { isTestLead, isTestLeadLinked, resolveShowTestData, testLeadIdSet } from "@/lib/leads/test-data";
 
@@ -12,9 +12,11 @@ import { isTestLead, isTestLeadLinked, resolveShowTestData, testLeadIdSet } from
 export default async function QuestionnairesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await requireStudioOwner();
   const showTestData = resolveShowTestData(await searchParams);
-  const [allQuestionnaires, allLeads] = await Promise.all([
+  const [allQuestionnaires, allLeads, responseCounts] = await Promise.all([
     listQuestionnaires(),
-    getLeadRepository().list(),
+    cachedListLeads(),
+    // N+1-fix: alle reactietellingen in één batch-query i.p.v. per vragenlijst.
+    getQuestionnaireRepository().countResponsesByQuestionnaire(),
   ]);
   // Testdata-scheiding (2026-10-01): fixture-vragenlijsten zijn verborgen in
   // het normale overzicht; ?test=1 toont expliciet (regressietests/opruimen).
@@ -24,11 +26,6 @@ export default async function QuestionnairesPage({ searchParams }: { searchParam
 
   const leadNames: Record<string, string> = {};
   for (const lead of leads) leadNames[lead.id] = lead.businessName;
-
-  const responseCounts: Record<string, number> = {};
-  for (const questionnaire of questionnaires) {
-    responseCounts[questionnaire.id] = (await getQuestionnaireRepository().listResponses(questionnaire.id)).length;
-  }
 
   return <QuestionnairesView questionnaires={questionnaires} leadNames={leadNames} responseCounts={responseCounts} />;
 }

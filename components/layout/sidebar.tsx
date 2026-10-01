@@ -62,7 +62,17 @@ const navItems = [
   { href: "/settings", label: "Settings", icon: "sliders" },
 ];
 
-export function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => void }) {
+export function Sidebar({
+  mobileOpen,
+  onClose,
+  aiMode,
+  supabaseConnected,
+}: {
+  mobileOpen: boolean;
+  onClose: () => void;
+  aiMode: "live" | "mock" | "configfout";
+  supabaseConnected: boolean;
+}) {
   const pathname = usePathname();
 
   return (
@@ -111,13 +121,25 @@ export function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose:
 
         <div className="border-t border-zinc-800 p-4">
           <div className="flex items-center gap-2.5">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
-            </span>
+            {aiMode === "live" ? (
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+              </span>
+            ) : (
+              <span className="flex h-2 w-2 rounded-full bg-amber-400" />
+            )}
             <div className="text-xs">
-              <p className="font-medium text-zinc-200">AI Agent actief</p>
-              <p className="text-zinc-500">Mock mode — geen echte acties</p>
+              <p className="font-medium text-zinc-200">
+                {aiMode === "live" ? "Live AI actief" : aiMode === "mock" ? "Mock AI actief" : "AI-configfout"}
+              </p>
+              <p className="text-zinc-500">
+                {aiMode === "live"
+                  ? supabaseConnected
+                    ? "Productiemodus — gates actief"
+                    : "Supabase niet geconfigureerd"
+                  : "Geen echte AI-acties in deze modus"}
+              </p>
             </div>
           </div>
         </div>

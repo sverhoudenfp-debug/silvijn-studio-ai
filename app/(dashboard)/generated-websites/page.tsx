@@ -1,12 +1,10 @@
 
 import { requireStudioOwner } from "@/lib/auth/server";
 import { GeneratedWebsitesView } from "@/components/websites/generated-websites-view";
-import { getProjectRepository } from "@/lib/projects/repository";
-import { WebsiteGenerationService } from "@/lib/websites/service";
-import { getThemeZipArtifactRepository } from "@/lib/websites/theme-zip/repository";
+import { getThemeZipArtifactRepository, type ThemeZipArtifact } from "@/lib/websites/theme-zip/repository";
 import { selectDownloadableArtifact, toArtifactSummary, type DownloadableArtifactSummary } from "@/lib/websites/theme-zip/download";
-import { getLeadRepository } from "@/lib/repositories/lead-repository";
 import { isTestLeadLinked, isTestLeadName, resolveShowTestData, testLeadIdSet } from "@/lib/leads/test-data";
+import { cachedListLeads, cachedListProjects, cachedListWebsites } from "@/lib/dashboard/cached-reads";
 
 /**
  * Websites-overzicht (Fase 9) — echte data uit de repository.
@@ -15,9 +13,9 @@ export default async function GeneratedWebsitesPage({ searchParams }: { searchPa
   await requireStudioOwner();
   const showTestData = resolveShowTestData(await searchParams);
   const [allWebsites, projects, allLeads] = await Promise.all([
-    new WebsiteGenerationService().list(),
-    getProjectRepository().list(),
-    getLeadRepository().list(),
+    cachedListWebsites(),
+    cachedListProjects(),
+    cachedListLeads(),
   ]);
   // Testdata-scheiding (2026-10-01): fixture-websites zijn verborgen in het
   // normale overzicht; ?test=1 toont expliciet (regressietests/opruimen).
@@ -31,10 +29,17 @@ export default async function GeneratedWebsitesPage({ searchParams }: { searchPa
 
   // Downloadbaar theme-ZIP per websiteversie (uitsluitend bestaande,
   // gevalideerde artefacten — geen generatie, geen gate-verandering).
+  // N+1-fix: alle artefacten in één batch-query i.p.v. per website.
   const artifactRepository = getThemeZipArtifactRepository();
   const zipArtifacts: Record<string, DownloadableArtifactSummary> = {};
+  const artifactsByWebsite = new Map<string, ThemeZipArtifact[]>();
+  for (const artifact of await artifactRepository.listByWebsites(websites.map((w) => w.id))) {
+    const list = artifactsByWebsite.get(artifact.websiteId) ?? [];
+    list.push(artifact);
+    artifactsByWebsite.set(artifact.websiteId, list);
+  }
   for (const website of websites) {
-    const artifact = selectDownloadableArtifact(await artifactRepository.listByWebsite(website.id));
+    const artifact = selectDownloadableArtifact(artifactsByWebsite.get(website.id) ?? []);
     if (artifact) zipArtifacts[website.id] = toArtifactSummary(artifact);
   }
 

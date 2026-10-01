@@ -1,8 +1,7 @@
 import { requireStudioOwner } from "@/lib/auth/server";
 import { ProjectsView } from "@/components/projects/projects-view";
 import { ZipFlowFixturePanel } from "@/components/projects/zip-flow-fixture-panel";
-import { getLeadRepository } from "@/lib/repositories/lead-repository";
-import { ProjectService } from "@/lib/projects/service";
+import { cachedListLeads, cachedListProjects } from "@/lib/dashboard/cached-reads";
 import { ProjectZipFlowFixtureService } from "@/lib/testing/project-zip-fixture";
 import { isTestLead, isTestLeadLinked, resolveShowTestData, testLeadIdSet } from "@/lib/leads/test-data";
 
@@ -14,8 +13,8 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
   await requireStudioOwner();
   const showTestData = resolveShowTestData(await searchParams);
   const [allProjects, allLeads, fixtures] = await Promise.all([
-    new ProjectService().list(),
-    getLeadRepository().list(),
+    cachedListProjects(),
+    cachedListLeads(),
     new ProjectZipFlowFixtureService().listFixtures(),
   ]);
   // Testdata-scheiding (2026-10-01): fixture-projecten zijn verborgen in het

@@ -11,11 +11,9 @@ import { StatCard } from "@/components/ui/stat-card";
 export const dynamic = "force-dynamic";
 import { getAgencyAnalytics } from "@/lib/services/analytics";
 import { getAIActivityRepository } from "@/lib/repositories/ai-activity-repository";
-import { getOutreachRepository } from "@/lib/outreach/repository";
-import { getAutomationRepository } from "@/lib/automation/repositories";
 import { getAIConfig } from "@/lib/ai/config";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
-import { getLeadRepository } from "@/lib/repositories/lead-repository";
+import { cachedListAutomations, cachedListLeads, cachedListOutreach } from "@/lib/dashboard/cached-reads";
 
 /**
  * Fase 12 §P — dashboard met uitsluitend ECHTE data uit repositories.
@@ -24,12 +22,14 @@ import { getLeadRepository } from "@/lib/repositories/lead-repository";
 
 export default async function DashboardPage() {
   await requireStudioOwner();
+  // Cached reads: analytics + needs-silvijn + deze pagina delen één query
+  // per tabel per request (request-deduplicatie, geen dubbele Supabase-calls).
   const [analytics, activities, outreachDrafts, automations, leads, needsSilvijn] = await Promise.all([
     getAgencyAnalytics(),
     getAIActivityRepository().listRecent(8),
-    getOutreachRepository().list(),
-    getAutomationRepository().list(),
-    getLeadRepository().list(),
+    cachedListOutreach(),
+    cachedListAutomations(),
+    cachedListLeads(),
     loadNeedsSilvijn(),
   ]);
 

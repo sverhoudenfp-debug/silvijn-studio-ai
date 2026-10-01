@@ -2,11 +2,9 @@ import { requireStudioOwner } from "@/lib/auth/server";
 import { SalesView } from "@/components/sales/sales-view";
 import { ReplyPipelinePanel } from "@/components/sales/reply-pipeline-panel";
 import { RecentReplies } from "@/components/sales/recent-replies";
-import { getInboundMessageRepository, getSalesInteractionRepository } from "@/lib/sales/repository";
-import { getLeadRepository } from "@/lib/repositories/lead-repository";
-import { SalesService } from "@/lib/sales/service";
 import { getSupabaseServerClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { isTestLead, isTestLeadLinked, resolveShowTestData, testLeadIdSet } from "@/lib/leads/test-data";
+import { cachedListInbound, cachedListInteractions, cachedListLeads } from "@/lib/dashboard/cached-reads";
 
 /**
  * AI Sales-overzicht — echte data uit de sales-repository's (geen mockstats).
@@ -16,11 +14,10 @@ import { isTestLead, isTestLeadLinked, resolveShowTestData, testLeadIdSet } from
 export default async function SalesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await requireStudioOwner();
   const showTestData = resolveShowTestData(await searchParams);
-  const service = new SalesService();
   const [allInteractions, allLeads, allInbounds] = await Promise.all([
-    service.listAllInteractions(),
-    getLeadRepository().list(),
-    getInboundMessageRepository().list(),
+    cachedListInteractions(),
+    cachedListLeads(),
+    cachedListInbound(),
   ]);
   // Testdata-scheiding (2026-10-01): reacties van mock-/fixture-leads horen
   // niet bij de echte productiestatistieken en reacties; ?test=1 toont expliciet.
@@ -28,9 +25,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   const interactions = showTestData ? allInteractions : allInteractions.filter((i) => !isTestLeadLinked(testIds, i.leadId));
   const inbounds = showTestData ? allInbounds : allInbounds.filter((m) => !isTestLeadLinked(testIds, m.leadId));
   const leads = showTestData ? allLeads : allLeads.filter((l) => !isTestLead(l));
-  const processedInboundIds = new Set(
-    (await getSalesInteractionRepository().list()).map((i) => i.inboundMessageId)
-  );
+  const processedInboundIds = new Set(allInteractions.map((i) => i.inboundMessageId));
   const pendingReplies = inbounds.filter((m) => m.replyConfirmed && !processedInboundIds.has(m.id)).length;
 
   const leadNames: Record<string, string> = {};

@@ -4,11 +4,9 @@ import { OutreachView } from "@/components/outreach/outreach-view";
 import { OutreachCommandPanel } from "@/components/outreach/outreach-command-panel";
 import { getOutreachCommandRepository } from "@/lib/outreach/command-repository";
 import { findDueFollowups } from "@/lib/outreach/followups";
-import { getDemoRepository } from "@/lib/repositories/demo-repository";
-import { getLeadRepository } from "@/lib/repositories/lead-repository";
-import { OutreachService } from "@/lib/outreach/service";
 import { gmailIngestStatus } from "@/lib/gmail/ingest";
 import { isTestLead, isTestLeadLinked, resolveShowTestData, testLeadIdSet } from "@/lib/leads/test-data";
+import { cachedListDemos, cachedListLeads, cachedListOutreach } from "@/lib/dashboard/cached-reads";
 
 /**
  * Outreach-overzicht — echte data uit de draft-repository (geen mockstats).
@@ -18,11 +16,10 @@ import { isTestLead, isTestLeadLinked, resolveShowTestData, testLeadIdSet } from
 export default async function OutreachPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await requireStudioOwner();
   const showTestData = resolveShowTestData(await searchParams);
-  const service = new OutreachService();
   const [allDrafts, allLeads, demos, gmail, commands, allFollowups] = await Promise.all([
-    service.listAll(),
-    getLeadRepository().list(),
-    getDemoRepository().list(),
+    cachedListOutreach(),
+    cachedListLeads(),
+    cachedListDemos(),
     gmailIngestStatus(),
     getOutreachCommandRepository().list(10),
     findDueFollowups(),

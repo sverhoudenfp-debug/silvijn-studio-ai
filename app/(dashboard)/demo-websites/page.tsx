@@ -1,16 +1,15 @@
 
 import { requireStudioOwner } from "@/lib/auth/server";
 import { DemoWebsitesView } from "@/components/demo/demo-websites-view";
-import { getDemoRepository } from "@/lib/repositories/demo-repository";
-import { getLeadRepository } from "@/lib/repositories/lead-repository";
 import { isTestLeadLinked, resolveShowTestData, testLeadIdSet } from "@/lib/leads/test-data";
+import { cachedListDemos, cachedListLeads } from "@/lib/dashboard/cached-reads";
 
 export default async function DemoWebsitesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await requireStudioOwner();
   const showTestData = resolveShowTestData(await searchParams);
   const [demos, leads] = await Promise.all([
-    getDemoRepository().list(),
-    getLeadRepository().list(),
+    cachedListDemos(),
+    cachedListLeads(),
   ]);
   // Testdata-scheiding (2026-10-01): demo's van testleads zijn verborgen;
   // de publieke /demo/[slug]-URL's blijven werken (per-lead artefacten).

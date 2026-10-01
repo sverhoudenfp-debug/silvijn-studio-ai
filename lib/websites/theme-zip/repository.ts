@@ -72,6 +72,8 @@ export interface ThemeZipArtifactRepository {
   create(input: ThemeZipArtifactCreateInput): Promise<ThemeZipArtifact>;
   getById(id: string): Promise<ThemeZipArtifact | null>;
   listByWebsite(websiteId: string): Promise<ThemeZipArtifact[]>;
+  /** Batch-variant voor overzichtspagina's: één query voor alle websites (N+1-fix). */
+  listByWebsites(websiteIds: string[]): Promise<ThemeZipArtifact[]>;
 }
 
 function buildArtifact(input: ThemeZipArtifactCreateInput, id: string, now: string): ThemeZipArtifact {
@@ -110,6 +112,12 @@ class MemoryThemeZipArtifactRepository implements ThemeZipArtifactRepository {
   async listByWebsite(websiteId: string): Promise<ThemeZipArtifact[]> {
     return this.artifacts
       .filter((a) => a.websiteId === websiteId)
+      .sort((a, b) => b.version - a.version);
+  }
+  async listByWebsites(websiteIds: string[]): Promise<ThemeZipArtifact[]> {
+    const ids = new Set(websiteIds);
+    return this.artifacts
+      .filter((a) => ids.has(a.websiteId))
       .sort((a, b) => b.version - a.version);
   }
 }
@@ -196,6 +204,17 @@ class SupabaseThemeZipArtifactRepository implements ThemeZipArtifactRepository {
       .from("theme_zip_artifacts")
       .select("*")
       .eq("website_id", websiteId)
+      .order("version", { ascending: false });
+    if (error) throw new Error(`Theme-artefacten ophalen mislukt: ${error.message}`);
+    return (data as ArtifactRow[]).map(rowToArtifact);
+  }
+
+  async listByWebsites(websiteIds: string[]): Promise<ThemeZipArtifact[]> {
+    if (websiteIds.length === 0) return [];
+    const { data, error } = await getSupabaseServerClient()
+      .from("theme_zip_artifacts")
+      .select("*")
+      .in("website_id", websiteIds)
       .order("version", { ascending: false });
     if (error) throw new Error(`Theme-artefacten ophalen mislukt: ${error.message}`);
     return (data as ArtifactRow[]).map(rowToArtifact);

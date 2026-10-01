@@ -49,7 +49,13 @@ export function OutreachView({
     setPendingId(draftId);
     setPending(true);
     try {
-      await sendApprovedOutreachDraft(draftId);
+      const result = await sendApprovedOutreachDraft(draftId);
+      if (!result.ok) {
+        // Verwachte fouten (geen e-mailadres, al verzonden, Gmail-config,
+        // alias onbeschikbaar): inline melding, pagina blijft bruikbaar.
+        setError(result.error);
+        return;
+      }
       setError(null);
       // Ververs via router: sent-status + provider-bewijs komen uit de server.
       window.location.reload();

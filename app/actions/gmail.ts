@@ -84,13 +84,38 @@ export async function syncGmailInbox(): Promise<GmailIngestResult> {
   return result;
 }
 
-export async function sendApprovedOutreachDraft(draftId: string): Promise<{ ok: true }> {
+/**
+ * Resultaat van een expliciete verzendactie. In Next 16 mag een Server Action
+ * voor VERWACHTE fouten geen throw doen: de client-render crasht dan met
+ * "Minified React error #441" (Server Components-renderfout, geen error.tsx
+ * op /outreach). Alle fouten komen daarom als getypeerd resultaat terug en
+ * worden server-side gelogd; de UI toont ze zonder de pagina te breken.
+ * Onverwachte fouten worden nooit ingeslikt: zelfde resultaatkanaal + log.
+ */
+export type SendDraftResult =
+  | { ok: true; sentAt: string }
+  | { ok: false; error: string };
+
+export async function sendApprovedOutreachDraft(draftId: string): Promise<SendDraftResult> {
   await requireStudioOwner();
-  if (!isGmailConfigured()) {
-    throw new Error("BLOCKED_EXTERNAL_CONFIGURATION: Gmail OAuth is niet geconfigureerd (Vercel Environment Variables)");
+  try {
+    if (!isGmailConfigured()) {
+      return {
+        ok: false,
+        error: "BLOCKED_EXTERNAL_CONFIGURATION: Gmail OAuth is niet geconfigureerd (Vercel Environment Variables)",
+      };
+    }
+    z.uuid().parse(draftId);
+    const sent = await sendOutreachViaGmail(draftId);
+    revalidatePath("/outreach");
+    return { ok: true, sentAt: sent.sentAt };
+  } catch (error) {
+    // Server-side log voor Vercel/observability; de eigenaar ziet de
+    // leesbare melding in het dashboard.
+    console.error("[outreach-send] verzenden mislukt:", error);
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Verzenden via Gmail mislukt",
+    };
   }
-  z.uuid().parse(draftId);
-  await sendOutreachViaGmail(draftId);
-  revalidatePath("/outreach");
-  return { ok: true };
 }

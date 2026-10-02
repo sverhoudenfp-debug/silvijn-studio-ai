@@ -101,7 +101,7 @@ export function evaluateEnvironment(env: NodeJS.ProcessEnv, obs: EnvironmentObse
   });
 
   // KVK (nog niet in de owner-flow gebruikt, wel voorbereid)
-  const contactEnrichment = envPresence(env, "GOOGLE_CSE_API_KEY") && envPresence(env, "GOOGLE_CSE_CX");
+  const contactEnrichment = envPresence(env, "BRAVE_SEARCH_API_KEY");
   const kvk = envPresence(env, "KVK_API_KEY");
   checks.push({
     key: "kvk",
@@ -116,8 +116,8 @@ export function evaluateEnvironment(env: NodeJS.ProcessEnv, obs: EnvironmentObse
     label: "Contactverrijking (e-mail)",
     level: contactEnrichment ? "ok" : "info",
     detail: contactEnrichment
-      ? "Google Custom Search-sleutels aanwezig; leads zonder e-mail worden gecontroleerd verrijkt."
-      : "Geen GOOGLE_CSE_API_KEY/GOOGLE_CSE_CX; verrijking staat uit — leads zonder e-mail blijven handmatig contact.",
+      ? "Brave Search API-key aanwezig; leads zonder e-mail worden gecontroleerd verrijkt."
+      : "Geen BRAVE_SEARCH_API_KEY; verrijking staat uit — leads zonder e-mail blijven handmatig contact.",
     evidence: null,
   });
 

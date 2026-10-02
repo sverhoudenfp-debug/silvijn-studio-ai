@@ -30,7 +30,7 @@ export interface ContactEnrichmentAttempt {
 }
 
 function notePrefix(): string {
-  return `Contactverrijking (${new Date().toISOString().slice(0, 10)}, bron: google-cse)`;
+  return `Contactverrijking (${new Date().toISOString().slice(0, 10)}, bron: brave-search)`;
 }
 
 export async function attemptContactEnrichment(

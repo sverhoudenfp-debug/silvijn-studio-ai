@@ -4,22 +4,31 @@ import { decideAcceptance, evaluateDocument, extractEmails, rankAcceptedCandidat
 
 /**
  * Contactverrijkingsprovider — zoekt in OPENBARE bronnen naar een zakelijk
- * e-mailadres voor een lead zonder e-mail. Configuratie: Google Custom Search
- * JSON API (GOOGLE_CSE_API_KEY + GOOGLE_CSE_CX). Zonder configuratie wordt
- * er NIET gezocht (blocked) — een lead zonder e-mail blijft dan eerlijk
- * "handmatig contact". Er bestaat geen ander, radend pad.
+ * e-mailadres voor een lead zonder e-mail.
+ *
+ * Zoekbron (2026-10-03): Brave Search API — Web Search endpoint
+ *   GET https://api.search.brave.com/res/v1/web/search
+ *   header: X-Subscription-Token: <BRAVE_SEARCH_API_KEY>, Accept: application/json
+ *   params: q, count (max 20), country, search_lang, extra_snippets
+ *   response: { web: { results: [{ title, url, description, extra_snippets? }] } }
+ * Google Programmable Search is voor deze stap losgelaten: nieuwe Google-
+ * zoekmachines kunnen niet meer op het hele web zoeken; CSE-sleutels zijn
+ * niet langer nodig. Zonder BRAVE_SEARCH_API_KEY wordt er NIET gezocht
+ * (blocked) — een lead zonder e-mail blijft dan eerlijk "handmatig contact".
  *
  * Begrenzing per lead: max. 2 zoekopdrachten + max. 3 bronpagina's, timeouts
  * per request, maximale responsegrootte. De provider verstuurt niets en
  * muteert niets: hij levert alleen kandidaten mét bewijs; de beslissing ligt
- * in de pure regels van lib/leads/contact-enrichment.ts.
+ * in de pure regels van lib/leads/contact-enrichment.ts (own_page_slug,
+ * phone_cross_check, second_source — nooit raden, nooit verzinnen).
  */
 
 const SEARCH_TIMEOUT_MS = 5000;
 const PAGE_TIMEOUT_MS = 4000;
 const MAX_PAGE_BYTES = 400 * 1024;
 const MAX_PAGE_FETCHES = 3;
-const SEARCH_RESULTS_PER_QUERY = 6;
+const SEARCH_RESULTS_PER_QUERY = 8;
+const BRAVE_ENDPOINT = "https://api.search.brave.com/res/v1/web/search";
 
 export interface EmailSearchResult {
   email: string | null;
@@ -36,37 +45,73 @@ export interface ContactEnrichmentProvider {
   attempt(target: EnrichmentTarget): Promise<EmailSearchResult>;
 }
 
+/** Configuratie: uitsluitend de API-key, server-side via Vercel env. */
 export function isContactEnrichmentConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
   // Zelfde conventie als lib/supabase/server.ts: unit-tests raken nooit
   // externe API's, ook niet als de shell toevallig sleutels bevat.
   if (process.env.NODE_ENV !== "production" && Boolean(process.env.NODE_TEST_CONTEXT)) return false;
-  return Boolean((env.GOOGLE_CSE_API_KEY ?? "").trim() && (env.GOOGLE_CSE_CX ?? "").trim());
+  return Boolean((env.BRAVE_SEARCH_API_KEY ?? "").trim());
 }
 
-function buildQueries(target: EnrichmentTarget): string[] {
+/** Zoekopdrachten per lead (begrensd, gericht op zakelijk contact). */
+export function buildQueries(target: EnrichmentTarget): string[] {
   const name = target.businessName.trim();
   const queries = [`"${name}" ${target.city ?? ""} contact email`.replace(/\s+/g, " ").trim(), `"${name}" email`];
   return queries.filter((q, i) => q.length > 10 && queries.indexOf(q) === i);
 }
 
-interface CseItem {
-  title?: string;
-  link?: string;
-  snippet?: string;
+interface BraveResult {
+  title?: unknown;
+  url?: unknown;
+  description?: unknown;
+  extra_snippets?: unknown;
 }
 
-interface CseResponse {
-  items?: CseItem[];
-  error?: { message?: string };
+interface BraveResponse {
+  web?: { results?: BraveResult[] };
 }
 
-async function fetchJson(url: string, timeoutMs: number): Promise<{ ok: boolean; status: number; body: unknown }> {
+/**
+ * Puur: zet een Brave Web Search-response om naar brondocumenten. De extra
+ * snippets (tot 5 extra fragmenten per resultaat, official docs) vergroten
+ * de kans dat naam + telefoon + adres in één fragment staan. Onbekende of
+ * ongeldige resultaten worden overgeslagen — nooit gokt.
+ */
+export function braveResponseToDocuments(body: unknown): SourceDocument[] {
+  const parsed = body as BraveResponse;
+  const results = parsed?.web?.results;
+  if (!Array.isArray(results)) return [];
+  const documents: SourceDocument[] = [];
+  for (const item of results) {
+    if (typeof item.url !== "string" || !/^https?:\/\//i.test(item.url)) continue;
+    const parts = [
+      typeof item.title === "string" ? item.title : "",
+      typeof item.description === "string" ? item.description : "",
+      ...(Array.isArray(item.extra_snippets)
+        ? item.extra_snippets.filter((snippet): snippet is string => typeof snippet === "string")
+        : []),
+    ];
+    const text = parts.join(" — ").replace(/\s+/g, " ").trim();
+    if (!text) continue;
+    documents.push({ url: item.url, text });
+  }
+  return documents;
+}
+
+async function fetchJson(url: string, timeoutMs: number, token: string): Promise<{ ok: boolean; body: unknown }> {
   try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs), headers: { "User-Agent": "SilvijnStudio-ContactEnrichment/1.0" } });
-    const body = await response.text();
-    return { ok: response.ok, status: response.status, body: JSON.parse(body) as unknown };
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(timeoutMs),
+      headers: {
+        // Official Brave API: authenticatie via subscription token + Accept.
+        "X-Subscription-Token": token,
+        Accept: "application/json",
+      },
+    });
+    const text = await response.text();
+    return { ok: response.ok, body: response.ok ? (JSON.parse(text) as unknown) : null };
   } catch {
-    return { ok: false, status: 0, body: null };
+    return { ok: false, body: null };
   }
 }
 
@@ -107,17 +152,15 @@ function htmlToText(html: string): string {
 }
 
 /**
- * Zoekt per lead: eerst zoeksnippets, daarna (alleen indien nodig) een klein
- * aantal bronpagina's. Acceptatie verloopt uitsluitend via de pure regels.
+ * Zoekt per lead: eerst zoeksnippets (incl. extra snippets), daarna (alleen
+ * indien nodig) een klein aantal bronpagina's. Acceptatie verloopt
+ * uitsluitend via de pure regels.
  */
-export class GoogleCustomSearchEmailProvider implements ContactEnrichmentProvider {
-  readonly id = "google-cse";
+export class BraveSearchEmailProvider implements ContactEnrichmentProvider {
+  readonly id = "brave-search";
   readonly live = true;
 
-  constructor(
-    private readonly apiKey: string,
-    private readonly cseId: string
-  ) {}
+  constructor(private readonly apiKey: string) {}
 
   async attempt(target: EnrichmentTarget): Promise<EmailSearchResult> {
     const queries = buildQueries(target);
@@ -126,17 +169,13 @@ export class GoogleCustomSearchEmailProvider implements ContactEnrichmentProvide
 
     for (const query of queries) {
       const url =
-        `https://customsearch.googleapis.com/customsearch/v1?key=${encodeURIComponent(this.apiKey)}` +
-        `&cx=${encodeURIComponent(this.cseId)}&num=${SEARCH_RESULTS_PER_QUERY}&gl=nl&hl=nl&q=${encodeURIComponent(query)}`;
-      const { ok, body } = await fetchJson(url, SEARCH_TIMEOUT_MS);
-      if (!ok || !body) continue;
-      const parsed = body as CseResponse;
-      if (parsed.error) continue; // quota/fout: geen kandidaten, geen gok
-      for (const item of parsed.items ?? []) {
-        if (!item.link || !/^https?:\/\//i.test(item.link)) continue;
-        const snippet = `${item.title ?? ""} — ${item.snippet ?? ""}`;
-        documents.push({ url: item.link, text: snippet });
-        if (!pageUrls.includes(item.link)) pageUrls.push(item.link);
+        `${BRAVE_ENDPOINT}?q=${encodeURIComponent(query)}` +
+        `&count=${SEARCH_RESULTS_PER_QUERY}&country=nl&search_lang=nl&extra_snippets=true`;
+      const { ok, body } = await fetchJson(url, SEARCH_TIMEOUT_MS, this.apiKey);
+      if (!ok || !body) continue; // quota/fout: geen kandidaten, geen gok
+      for (const document of braveResponseToDocuments(body)) {
+        documents.push(document);
+        if (!pageUrls.includes(document.url)) pageUrls.push(document.url);
       }
     }
 
@@ -191,8 +230,5 @@ export class GoogleCustomSearchEmailProvider implements ContactEnrichmentProvide
 
 export function getContactEnrichmentProvider(): ContactEnrichmentProvider | null {
   if (!isContactEnrichmentConfigured()) return null;
-  return new GoogleCustomSearchEmailProvider(
-    (process.env.GOOGLE_CSE_API_KEY ?? "").trim(),
-    (process.env.GOOGLE_CSE_CX ?? "").trim()
-  );
+  return new BraveSearchEmailProvider((process.env.BRAVE_SEARCH_API_KEY ?? "").trim());
 }

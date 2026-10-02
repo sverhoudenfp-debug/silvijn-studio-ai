@@ -10,7 +10,13 @@ import {
   type EnrichmentTarget,
   type SourceDocument,
 } from "../lib/leads/contact-enrichment";
-import { isContactEnrichmentConfigured, type ContactEnrichmentProvider, type EmailSearchResult } from "../lib/discovery/contact-enrichment/provider";
+import {
+  braveResponseToDocuments,
+  buildQueries,
+  isContactEnrichmentConfigured,
+  type ContactEnrichmentProvider,
+  type EmailSearchResult,
+} from "../lib/discovery/contact-enrichment/provider";
 import { attemptContactEnrichment, enrichCreatedLeads } from "../lib/discovery/contact-enrichment/service";
 import { getLeadRepository, type LeadCreateInput } from "../lib/repositories/lead-repository";
 import { contactChannelFor, needsManualContact } from "../lib/outreach/contactability";
@@ -24,10 +30,12 @@ import type { Lead } from "../lib/types";
  * de verificatieregels zijn puur.
  */
 
-// VEILIGHEID: alleen de mock-omgeving; productie-DB nooit raken.
+// VEILIGHEID: alleen de mock-omgeving; productie-DB nooit raken. De
+// testcontext-configcheck weigert sowieso externe API's (NODE_TEST_CONTEXT).
 delete process.env.NEXT_PUBLIC_SUPABASE_URL;
 delete process.env.SUPABASE_SECRET_KEY;
 delete process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+delete process.env.BRAVE_SEARCH_API_KEY;
 
 function noEmailResult(): EmailSearchResult {
   return { email: null, sourceUrl: null, rule: null, reason: "geen adres voldoet aan de verificatieregels", queries: [], pagesFetched: 0 };
@@ -233,9 +241,37 @@ test("TEST 2 — lead zonder e-mail blijft handmatig contact; generatie wordt ge
   }
 });
 
-test("zonder CSE-configuratie is verrijking blocked: geen mutatie, geen netwerk, eerlijke telling", async () => {
-  delete process.env.GOOGLE_CSE_API_KEY;
-  delete process.env.GOOGLE_CSE_CX;
+test("Brave-response wordt puur omgezet naar brondocumenten (geen netwerk nodig)", () => {
+  const documents = braveResponseToDocuments({
+    web: {
+      results: [
+        {
+          title: "Twan Janssen Schilderwerken",
+          url: "https://facebook.com/twanjanssenschilderwerken",
+          description: "Schilderwerken in Eindhoven",
+          extra_snippets: ["Bel 040 123 4567", "Mail info@twanjanssen.nl"],
+        },
+        { title: "geen url", url: null, description: "wordt overgeslagen" },
+        { title: "ftp", url: "ftp://example.com", description: "fout protocol overgeslagen" },
+      ],
+    },
+  });
+  assert.equal(documents.length, 1, "alleen geldige http(s)-resultaten");
+  assert.match(documents[0].url, /facebook\.com/);
+  assert.match(documents[0].text, /info@twanjanssen\.nl/, "extra snippets landen in de brontekst");
+  assert.deepEqual(braveResponseToDocuments({}), [], "lege response geeft geen documenten");
+  assert.deepEqual(braveResponseToDocuments({ web: { results: "geen-array" } }), [], "onverwachte vorm geeft geen documenten");
+});
+
+test("zoekopdrachten zijn gericht, begrensd en bevatten nooit een e-mailconjectuur", () => {
+  const queries = buildQueries(target);
+  assert.equal(queries.length, 2);
+  assert.ok(queries[0].includes('"Twan Janssen Schilderwerken"'), "exacte naam tussen aanhalingstekens");
+  assert.ok(queries.every((q) => !q.includes("@")), "nooit zelf een adres in de query gokken");
+});
+
+test("zonder Brave-configuratie is verrijking blocked: geen mutatie, geen netwerk, eerlijke telling", async () => {
+  delete process.env.BRAVE_SEARCH_API_KEY;
   assert.equal(isContactEnrichmentConfigured(), false);
 
   const lead = await createTestLead();

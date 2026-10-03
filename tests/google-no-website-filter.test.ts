@@ -134,14 +134,36 @@ test("pre-KVK selection service itself stays free of KVK, repositories, scoring 
       async discover() { return { status: "not_found" as const, inspectedCandidates: 0 }; },
     },
   });
-  const result = await new LeadDiscoveryService({ google }).discover(
+  // Email-required (2026-10-03): google-kandidaten worden pas een lead nadat de
+  // verrijkingsprovider een adres accepteert; de stub staat model voor de
+  // Brave-provider + verificatieregels. Creatie gebeurt nog steeds uitsluitend
+  // in LeadDiscoveryService (source-guard hieronder blijft de hoofdzaak).
+  const enrichment: import("../lib/discovery/contact-enrichment/provider").ContactEnrichmentProvider = {
+    id: "stub-enrichment",
+    live: true,
+    async attempt() {
+      return {
+        email: "info@schildersbedrijf-productiecheck.example",
+        sourceUrl: "https://schildersbedrijf-productiecheck.example/contact",
+        rule: "phone_cross_check",
+        reason: "telefoonkruiscontrole op bronpagina",
+        queries: [],
+        pagesFetched: 1,
+      };
+    },
+  };
+  const result = await new LeadDiscoveryService({ google, contactEnrichment: enrichment }).discover(
     { ...request, limit: 1 },
     { runId: "run-not-used" }
   );
   assert.equal(result.preKvk?.noWebsiteListed, 1);
   assert.equal(result.preKvk?.officialWebsiteNotFound, 1);
   assert.equal(result.preKvk?.potentialNoWebsiteCandidates, 1);
-  assert.equal(result.preKvk?.quotaMet, true);
+  // Pool (1) < candidate cap (3x limiet): quotaMet eerlijk false.
+  assert.equal(result.preKvk?.quotaMet, false);
+  assert.equal(result.emailRequired?.leadsCreated, 1);
+  assert.equal(result.emailRequired?.stopReason, "target_reached");
+  assert.equal(result.emailRequired?.message, "1 van 1 e-mail-leads gevonden");
   // The bounded not_found candidate is handed to the EXISTING creation chain (memory repository in tests).
   assert.equal(result.createdLeads, 1);
   assert.equal(result.candidates.length, 1);

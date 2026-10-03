@@ -33,6 +33,11 @@ function notePrefix(): string {
   return `Contactverrijking (${new Date().toISOString().slice(0, 10)}, bron: brave-search)`;
 }
 
+/** Audit-notitie bij een geaccepteerd adres (zelfde formaat als de lead-write-pad). */
+export function contactEnrichmentFoundNote(email: string, sourceUrl: string | null, rule: string): string {
+  return `${notePrefix()}: zakelijk e-mailadres ${email} gevonden via ${sourceUrl ?? "onbekende bron"} (regel: ${rule}).`;
+}
+
 export async function attemptContactEnrichment(
   lead: Lead,
   options?: { provider?: ContactEnrichmentProvider }
@@ -64,10 +69,7 @@ export async function attemptContactEnrichment(
     const repository = getLeadRepository();
     await repository.updateContact(lead.id, {
       email: result.email,
-      notes: [
-        ...lead.notes,
-        `${notePrefix()}: zakelijk e-mailadres ${result.email} gevonden via ${result.sourceUrl ?? "onbekende bron"} (regel: ${result.rule}).`,
-      ],
+      notes: [...lead.notes, contactEnrichmentFoundNote(result.email, result.sourceUrl, String(result.rule))],
     });
     return { outcome: "email_found", leadId: lead.id, email: result.email, sourceUrl: result.sourceUrl };
   } catch (error) {
@@ -125,4 +127,56 @@ export async function enrichCreatedLeads(
     }
   }
   return summary;
+}
+
+export interface CandidateContactEnrichmentOutcome {
+  outcome: "email_found" | "no_email_found" | "blocked_external_configuration" | "provider_error";
+  email: string | null;
+  sourceUrl: string | null;
+  rule: string | null;
+  reason: string;
+}
+
+/**
+ * Kandidaat-niveau verrijking voor email-required discovery (2026-10-03):
+ * zoekt met de bestaande provider + bestaande verificatieregels
+ * (own_page_slug / phone_cross_check / second_source) naar een geverifieerd
+ * zakelijk adres, maar schrijft NIETS — geen lead, geen notitie, geen
+ * mutatie. De caller (LeadDiscoveryService) beslist of de kandidaat pas een
+ * lead wordt. Nooit raden, nooit verzinnen; zonder geconfigureerde provider
+ * is de uitkomst blocked (eerlijk, geen gok).
+ */
+export async function enrichCandidateContact(
+  target: { businessName: string; city: string | null; phone: string | null },
+  options?: { provider?: ContactEnrichmentProvider }
+): Promise<CandidateContactEnrichmentOutcome> {
+  const provider = options?.provider ?? getContactEnrichmentProvider();
+  if (!provider) {
+    return {
+      outcome: "blocked_external_configuration",
+      email: null,
+      sourceUrl: null,
+      rule: null,
+      reason: "geen zoekprovider geconfigureerd",
+    };
+  }
+  try {
+    const result = await provider.attempt({
+      businessName: target.businessName,
+      city: target.city,
+      phone: target.phone,
+    });
+    if (!result.email) {
+      return { outcome: "no_email_found", email: null, sourceUrl: null, rule: null, reason: result.reason };
+    }
+    return {
+      outcome: "email_found",
+      email: result.email,
+      sourceUrl: result.sourceUrl,
+      rule: result.rule,
+      reason: result.reason,
+    };
+  } catch {
+    return { outcome: "provider_error", email: null, sourceUrl: null, rule: null, reason: "providerfout" };
+  }
 }

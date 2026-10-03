@@ -30,6 +30,8 @@ export interface DiscoveryRunLeadSummary {
 export interface DiscoveryRunSummary {
   identity?: import("./identity/persistence").IdentityDiscoverySummary;
   preKvk?: import("./types").GooglePreKvkSummary;
+  /** Email-required trechter (2026-10-03, alleen google-bron). */
+  emailRequired?: import("./types").EmailRequiredDiscoverySummary;
   created: DiscoveryRunLeadSummary[];
   duplicateReasons: Record<string, number>;
 }

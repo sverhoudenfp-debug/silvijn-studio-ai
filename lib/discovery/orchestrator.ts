@@ -199,6 +199,7 @@ export class DiscoveryOrchestrator {
         duplicateReasons,
         ...(result.identity ? { identity: result.identity } : {}),
         ...(result.preKvk ? { preKvk: result.preKvk } : {}),
+        ...(result.emailRequired ? { emailRequired: result.emailRequired } : {}),
       };
 
       const durationMs = Date.now() - started;
@@ -238,6 +239,16 @@ export class DiscoveryOrchestrator {
             officialWebsiteTechnicalErrors: result.preKvk.officialWebsiteTechnicalErrors,
             potentialNoWebsiteCandidates: result.preKvk.potentialNoWebsiteCandidates,
             quotaMet: result.preKvk.quotaMet,
+            ...(result.emailRequired
+              ? {
+                  emailLeadsCreated: result.emailRequired.leadsCreated,
+                  emailTargetLeads: result.emailRequired.targetLeads,
+                  candidatesResearched: result.emailRequired.candidatesResearched,
+                  noEmailFound: result.emailRequired.noEmailFound,
+                  emailsFound: result.emailRequired.emailsFound,
+                  emailStopReason: result.emailRequired.stopReason,
+                }
+              : {}),
           } : {}),
         duplicates: result.duplicatesSkipped,
         invalid: result.invalidCandidatesSkipped,

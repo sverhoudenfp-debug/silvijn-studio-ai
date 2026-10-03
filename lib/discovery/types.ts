@@ -86,6 +86,39 @@ export interface GooglePreKvkSummary {
   stopReason: "quota_met" | "search_budget" | "results_exhausted" | "page_limit" | "candidate_limit" | "technical_error";
 }
 
+/**
+ * Email-required samenvatting (2026-10-03) — alleen gezet voor de live
+ * google-bron. limit betekent hier: gewenste nieuwe e-mail-geschikte leads;
+ * de discovery onderzoekt een begrensde kandidaatpool (candidateCap) om dat
+ * aantal te bereiken. Kandidaten zonder geverifieerd zakelijk adres worden
+ * NIET als lead opgeslagen.
+ */
+export interface EmailRequiredDiscoverySummary {
+  mode: "email_required";
+  /** Gewenste aantal nieuwe e-mail-leads (= owner-limiet). */
+  targetLeads: number;
+  /** Harde bovengrens aan onderzochte kandidaten deze run. */
+  candidateCap: number;
+  /** Kandidaten die de verrijkingsbeslissing hebben bereikt. */
+  candidatesResearched: number;
+  /** Verrijking gedraaid, geen adres geaccepteerd (niet opgeslagen). */
+  noEmailFound: number;
+  /** Adres geaccepteerd door een van de drie verificatieregels. */
+  emailsFound: number;
+  /** Nieuwe leads aangemaakt mét geverifieerd adres. */
+  leadsCreated: number;
+  /** Verrijking geblokkeerd (geen provider geconfigureerd). */
+  blocked: number;
+  /** Providerfouten tijdens de verrijking. */
+  errors: number;
+  stopReason:
+    | "target_reached"
+    | "candidates_exhausted"
+    | "blocked_external_configuration";
+  /** Leesbare uitkomst voor UI en run-overzicht, bijv. "7 van 10 e-mail-leads gevonden — kandidaatpool uitgeput". */
+  message: string;
+}
+
 export interface DiscoveryResult {
   identity?: import("./identity/persistence").IdentityDiscoverySummary;
   preKvk?: GooglePreKvkSummary;
@@ -100,6 +133,8 @@ export interface DiscoveryResult {
   errors: string[];
   /** Contactverrijking (2026-10-01): alleen gezet voor live bronnen (google). */
   contactEnrichment?: import("./contact-enrichment/service").ContactEnrichmentRunSummary;
+  /** Email-required trechter (2026-10-03): alleen gezet voor de google-bron. */
+  emailRequired?: EmailRequiredDiscoverySummary;
 }
 
 /**

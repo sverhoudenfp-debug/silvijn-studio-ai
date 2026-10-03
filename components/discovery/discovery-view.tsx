@@ -191,7 +191,9 @@ export function DiscoveryView({ recentRuns }: { recentRuns: DiscoveryRunRecord[]
             </select>
           </label>
           <label className="space-y-1.5">
-            <span className="text-xs font-medium text-zinc-400">Limiet</span>
+            <span className="text-xs font-medium text-zinc-400">
+              {form.source === "google" ? "Gewenste e-mail-leads" : "Limiet"}
+            </span>
             <input
               type="number"
               min={1}
@@ -214,7 +216,7 @@ export function DiscoveryView({ recentRuns }: { recentRuns: DiscoveryRunRecord[]
         </div>
         {error && <p className="mt-3 text-xs text-red-400">{error}</p>}
         <p className="mt-3 text-xs text-zinc-500">
-          Minimaal een branche, plaats of regio vereist. Max. 50 kandidaten per run (configureerbaar). Discovery start nooit outreach. Mock-bron bevat uitsluitend fictieve testbedrijven — geen echte externe data.
+          Minimaal een branche, plaats of regio vereist. Bij de Google-bron betekent de limiet: gewenste nieuwe leads mét geverifieerd zakelijk e-mailadres; er worden max. 3× zoveel kandidaten onderzocht (hard maximum 24). Kandidaten zonder betrouwbaar adres worden overgeslagen, niet opgeslagen. Discovery start nooit outreach. Mock-bron bevat uitsluitend fictieve testbedrijven — geen echte externe data.
         </p>
       </div>
 
@@ -240,7 +242,7 @@ export function DiscoveryView({ recentRuns }: { recentRuns: DiscoveryRunRecord[]
               <div className="flex flex-wrap gap-2">
                 <Chip label="Gevonden" value={discovery.totalFound} />
                 <Chip
-                  label={discovery.identity ? "Nieuwe KVK-kandidaten" : "Nieuwe leads"}
+                  label={discovery.identity ? "Nieuwe KVK-kandidaten" : discovery.emailRequired ? "Nieuwe e-mail-leads" : "Nieuwe leads"}
                   value={discovery.identity?.persisted ?? discovery.createdLeads}
                   tone="ok"
                 />
@@ -257,11 +259,32 @@ export function DiscoveryView({ recentRuns }: { recentRuns: DiscoveryRunRecord[]
                   <Chip label="Technische fouten" value={discovery.preKvk.officialWebsiteTechnicalErrors} tone={discovery.preKvk.officialWebsiteTechnicalErrors ? "error" : undefined} />
                   <Chip label="Stopreden" value={discovery.preKvk.stopReason} />
                 </>}
+                {discovery.emailRequired && <>
+                  <Chip label="Kandidaten onderzocht" value={discovery.emailRequired.candidatesResearched} />
+                  <Chip label="Geen e-mail gevonden" value={discovery.emailRequired.noEmailFound} tone="warn" />
+                  <Chip label="E-mails geaccepteerd" value={discovery.emailRequired.emailsFound} tone="ok" />
+                  <Chip label="Nieuwe e-mail-leads" value={discovery.emailRequired.leadsCreated} tone="ok" />
+                  {discovery.emailRequired.blocked > 0 && <Chip label="Verrijking geblokkeerd" value={discovery.emailRequired.blocked} tone="error" />}
+                  <Chip label="Doel" value={`${discovery.emailRequired.leadsCreated}/${discovery.emailRequired.targetLeads}`} />
+                </>}
                 <Chip label="Duplicaten/bestaand" value={discovery.duplicatesSkipped} tone="warn" />
                 <Chip label="Ongeldig" value={discovery.invalidCandidatesSkipped} tone="warn" />
                 <Chip label="Fouten" value={discovery.errors.length} tone={discovery.errors.length ? "error" : undefined} />
                 <Chip label="Duur" value={`${discovery.durationMs}ms`} />
               </div>
+
+              {discovery.emailRequired && discovery.emailRequired.message && (
+                <p
+                  className={
+                    discovery.emailRequired.leadsCreated >= discovery.emailRequired.targetLeads &&
+                    discovery.emailRequired.stopReason !== "blocked_external_configuration"
+                      ? "text-xs text-emerald-300/90"
+                      : "text-xs text-amber-300/90"
+                  }
+                >
+                  {discovery.emailRequired.message}
+                </p>
+              )}
 
               {discovery.errors.length > 0 && (
                 <div className="rounded-lg border border-red-500/40 bg-red-950/40 p-3 text-sm text-red-300">
@@ -307,7 +330,7 @@ export function DiscoveryView({ recentRuns }: { recentRuns: DiscoveryRunRecord[]
                 <EmptyState
                   title={discovery.preKvk ? "Geen nieuwe leads uit deze run" : "Geen kandidaten gevonden"}
                   description={discovery.preKvk
-                    ? `${discovery.preKvk.googleCandidates} Google-kandidaten, ${discovery.preKvk.websiteListedSkipped} met vermelde website, ${discovery.preKvk.industryMismatchSkipped ?? 0} buiten de branche, ${discovery.preKvk.officialWebsiteNotFound} zonder gevonden website; er zijn geen leads aangemaakt.`
+                    ? `${discovery.preKvk.googleCandidates} Google-kandidaten, ${discovery.preKvk.websiteListedSkipped} met vermelde website, ${discovery.preKvk.industryMismatchSkipped ?? 0} buiten de branche, ${discovery.preKvk.officialWebsiteNotFound} zonder gevonden website; alleen kandidaten met een geverifieerd zakelijk e-mailadres worden opgeslagen — deze run leverde er geen.`
                     : "Probeer andere filters of een grotere limiet."}
                 />
               ) : (

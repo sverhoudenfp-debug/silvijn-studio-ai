@@ -25,7 +25,7 @@ import { WebsiteDiscoveryService } from "./website-service";
  *   (google: contactverrijking via Brave + bestaande verificatieregels; alleen
  *   kandidaten met geverifieerd zakelijk adres gaan verder) → WEBSITE STATUS
  * → LEAD CREATION. limit = gewenste nieuwe e-mail-leads; de kandidaatpool is
- * begrensd door getEmailRequiredCandidateCap (harde clamp 24).
+ * begrensd door getEmailRequiredCandidateCap (harde clamp 40).
  * Alleen expliciet aangeroepen (server action); geen cron, geen loops, geen bulk-AI.
  * Werkt volledig ZONDER Anthropic — AI-assisted enrichment kan later optioneel.
  *
@@ -37,11 +37,11 @@ import { WebsiteDiscoveryService } from "./website-service";
 /**
  * Email-required (2026-10-03): harde bovengrens aan het aantal kandidaten dat
  * een run onderzoekt, om de limiet (gewenste e-mail-leads) te kunnen halen
- * zonder onbeperkte API-calls. Standaard min(3× limiet, 24); configureerbaar
+ * zonder onbeperkte API-calls. Standaard min(4× limiet, 40); configureerbaar
  * via DISCOVERY_EMAIL_REQUIRED_MAX_CANDIDATES, altijd afgetopt op 24.
  */
-const EMAIL_REQUIRED_HARD_CANDIDATE_CAP = 24;
-const EMAIL_REQUIRED_CANDIDATE_MULTIPLIER = 3;
+const EMAIL_REQUIRED_HARD_CANDIDATE_CAP = 40;
+const EMAIL_REQUIRED_CANDIDATE_MULTIPLIER = 4;
 
 export function getEmailRequiredCandidateCap(limit: number): number {
   const parsed = Number.parseInt(process.env.DISCOVERY_EMAIL_REQUIRED_MAX_CANDIDATES ?? "", 10);

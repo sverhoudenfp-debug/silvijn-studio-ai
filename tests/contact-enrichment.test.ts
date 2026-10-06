@@ -53,6 +53,8 @@ const target: EnrichmentTarget = {
   businessName: "Twan Janssen Schilderwerken",
   city: "Eindhoven",
   phone: "+31 40 123 4567",
+  address: "Kerkstraat 12",
+  postalCode: "5611AB",
 };
 
 async function createTestLead(input: Partial<LeadCreateInput> = {}): Promise<Lead> {
@@ -126,11 +128,20 @@ test("TEST 3 — ongeldig/onzeker e-mailadres wordt niet gebruikt", () => {
 test("telefoon-kruischeck accepteert een adres dat naast naam én lead-telefoonnummer staat", () => {
   const evidence = evaluateDocument(target, {
     url: "https://bedriegids.nl/twan-janssen",
-    text: "Twan Janssen Schilderwerken — Eindhoven, tel. 040 123 4567. E-mail: info@twanjanssen.nl",
+    text: "Twan Janssen Schilderwerken — Kerkstraat 12, 5611 AB Eindhoven, tel. 040 123 4567. E-mail: info@twanjanssen.nl",
   });
   const decision = decideAcceptance(target, "info@twanjanssen.nl", evidence);
   assert.equal(decision.accepted, true);
   assert.equal(decision.rule, "phone_cross_check");
+});
+
+test("directory-support mailbox wordt geweigerd, ook als naam + telefoon + adres kloppen", () => {
+  const evidence = evaluateDocument(target, {
+    url: "https://besteautopoetser.nl/autopoetser/twan-janssen-schilderwerken/",
+    text: "Twan Janssen Schilderwerken — Kerkstraat 12, 5611 AB Eindhoven — 040 123 4567 — support@besteautopoetser.nl",
+  });
+  const decision = decideAcceptance(target, "support@besteautopoetser.nl", evidence);
+  assert.equal(decision.accepted, false, "een directory mag zijn eigen supportmail nooit aan een bedrijf koppelen");
 });
 
 test("eigen pagina (URL bevat de bedrijfsnaam) accepteert het daar vermelde adres", () => {
@@ -147,11 +158,11 @@ test("twee onafhankelijke bronnen met hetzelfde adres vormen voldoende zekerheid
   const docs: SourceDocument[] = [
     {
       url: "https://gids-a.nl/twan",
-      text: "Twan Janssen Schilderwerken — e-mail: werkwijzetwan@gmail.com",
+      text: "Twan Janssen Schilderwerken — Kerkstraat 12, 5611 AB Eindhoven — e-mail: werkwijzetwan@gmail.com",
     },
     {
       url: "https://gids-b.org/schilders/eindhoven",
-      text: "Twan Janssen Schilderwerken, Eindhoven. Contact: werkwijzetwan@gmail.com",
+      text: "Twan Janssen Schilderwerken, Kerkstraat 12, 5611 AB Eindhoven. Contact: werkwijzetwan@gmail.com",
     },
   ];
   const evidence = docs.flatMap((doc) => evaluateDocument(target, doc)).filter((e) => e.email === "werkwijzetwan@gmail.com");
@@ -265,7 +276,7 @@ test("Brave-response wordt puur omgezet naar brondocumenten (geen netwerk nodig)
 
 test("zoekopdrachten zijn gericht, begrensd en bevatten nooit een e-mailconjectuur", () => {
   const queries = buildQueries(target);
-  assert.equal(queries.length, 2);
+  assert.equal(queries.length, 3);
   assert.ok(queries[0].includes('"Twan Janssen Schilderwerken"'), "exacte naam tussen aanhalingstekens");
   assert.ok(queries.every((q) => !q.includes("@")), "nooit zelf een adres in de query gokken");
 });

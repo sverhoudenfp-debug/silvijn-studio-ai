@@ -672,6 +672,23 @@ test("REGRESSIE — generieke namen (alleen branche-termen/plaats) vragen altijd
   assert.equal(decision.rule, null);
 });
 
+test("REGRESSIE — achternaam + eigen-domein adres zonder telefoon/plaats-anker op de pagina: REJECT", () => {
+  // Holwerda-patroon (2026-10-06): holwerda.pro liet hessel@holwerda.pro zien,
+  // maar de pagina noemde een andere telefoon en niet de vestigingsplaats.
+  const holwerda: EnrichmentTarget = {
+    businessName: "Holwerda",
+    city: "Oosterbeek",
+    phone: "06 48926199",
+  };
+  const evidence = evaluateDocument(holwerda, {
+    url: "https://www.holwerda.pro/contact/",
+    text: "Holwerda Safety Solutions — contact. e-mail: hessel@holwerda.pro. Telefonisch: 06-40962926.",
+  });
+  const decision = decideAcceptance(holwerda, "hessel@holwerda.pro", evidence);
+  assert.equal(decision.accepted, false, "naam-overeenkomst alleen (zonder telefoon/plaats-anker) is niet voldoende");
+  assert.equal(decision.rule, null);
+});
+
 test("REGRESSIE — buitenlandse ccTLD mét telefoon-kruischeck kan nog steeds slagen", () => {
   const garden: EnrichmentTarget = {
     businessName: "Beautiful Garden",

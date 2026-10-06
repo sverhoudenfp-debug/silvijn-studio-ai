@@ -253,7 +253,13 @@ export class LeadDiscoveryService {
         let verifiedSourceUrl: string | null = null;
         if (emailSummary && !verifiedEmail) {
           const enrichment = await enrichCandidateContact(
-            { businessName: e.businessName, city: e.city, phone: e.phone },
+            {
+              businessName: e.businessName,
+              city: e.city,
+              phone: e.phone,
+              address: e.address,
+              postalCode: e.postalCode,
+            },
             this.dependencies.contactEnrichment ? { provider: this.dependencies.contactEnrichment } : undefined
           );
           emailSummary.candidatesResearched += 1;

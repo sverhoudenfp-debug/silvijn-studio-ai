@@ -5,9 +5,11 @@
  *
  *   - een e-mailadres wordt ALLEEN geaccepteerd wanneer het letterlijk op
  *     een openbare bronpagina staat (nooit verzinnen, nooit afleiden);
- *   - de bron moet met voldoende zekerheid bij het bedrijf horen:
- *       1. own_page_slug — de URL (domein/pad) bevat de bedrijfsnaam
- *          (eigen webpresence, bijv. facebook.com/<bedrijfsnaam>), óf
+ *   - de bron moet daadwerkelijk aan het bedrijf gekoppeld kunnen worden:
+ *       1. own_page_slug (aangescherpt 2026-10-06) — ALLEEN via een officieel
+ *          social-profiel of de eigen bedrijfswebsite, mét kruiscontrole
+ *          (telefoon, vestigingsplaats of bij de naam horend e-maildomein);
+ *          een naam in een URL is op zichzelf nooit voldoende, óf
  *       2. phone_cross_check — de bron bevat de exacte bedrijfsnaam ÉN
  *          het telefoonnummer van de lead (Google Places), met het adres
  *          in de buurt van naam of nummer, óf
@@ -43,6 +45,8 @@ export interface DocumentEvidence {
   phoneInText: boolean;
   nearName: boolean;
   nearPhone: boolean;
+  /** Vestigingsplaats van de lead staat op de bronpagina (kruiscontrole-signaal). */
+  cityInText: boolean;
 }
 
 export interface AcceptanceDecision {
@@ -108,6 +112,7 @@ const FREEMAIL_DOMAINS = [
  */
 export const DIRECTORY_PLATFORM_DOMAINS: readonly string[] = [
   "oozo.nl",
+  "klusgo.nl",
   "degemeentegids.nl",
   "besteautopoetser.nl",
   "cylex.nl",
@@ -128,6 +133,134 @@ export const PLATFORM_SOURCE_DOMAINS: readonly string[] = [...DIRECTORY_PLATFORM
 /** True wanneer de bron-URL op een bekend directory-/platformdomein staat. */
 export function isPlatformSourceUrl(url: string): boolean {
   return PLATFORM_SOURCE_DOMAINS.includes(domainOf(url));
+}
+
+/**
+ * SOCIAL-BRONDOMEINEN (2026-10-06, own_page_slug-aanscherping): domeinen
+ * waarop een OFFICIEEL bedrijfsprofiel mogelijk is. Ook hier geldt: alleen
+ * de bedrijfsnaam in de URL is niet voldoende — er is altijd een
+ * kruiscontrole nodig (telefoon, bedrijfsdomein of vestigingsplaats).
+ */
+export const SOCIAL_PLATFORM_DOMAINS: readonly string[] = [
+  "facebook.com",
+  "m.facebook.com",
+  "instagram.com",
+  "linkedin.com",
+];
+
+/** True wanneer de bron-URL een social-profielpagina is (Facebook e.d.). */
+export function isSocialSourceUrl(url: string): boolean {
+  return SOCIAL_PLATFORM_DOMAINS.includes(domainOf(url));
+}
+
+/**
+ * GENERIEKE BRANCHE-TERMEN (2026-10-06): een bedrijfsnaam die (na weghalen
+ * van de vestigingsplaats) uitsluitend uit branche-termen bestaat, is te
+ * generiek voor een naam-overeenkomst — te veel valse treffers
+ * ("Hovenier Gouda", "Tuinonderhoud"). Voor zulke namen eist own_page_slug
+ * een telefoon-kruischeck.
+ */
+const GENERIC_INDUSTRY_SLUGS: readonly string[] = [
+  "schilder",
+  "schilders",
+  "schilderwerk",
+  "schilderwerken",
+  "schildersbedrijf",
+  "schildersvandaag",
+  "hovenier",
+  "hoveniers",
+  "hoveniersbedrijf",
+  "tuinonderhoud",
+  "tuinman",
+  "tuintechniek",
+  "stukadoor",
+  "stukadoors",
+  "stukadoorsbedrijf",
+  "dakdekker",
+  "dakdekkers",
+  "loodgieter",
+  "loodgieters",
+  "klusbedrijf",
+  "klusjesman",
+  "klussers",
+  "timmerman",
+  "timmerwerken",
+  "installatiebedrijf",
+  "schoonmaakbedrijf",
+  "reparatiebedrijf",
+  "grasmaaier",
+];
+
+/** Vestigings-plaatsen waarvan de ccTLD zonder telefoon-check acceptabel is. */
+const ALLOWED_COUNTRY_TLDS: readonly string[] = ["nl", "eu", "be"];
+
+/** Domein van een e-mailadres (klein, zonder www). */
+export function emailDomainOf(email: string): string {
+  return (email.split("@")[1] ?? "").toLowerCase().replace(/^www\./, "");
+}
+
+/** Hostname zonder TLD, genormaliseerd ("acvandijk.nl" -> "acvandijk"). */
+export function domainSlugOf(domain: string): string {
+  const host = domain.toLowerCase().replace(/^www\./, "");
+  const labels = host.split(".");
+  if (labels.length <= 1) return normalizeForMatch(host);
+  return normalizeForMatch(labels.slice(0, -1).join(""));
+}
+
+/**
+ * Het kenmerkende deel van een bedrijfsnaam: alles wat overblijft na het
+ * weghalen van de vestigingsplaats en generieke branche-termen. Voor
+ * "Schildersbedrijf A.C van Dijk" is dat "acvandijk"; voor "Hovenier Gouda"
+ * blijft er niets over (generiek).
+ */
+export function distinctiveBusinessSlug(businessName: string, city: string | null): string {
+  let slug = nameSlug(businessName);
+  const citySlug = city ? nameSlug(city) : "";
+  if (citySlug.length >= 4 && slug.includes(citySlug)) {
+    slug = slug.split(citySlug).join("");
+  }
+  // Branche-termen langst-eerst verwijderen, herhalend tot stabiel: deels-
+  // verwijdering mag geen betekenisloze fragmenten laten ("sbedrijf") die
+  // alsnog als kenmerkend door de domein-correspondentie heen glippen.
+  const sorted = [...GENERIC_INDUSTRY_SLUGS].sort((a, b) => b.length - a.length);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const term of sorted) {
+      if (slug.includes(term)) {
+        slug = slug.split(term).join("");
+        changed = true;
+      }
+    }
+  }
+  return slug;
+}
+
+/** True wanneer de naam te generiek is voor een naam-overeenkomst alléén. */
+export function isGenericBusinessName(businessName: string, city: string | null): boolean {
+  return distinctiveBusinessSlug(businessName, city).length < 6;
+}
+
+/**
+ * True wanneer het e-maildomein bij de bedrijfsnaam hoort (bijv.
+ * info@acvandijk.nl bij "Schildersbedrijf A.C van Dijk"). Alleen het
+ * kenmerkende deel van de naam telt: branche-termen + plaats doen dat niet.
+ */
+export function emailDomainCorrespondsToBusiness(email: string, target: EnrichmentTarget): boolean {
+  const domainSlug = domainSlugOf(emailDomainOf(email));
+  if (domainSlug.length < 8) return false;
+  const distinctive = distinctiveBusinessSlug(target.businessName, target.city);
+  if (distinctive.length < 6) return false;
+  return domainSlug.includes(distinctive) || distinctive.includes(domainSlug);
+}
+
+/**
+ * Buitenlandse ccTLD (niet NL/EU/BE) voor een Nederlands bedrijfsdoel:
+ * alleen te accepteren mét telefoon-kruischeck op de bron.
+ */
+export function isForeignCountryEmailDomain(email: string): boolean {
+  const tld = emailDomainOf(email).split(".").pop() ?? "";
+  return /^[a-z]{2}$/.test(tld) && !ALLOWED_COUNTRY_TLDS.includes(tld);
 }
 
 /** True wanneer het e-maildomein eigendom is van een directory/platform. */
@@ -212,6 +345,7 @@ export function evaluateDocument(target: EnrichmentTarget, doc: SourceDocument):
   const lowerText = doc.text.toLowerCase();
   const phone = phoneSuffix(target.phone);
   const phoneRe = phone ? phonePattern(phone) : null;
+  const city = target.city ? target.city.trim().toLowerCase() : "";
 
   const phoneHits: { index: number; length: number }[] = [];
   if (phoneRe) {
@@ -234,6 +368,7 @@ export function evaluateDocument(target: EnrichmentTarget, doc: SourceDocument):
       nameInText: rawName.length >= MIN_NAME_LENGTH && lowerText.includes(rawName),
       phoneInText: phoneHits.length > 0,
       nearName: withinDistance(lowerText, rawName, emailIndex, NEAR_MATCH_DISTANCE),
+      cityInText: city.length >= 3 && lowerText.includes(city),
       nearPhone: phoneHits.some(
         (hit) => Math.abs(hit.index - emailIndex) <= NEAR_MATCH_DISTANCE || Math.abs(hit.index + hit.length - emailIndex) <= NEAR_MATCH_DISTANCE
       ),
@@ -270,13 +405,54 @@ export function decideAcceptance(
     return { accepted: false, rule: null, reason: "geen brondocument met dit adres" };
   }
 
-  // Regel 1 — eigen pagina: de bedrijfsnaam zit in de URL van een bron die
-  // het adres vermeldt (facebook.com/<bedrijfsnaam>, <bedrijfsnaam>.wixsite.com, …).
+  // Regel 1 — EIGEN PAGINA (aangescherpt 2026-10-06, goedgekeurd door Silvijn):
+  // een URL met de bedrijfsnaam is alléén NOOIT voldoende. De bron moet
+  // daadwerkelijk aan het bedrijf gekoppeld kunnen worden, via precies één
+  // van twee routes:
+  //   A. OFFICIEEL SOCIAL-PROFIEL (facebook.com/<bedrijf>, …): naam in URL
+  //      én op de pagina, plus een kruiscontrole: lead-telefoon op de pagina,
+  //      het e-maildomein dat bij de bedrijfsnaam hoort, óf (bij freemail)
+  //      de vestigingsplaats op het profiel.
+  //   B. EIGEN WEBSITE: het adres staat op het bedrijfsdomein zelf
+  //      (e-maildomein == brondomein), het domein hoort bij het kenmerkende
+  //      deel van de bedrijfsnaam, de naam staat op de pagina én er is een
+  //      locatie-/telefoon-anker. Derden-pagina's (magazines, concurrenten,
+  //      directories, platforms) kunnen nooit als eigen website gelden.
+  // Extra garde over beide routes heen: een buitenlandse ccTLD (niet
+  // nl/eu/be) vraagt altijd een telefoon-kruischeck; een generieke naam
+  // (alleen branche-termen, bijv. "Hovenier Gouda") vraagt dat óók.
+  // Beleid: recall laten liggen boven false positives.
   if (slug.length >= MIN_NAME_SLUG_LENGTH) {
-    const ownPage = evidence.find(
-      (e) => e.nameInUrl && (e.nameInText || e.nearName) && !isPlatformSourceUrl(e.url)
-    );
-    if (ownPage) return { accepted: true, rule: "own_page_slug", reason: `eigen webpagina: ${ownPage.domain}` };
+    const genericName = isGenericBusinessName(target.businessName, target.city);
+
+    // Route A — officieel social-profiel.
+    const social = evidence.find((e) => {
+      if (!isSocialSourceUrl(e.url)) return false;
+      if (!e.nameInUrl || !(e.nameInText || e.nearName)) return false;
+      if (isForeignCountryEmailDomain(e.email) && !e.phoneInText) return false;
+      if (genericName && !e.phoneInText) return false;
+      const domainCorresponds = emailDomainCorrespondsToBusiness(e.email, target);
+      if (domainCorresponds || e.phoneInText) return true;
+      // Freemail op een officieel profiel met de vestigingsplaats als anker:
+      return e.cityInText && isFreemailDomain(e.email);
+    });
+
+    // Route B — eigen website (adres gehost op het bedrijfsdomein zelf).
+    const ownSite = evidence.find((e) => {
+      if (isPlatformSourceUrl(e.url) || isSocialSourceUrl(e.url)) return false;
+      if (emailDomainOf(e.email) !== e.domain) return false;
+      if (!emailDomainCorrespondsToBusiness(e.email, target)) return false;
+      if (!(e.nameInText || e.nearName)) return false;
+      if (isForeignCountryEmailDomain(e.email) && !e.phoneInText) return false;
+      if (genericName && !e.phoneInText) return false;
+      // Waar beschikbaar: telefoon- of vestigingsplaats-kruiscontrole.
+      const hasAnchor = Boolean(target.phone || target.city);
+      if (hasAnchor && !(e.phoneInText || e.cityInText)) return false;
+      return true;
+    });
+
+    if (social) return { accepted: true, rule: "own_page_slug", reason: `officieel social-profiel: ${social.domain}` };
+    if (ownSite) return { accepted: true, rule: "own_page_slug", reason: `eigen bedrijfswebsite: ${ownSite.domain}` };
   }
 
   // Regel 2 — telefoon-kruischeck: exacte bedrijfsnaam + het telefoonnummer

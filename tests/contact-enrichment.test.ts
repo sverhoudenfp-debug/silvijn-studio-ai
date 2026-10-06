@@ -136,14 +136,23 @@ test("telefoon-kruischeck accepteert een adres dat naast naam én lead-telefoonn
   assert.equal(decision.rule, "phone_cross_check");
 });
 
-test("eigen pagina (URL bevat de bedrijfsnaam) accepteert het daar vermelde adres", () => {
-  const evidence = evaluateDocument(target, {
+test("own_page_slug (aangescherpt): social-profiel vraagt een kruiscontrole — naam in URL alléén is niet voldoende", () => {
+  // Zonder enige kruiscontrole (geen telefoon, geen plaats, freemail): AFWIJZEN.
+  const bare = evaluateDocument(target, {
     url: "https://www.facebook.com/twanjanssenschilderwerken/about",
     text: "Twan Janssen Schilderwerken. Mail ons: schilderwerktwan@gmail.com",
   });
-  const decision = decideAcceptance(target, "schilderwerktwan@gmail.com", evidence);
-  assert.equal(decision.accepted, true);
-  assert.equal(decision.rule, "own_page_slug");
+  const bareDecision = decideAcceptance(target, "schilderwerktwan@gmail.com", bare);
+  assert.equal(bareDecision.accepted, false, "vergelijkbare naam op social zonder kruiscontrole is niet voldoende");
+
+  // Met de vestigingsplaats als anker op het officiële profiel: ACCEPTEREN.
+  const withCity = evaluateDocument(target, {
+    url: "https://www.facebook.com/twanjanssenschilderwerken/about",
+    text: "Twan Janssen Schilderwerken, Eindhoven. Mail ons: schilderwerktwan@gmail.com",
+  });
+  const withCityDecision = decideAcceptance(target, "schilderwerktwan@gmail.com", withCity);
+  assert.equal(withCityDecision.accepted, true);
+  assert.equal(withCityDecision.rule, "own_page_slug");
 });
 
 test("twee onafhankelijke bronnen met hetzelfde adres vormen voldoende zekerheid", () => {
@@ -503,4 +512,177 @@ test("isPlatformSourceUrl herkent platformdomeinen (inclusief subdomeinloze bron
   assert.equal(isPlatformSourceUrl("https://www.oozo.nl/bedrijf/12345"), true);
   assert.equal(isPlatformSourceUrl("https://www.facebook.com/pitcameleon"), false, "social mag een eigen pagina zijn");
   assert.equal(isPlatformSourceUrl("https://www.pitcameleon.nl/contact"), false);
+});
+
+// ─── OWN_PAGE_SLUG AANSCHERPING (2026-10-06, goedgekeurd door Silvijn) ────
+// Doel: liever 70 goede leads dan 100 met false positives. De bron moet
+// daadwerkelijk aan het gevonden bedrijf gekoppeld kunnen worden; een
+// overeenkomstige bedrijfsnaam in een URL is op zichzelf nooit voldoende.
+
+const vandijk: EnrichmentTarget = {
+  businessName: "Schildersbedrijf A.C van Dijk",
+  city: "Apeldoorn",
+  phone: "06 49784322",
+};
+
+test("A — magazine-/tagpagina met overeenkomende naam in de URL: REJECT", () => {
+  // Vals positief uit de marathon van 6 oktober: focus@focusmagazine.nl werd
+  // geaccepteerd via een tagpagina op het magazine-domein.
+  const laurens: EnrichmentTarget = {
+    businessName: "Laurens van Houten",
+    city: "Leiden",
+    phone: "06 15227213",
+  };
+  const evidence = evaluateDocument(laurens, {
+    url: "https://focusmagazine.nl/tag/laurens-van-houten/",
+    text: "Artikelen over Laurens van Houten, schilder uit Leiden. Mail de redactie: focus@focusmagazine.nl",
+  });
+  const decision = decideAcceptance(laurens, "focus@focusmagazine.nl", evidence);
+  assert.equal(decision.accepted, false, "een magazine-tagpagina is nooit de eigen pagina van het bedrijf");
+  assert.equal(decision.rule, null);
+});
+
+test("B — website van een concurrent (telefoon mismatch, generieke naam): REJECT", () => {
+  // Vals positief: lead \"Tuinonderhoud\" kreeg info@catalpatuinen.nl via een
+  // servicepagina (tuinonderhoud-breda) van een ander bedrijf.
+  const tuinonderhoud: EnrichmentTarget = {
+    businessName: "Tuinonderhoud",
+    city: "Breda",
+    phone: "06 28611933",
+  };
+  const evidence = evaluateDocument(tuinonderhoud, {
+    url: "https://www.catalpatuinen.nl/tuinonderhoud-breda",
+    text: "Tuinonderhoud Breda door Catalpa Tuinen. Tuinonderhoud in Breda en omgeving. Bel 0168-473939 of mail info@catalpatuinen.nl.",
+  });
+  const decision = decideAcceptance(tuinonderhoud, "info@catalpatuinen.nl", evidence);
+  assert.equal(decision.accepted, false, "servicepagina van een ander bedrijf is geen eigen website");
+  assert.equal(decision.rule, null);
+});
+
+test("B2 — eigen-domein e-mail op een oneigen website (telefoon mismatch): REJECT", () => {
+  const hovenierGouda: EnrichmentTarget = {
+    businessName: "Hovenier Gouda",
+    city: "Gouda",
+    phone: "0182 570 183",
+  };
+  const evidence = evaluateDocument(hovenierGouda, {
+    url: "https://www.mstuintechniek.nl/hovenier-gouda/",
+    text: "Hovenier Gouda gezocht? MS Tuintechniek verzorgt hovenierwerk in Gouda. Bel 06 10103820, mail info@mstuintechniek.nl.",
+  });
+  const decision = decideAcceptance(hovenierGouda, "info@mstuintechniek.nl", evidence);
+  assert.equal(decision.accepted, false, "het e-maildomein hoort niet bij het kenmerkende deel van de leadnaam");
+  assert.equal(decision.rule, null);
+});
+
+test("C — buitenlands bedrijf met dezelfde naam (vreemde ccTLD): REJECT", () => {
+  // Vals positief: lead \"Beautiful Garden\" (Oosterhout) kreeg een Canadees adres.
+  const garden: EnrichmentTarget = {
+    businessName: "Beautiful Garden",
+    city: "Oosterhout",
+    phone: "06 54938947",
+  };
+  const evidence = evaluateDocument(garden, {
+    url: "https://mybeautifulgarden.ca/",
+    text: "Beautiful Garden — landscaping services. Contact: kevin@mybeautifulgarden.ca.",
+  });
+  const decision = decideAcceptance(garden, "kevin@mybeautifulgarden.ca", evidence);
+  assert.equal(decision.accepted, false, "een .ca-domein voor een NL-lead vraagt een telefoon-kruischeck");
+  assert.equal(decision.rule, null);
+});
+
+test("D — klusplatform-/directory-profiel is nooit een eigen pagina: REJECT", () => {
+  // Vals positief: info@peterdeschilder.nl via een klusgo-platformprofiel.
+  const peter: EnrichmentTarget = {
+    businessName: "Peter de Schilder",
+    city: "Maastricht",
+    phone: "06 46750832",
+  };
+  const evidence = evaluateDocument(peter, {
+    url: "https://klusgo.nl/peter-de-schilder",
+    text: "Peter de Schilder — schildersbedrijf uit Maastricht. Zakelijk: info@peterdeschilder.nl.",
+  });
+  const decision = decideAcceptance(peter, "info@peterdeschilder.nl", evidence);
+  assert.equal(decision.accepted, false, "own_page_slug geldt niet op een klusplatform-profiel");
+  assert.equal(decision.rule, null);
+});
+
+test("E — officieel Facebook-bedrijfsprofiel + écht bedrijfs-e-maildres: ACCEPT", () => {
+  // Het échte goede geval uit de marathon: eigen Facebook-pagina met
+  // info@acvandijk.nl (e-maildomein hoort bij de bedrijfsnaam).
+  const evidence = evaluateDocument(vandijk, {
+    url: "https://www.facebook.com/p/Schildersbedrijf-AC-van-Dijk-100093495331513/",
+    text: "Schildersbedrijf A.C van Dijk. Vraag een offerte via info@acvandijk.nl.",
+  });
+  const decision = decideAcceptance(vandijk, "info@acvandijk.nl", evidence);
+  assert.equal(decision.accepted, true, "officieel profiel + bij de bedrijfsnaam horend e-maildomein");
+  assert.equal(decision.rule, "own_page_slug");
+});
+
+test("F — officiële bedrijfswebsite + overeenkomende bedrijfsgegevens + eigen adres: ACCEPT", () => {
+  const evidence = evaluateDocument(vandijk, {
+    url: "https://www.acvandijk.nl/contact",
+    text: "Schildersbedrijf A.C van Dijk — Apeldoorn. Telefoon 06 49784322. E-mail: info@acvandijk.nl.",
+  });
+  const decision = decideAcceptance(vandijk, "info@acvandijk.nl", evidence);
+  assert.equal(decision.accepted, true, "eigen website + naam + plaats/telefoon + eigen e-maildomein");
+  assert.equal(decision.rule, "own_page_slug");
+});
+
+test("G — directory als BRON met naam + lead-telefoon en écht bedrijfsadres: ACCEPT via phone_cross_check", () => {
+  // Bestaande regels blijven gelden: een gids mag brondocument zijn zolang
+  // het adres zelf níet op het gidsdomein staat.
+  const evidence = evaluateDocument(vandijk, {
+    url: "https://www.oozo.nl/bedrijf/ac-van-dijk",
+    text: "Schildersbedrijf A.C van Dijk, Apeldoorn — tel. 06 49784322. Zakelijk e-mailadres: info@acvandijk.nl.",
+  });
+  const decision = decideAcceptance(vandijk, "info@acvandijk.nl", evidence);
+  assert.equal(decision.accepted, true, "directory als bron mag; het adres is van het bedrijf zelf");
+  assert.equal(decision.rule, "phone_cross_check");
+});
+
+test("H — e-mailadres op een directory-/platformdomein: REJECT (hard rule)", () => {
+  const evidence = evaluateDocument(vandijk, {
+    url: "https://www.oozo.nl/bedrijf/ac-van-dijk",
+    text: "Schildersbedrijf A.C van Dijk, Apeldoorn — tel. 06 49784322. Contact: info@oozo.nl.",
+  });
+  const decision = decideAcceptance(vandijk, "info@oozo.nl", evidence);
+  assert.equal(decision.accepted, false, "een platform-postvak is nooit het bedrijfsadres");
+  assert.match(decision.reason, /directory/i);
+});
+
+test("REGRESSIE — klusgo.nl staat op de platformlijst (e-mail én bron)", () => {
+  assert.equal(isDirectoryPlatformEmail("info@klusgo.nl"), true);
+  assert.equal(isPlatformSourceUrl("https://klusgo.nl/peter-de-schilder"), true);
+});
+
+test("REGRESSIE — generieke namen (alleen branche-termen/plaats) vragen altijd een telefoon-kruischeck", () => {
+  // "Schildersbedrijf Amstelveen" (branche + plaats) op een ander bedrijfsdomein
+  // met de plaats vermeld: nog steeds REJECT zonder telefoon.
+  const amstelveen: EnrichmentTarget = {
+    businessName: "Schildersbedrijf Amstelveen",
+    city: "Amstelveen",
+    phone: "06 26218182",
+  };
+  const evidence = evaluateDocument(amstelveen, {
+    url: "https://www.deema-schildersbedrijf.nl/schildersbedrijf-amstelveen/",
+    text: "Schildersbedrijf Amstelveen nodig? Deema Schildersbedrijf werkt in Amstelveen. Bel 06 42672865 of mail info@deema-schildersbedrijf.nl.",
+  });
+  const decision = decideAcceptance(amstelveen, "info@deema-schildersbedrijf.nl", evidence);
+  assert.equal(decision.accepted, false, "branche+plaats-namen zijn te generiek voor een domein-overeenkomst");
+  assert.equal(decision.rule, null);
+});
+
+test("REGRESSIE — buitenlandse ccTLD mét telefoon-kruischeck kan nog steeds slagen", () => {
+  const garden: EnrichmentTarget = {
+    businessName: "Beautiful Garden",
+    city: "Oosterhout",
+    phone: "06 54938947",
+  };
+  const evidence = evaluateDocument(garden, {
+    url: "https://www.facebook.com/beautifulgarden",
+    text: "Beautiful Garden — Oosterhout. Bel 06 54938947 of mail kevin@mybeautifulgarden.ca.",
+  });
+  const decision = decideAcceptance(garden, "kevin@mybeautifulgarden.ca", evidence);
+  assert.equal(decision.accepted, true, "met de lead-telefoon op het officiële profiel is het adres geverifieerd");
+  assert.equal(decision.rule, "own_page_slug");
 });

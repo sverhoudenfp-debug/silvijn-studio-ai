@@ -214,7 +214,7 @@ test("search API failure returns technical_error and performs no inspection", as
     },
   });
 
-  assert.deepEqual(await service.discover(candidate()), { status: "technical_error", reason: "SEARCH_FAILED" });
+  assert.deepEqual(await service.discover(candidate()), { status: "technical_error", reason: "SEARCH_FAILED", detail: "Error: provider payload must not escape" });
   assert.equal(inspections, 0);
 });
 

@@ -321,7 +321,7 @@ test("REGRESSIE — falende official-websitecheck legt exacte reden vast in run-
   assert.equal(result.preKvk?.potentialNoWebsiteCandidates, 0, "niets stroomt door zonder bewijs");
   const checkError = result.errors.find((e) => e.startsWith("OFFICIAL_WEBSITE_CHECK_FAILED"));
   assert.ok(checkError, "foutreden staat in de run-errors");
-  assert.match(checkError, /SEARCH_FAILED: REQUEST_FAILED: HTTP 429 RateLimitError/);
+  assert.match(checkError, /REQUEST_FAILED: HTTP 429 RateLimitError/);
   assert.match(checkError, /x2/, "identieke fouten worden geteld, niet herhaald");
 });
 

@@ -120,7 +120,8 @@ test("owner-triggered Google pipeline aggregates all four website outcomes and c
     limit: 4,
   });
 
-  assert.equal(result.status, "completed");
+  // Observability (2026-10-06): een run met een gefaalde websitecheck is terecht 'failed'.
+  assert.equal(result.status, "failed");
   // Email-required (2026-10-03): het Google-zoekbudget is de kandidaat-bovengrens
   // (3x limiet, hard max 24), niet langer de lead-limiet zelf.
   assert.equal(googleCalls, 2, "candidate cap allows a second Google page; page 2 has no next token");
@@ -138,7 +139,7 @@ test("owner-triggered Google pipeline aggregates all four website outcomes and c
   assert.equal(result.createdLeadSummaries.length, 1);
   assert.equal(result.createdLeadSummaries[0]?.businessName, "Temporary Business missing");
   assert.ok(result.createdLeadSummaries[0]!.score > 0, "existing scoring ran on create");
-  assert.deepEqual(result.errors, []);
+  assert.deepEqual(result.errors, ["OFFICIAL_WEBSITE_CHECK_FAILED [SEARCH_FAILED]"]);
   assert.deepEqual(result.discovery?.preKvk, {
     phase: "google_official_website_discovery_v2",
     requested: 12,
@@ -170,7 +171,7 @@ test("owner-triggered Google pipeline aggregates all four website outcomes and c
   });
 
   const [run] = await runs.list(1);
-  assert.equal(run.status, "completed");
+  assert.equal(run.status, "failed");
   assert.equal(run.createdLeads, 1);
   assert.equal(run.createdLeadIds.length, 1);
   assert.equal(run.summary.created.length, 1);
@@ -224,5 +225,5 @@ test("technical website outcomes are aggregate-only and never become potential n
   assert.equal(selection.summary.officialWebsiteTechnicalErrors, 1);
   assert.equal(selection.summary.potentialNoWebsiteCandidates, 0);
   assert.equal(selection.summary.officialWebsiteNotFound, 0);
-  assert.deepEqual(selection.errors, []);
+  assert.deepEqual(selection.errors, ["OFFICIAL_WEBSITE_CHECK_FAILED [SEARCH_FAILED]"]);
 });

@@ -26,8 +26,8 @@ import { decideAcceptance, evaluateDocument, extractEmails, rankAcceptedCandidat
 const SEARCH_TIMEOUT_MS = 5000;
 const PAGE_TIMEOUT_MS = 4000;
 const MAX_PAGE_BYTES = 400 * 1024;
-const MAX_PAGE_FETCHES = 3;
-const SEARCH_RESULTS_PER_QUERY = 8;
+const MAX_PAGE_FETCHES = 5;
+const SEARCH_RESULTS_PER_QUERY = 10;
 const BRAVE_ENDPOINT = "https://api.search.brave.com/res/v1/web/search";
 
 export interface EmailSearchResult {
@@ -56,7 +56,13 @@ export function isContactEnrichmentConfigured(env: NodeJS.ProcessEnv = process.e
 /** Zoekopdrachten per lead (begrensd, gericht op zakelijk contact). */
 export function buildQueries(target: EnrichmentTarget): string[] {
   const name = target.businessName.trim();
-  const queries = [`"${name}" ${target.city ?? ""} contact email`.replace(/\s+/g, " ").trim(), `"${name}" email`];
+  const city = target.city?.trim() ?? "";
+  const phone = target.phone?.trim() ?? "";
+  const queries = [
+    `"${name}" ${city} contact email`,
+    phone ? `"${name}" "${phone}" email` : `"${name}" email`,
+    `"${name}" ${city} contactgegevens`,
+  ].map((q) => q.replace(/\s+/g, " ").trim());
   return queries.filter((q, i) => q.length > 10 && queries.indexOf(q) === i);
 }
 
@@ -205,8 +211,12 @@ export class BraveSearchEmailProvider implements ContactEnrichmentProvider {
         pagesFetched,
       };
     }
-    const best = rankAcceptedCandidates(accepted)[0];
-    const evidence = documents.find((d) => extractEmails(d.text).includes(best.email));
+    const ranked = rankAcceptedCandidates(accepted);
+    const best = ranked[0];
+    const evidence = documents
+      .flatMap((d) => evaluateDocument(target, d).map((e) => ({ e, url: d.url })))
+      .filter(({ e }) => e.email === best.email)
+      .sort((a, b) => Number(b.e.addressInText) - Number(a.e.addressInText) || Number(b.e.phoneInText) - Number(a.e.phoneInText) || Number(b.e.nearName) - Number(a.e.nearName))[0];
     return { email: best.email, sourceUrl: evidence?.url ?? null, rule: best.rule, reason: "", queries, pagesFetched };
   }
 

@@ -55,6 +55,8 @@ export async function attemptContactEnrichment(
       businessName: lead.businessName,
       city: lead.city,
       phone: lead.phone,
+      address: lead.address,
+      postalCode: lead.postalCode,
     });
     if (!result.email) {
       const repository = getLeadRepository();
@@ -165,6 +167,8 @@ export async function enrichCandidateContact(
       businessName: target.businessName,
       city: target.city,
       phone: target.phone,
+      address: target.address,
+      postalCode: target.postalCode,
     });
     if (!result.email) {
       return { outcome: "no_email_found", email: null, sourceUrl: null, rule: null, reason: result.reason };

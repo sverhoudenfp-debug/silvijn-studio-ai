@@ -6,6 +6,7 @@ import {
   evaluateDocument,
   extractEmails,
   isDirectoryPlatformEmail,
+  isPlatformSourceUrl,
   isRejectedLocalPart,
   rankAcceptedCandidates,
   type AcceptanceRule,
@@ -458,4 +459,48 @@ test("second_source-route: ook twee onafhankelijke bronnen met hetzelfde directo
   const decision = decideAcceptance(pitCameleon, "info@oozo.nl", evidence);
   assert.equal(decision.accepted, false, "twee bronnen of niet: een platform-postvak is nooit het bedrijfsadres");
   assert.match(decision.reason, /directory/i);
+});
+
+// ─── PLATFORM-BRON & GEMASKEERDE ADRESSEN (2026-10-06, audit-breed) ──────
+// Een profielpagina op een platform (data-broker, gids) is nooit de eigen
+// pagina van het bedrijf; gemaskeerde adressen zijn geen letterlijke adressen.
+
+test("G — own_page_slug geldt niet op een platform-profielpagina (rocketreach)", () => {
+  const holwerda: EnrichmentTarget = {
+    businessName: "Holwerda",
+    city: "Oosterbeek",
+    phone: "+31 6 48926199",
+  };
+  const evidence = evaluateDocument(holwerda, {
+    url: "https://rocketreach.co/amber-holwerda-email_2796533",
+    text: "Amber Holwerda — e-mail: a***@cava.com, telefoon 06 48926199.",
+  });
+  assert.equal(evidence.length, 0, "gemaskeerd adres is al geen kandidaat");
+  const decision = decideAcceptance(holwerda, "amber@cava.com", evidence);
+  assert.equal(decision.accepted, false, "platform-profiel is geen eigen pagina");
+});
+
+test("H — platform-profiel met naam + lead-telefoon mag als BRON (phone_cross_check) voor een echt adres", () => {
+  const evidence = evaluateDocument(pitCameleon, {
+    url: "https://rocketreach.co/pit-cameleon-email_991",
+    text: "Pit Cameleon, Breda — schildersbedrijf. Telefoon 06 27654956. Zakelijk: info@pitcameleon.nl.",
+  });
+  const decision = decideAcceptance(pitCameleon, "info@pitcameleon.nl", evidence);
+  assert.equal(decision.accepted, true);
+  assert.equal(decision.rule, "phone_cross_check");
+});
+
+test("gemaskeerde adressen (a***@domein) worden nooit als kandidaat gezien", () => {
+  const evidence = evaluateDocument(pitCameleon, {
+    url: "https://www.bedrijfslijst.nl/pit-cameleon",
+    text: "Pit Cameleon, Breda, tel. 06 27654956. E-mail: p**@pitcameleon.nl.",
+  });
+  assert.equal(evidence.length, 0);
+});
+
+test("isPlatformSourceUrl herkent platformdomeinen (inclusief subdomeinloze bron-URL's)", () => {
+  assert.equal(isPlatformSourceUrl("https://rocketreach.co/amber-holwerda-email_2796533"), true);
+  assert.equal(isPlatformSourceUrl("https://www.oozo.nl/bedrijf/12345"), true);
+  assert.equal(isPlatformSourceUrl("https://www.facebook.com/pitcameleon"), false, "social mag een eigen pagina zijn");
+  assert.equal(isPlatformSourceUrl("https://www.pitcameleon.nl/contact"), false);
 });

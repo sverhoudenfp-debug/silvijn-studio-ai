@@ -116,6 +116,20 @@ export const DIRECTORY_PLATFORM_DOMAINS: readonly string[] = [
   "123auto.nl",
 ];
 
+/**
+ * PLATFORM-BRONDOMEINEN (2026-10-06): profielpagina's op deze domeinen zijn
+ * nooit de "eigen pagina" van het bedrijf — een URL met de bedrijfsnaam op
+ * zo'n platform (bijv. rocketreach.co/<naam>-email_123) zegt niets over
+ * eigendom. own_page_slug geldt er dus niet; de pagina mag wél als BRON
+ * dienen voor de telefoon-kruischeck of tweede bron (regel 4 van de fix).
+ */
+export const PLATFORM_SOURCE_DOMAINS: readonly string[] = [...DIRECTORY_PLATFORM_DOMAINS, "rocketreach.co"];
+
+/** True wanneer de bron-URL op een bekend directory-/platformdomein staat. */
+export function isPlatformSourceUrl(url: string): boolean {
+  return PLATFORM_SOURCE_DOMAINS.includes(domainOf(url));
+}
+
 /** True wanneer het e-maildomein eigendom is van een directory/platform. */
 export function isDirectoryPlatformEmail(email: string): boolean {
   const domain = (email.split("@")[1] ?? "").toLowerCase().replace(/^www\./, "");
@@ -208,6 +222,9 @@ export function evaluateDocument(target: EnrichmentTarget, doc: SourceDocument):
 
   const evidence: DocumentEvidence[] = [];
   for (const email of extractEmails(doc.text)) {
+    // Gemaskeerde weergaven (a***@domein.nl) zijn geen letterlijke, bruikbare
+    // adressen — data-brokers tonen ze zo; opslaan levert onbezorgbare mail.
+    if (email.includes("*")) continue;
     const emailIndex = lowerText.indexOf(email);
     evidence.push({
       email,
@@ -256,7 +273,9 @@ export function decideAcceptance(
   // Regel 1 — eigen pagina: de bedrijfsnaam zit in de URL van een bron die
   // het adres vermeldt (facebook.com/<bedrijfsnaam>, <bedrijfsnaam>.wixsite.com, …).
   if (slug.length >= MIN_NAME_SLUG_LENGTH) {
-    const ownPage = evidence.find((e) => e.nameInUrl && (e.nameInText || e.nearName));
+    const ownPage = evidence.find(
+      (e) => e.nameInUrl && (e.nameInText || e.nearName) && !isPlatformSourceUrl(e.url)
+    );
     if (ownPage) return { accepted: true, rule: "own_page_slug", reason: `eigen webpagina: ${ownPage.domain}` };
   }
 

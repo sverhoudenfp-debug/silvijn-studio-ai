@@ -1,6 +1,15 @@
 import "server-only";
 import type { AcceptanceRule, DocumentEvidence, EnrichmentTarget } from "@/lib/leads/contact-enrichment";
-import { decideAcceptance, evaluateDocument, extractEmails, rankAcceptedCandidates, type SourceDocument } from "@/lib/leads/contact-enrichment";
+import {
+  decideAcceptance,
+  distinctiveBusinessSlug,
+  domainSlugOf,
+  evaluateDocument,
+  extractEmails,
+  isSocialSourceUrl,
+  rankAcceptedCandidates,
+  type SourceDocument,
+} from "@/lib/leads/contact-enrichment";
 
 /**
  * Contactverrijkingsprovider — zoekt in OPENBARE bronnen naar een zakelijk
@@ -154,6 +163,34 @@ function htmlToText(html: string): string {
 }
 
 /**
+ * Fetch-volgorde (2026-10-06, false-negative audit): officiële eigen
+ * bedrijfsdomeinen en social-profielen krijgen prioriteit boven directories
+ * en aggregators. Dit verandert NIET wat wordt geaccepteerd (alle regels,
+ * blocks en checks ongewijzigd): het zorgt er alleen voor dat het beperkte
+ * fetch-budget eerst aan het sterkste bewijs wordt besteed — de eigen
+ * website stond bij herhaalde gelegenheden achter directories op positie 5+
+ * en werd daardoor nooit opgehaald.
+ */
+export function prioritizeFetchUrls(target: EnrichmentTarget, pageUrls: string[]): string[] {
+  const distinctive = distinctiveBusinessSlug(target.businessName, target.city ?? null);
+  const rank = (url: string): number => {
+    let host = "";
+    try {
+      host = new URL(url).hostname.toLowerCase();
+    } catch {
+      return 2;
+    }
+    if (distinctive.length >= 6 && domainSlugOf(host).includes(distinctive)) return 0;
+    if (isSocialSourceUrl(url)) return 1;
+    return 2;
+  };
+  return pageUrls
+    .map((url, index) => ({ url, index, r: rank(url) }))
+    .sort((a, b) => a.r - b.r || a.index - b.index)
+    .map((entry) => entry.url);
+}
+
+/**
  * Zoekt per lead: eerst zoeksnippets (incl. extra snippets), daarna (alleen
  * indien nodig) een klein aantal bronpagina's. Acceptatie verloopt
  * uitsluitend via de pure regels.
@@ -188,7 +225,7 @@ export class BraveSearchEmailProvider implements ContactEnrichmentProvider {
     // ophalen. De volledige pagina bevat vaak wél het telefoonnummer dat de
     // kruischeck mogelijk maakt; de snippet zelden.
     if (accepted.length === 0) {
-      for (const pageUrl of pageUrls.slice(0, MAX_PAGE_FETCHES)) {
+      for (const pageUrl of prioritizeFetchUrls(target, pageUrls).slice(0, MAX_PAGE_FETCHES)) {
         const text = await fetchPageText(pageUrl);
         pagesFetched += 1;
         if (!text) continue;

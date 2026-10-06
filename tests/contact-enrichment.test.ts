@@ -816,3 +816,72 @@ test("WEBSITE 5 — onbevestigde/verkeerde website (mail-subdomein, e-maildomein
   assert.equal(websiteUpdateAfterEnrichment({ websiteStatus: "no_website" }, null), null);
   assert.equal(websiteUpdateAfterEnrichment({ websiteStatus: "has_website" }, "https://example.nl"), null, "bestaande status wordt niet opnieuw gemarkeerd");
 });
+
+// ---------------------------------------------------------------------------
+// FETCH-PRIORITEIT (2026-10-06): eigen bedrijfsdomein/social eerst, directories
+// pas daarna. Verandert alleen de volgorde van bronselectie, nooit de regels.
+// ---------------------------------------------------------------------------
+import { prioritizeFetchUrls } from "../lib/discovery/contact-enrichment/provider";
+
+test("FETCH 1 — eigen website achter directoryresultaten krijgt fetch-prioriteit", () => {
+  const target: EnrichmentTarget = { businessName: "Schildersbedrijf Pit Cameleon", city: "Breda", phone: "06 27654956" };
+  const ordered = prioritizeFetchUrls(target, [
+    "https://www.oozo.nl/bedrijven/breda/heuvel/88130/pit-cameleon",
+    "https://www.telefoonboek.nl/bedrijven/breda/pit-cameleon",
+    "https://offertesonline.nl/schilderwerken/breda/pit-cameleon",
+    "https://www.pitcameleon.nl/",
+    "https://www.pitcameleon.nl/buitenschilder-breda/",
+  ]);
+  assert.match(ordered[0], /pitcameleon\.nl/, "eigen bedrijfswebsite staat vooraan");
+  assert.match(ordered[1], /pitcameleon\.nl/, "beide eigen pagina's vóór de directories");
+  assert.ok(ordered.slice(2).every((u) => !/pitcameleon\.nl/.test(u) || true));
+  assert.equal(ordered.length, 5, "geen URL verdwijnt, alleen de volgorde verandert");
+});
+
+test("FETCH 2 — directory blijft beschikbaar als fallback achter eigen en social bronnen", () => {
+  const target: EnrichmentTarget = { businessName: "Schildersbedrijf Pit Cameleon", city: "Breda", phone: "06 27654956" };
+  const ordered = prioritizeFetchUrls(target, [
+    "https://www.oozo.nl/bedrijven/breda/pit-cameleon",
+    "https://www.facebook.com/pitcameleon",
+    "https://www.pitcameleon.nl/",
+  ]);
+  assert.match(ordered[0], /pitcameleon\.nl/);
+  assert.match(ordered[1], /facebook\.com/);
+  assert.match(ordered[2], /oozo\.nl/, "directory blijft in de lijst als laatste fallback");
+});
+
+test("FETCH 3 — directory-e-mailadres blijft REJECT onder de ongewijzigde regels", () => {
+  const target: EnrichmentTarget = { businessName: "Klussenbedrijf Sluijter", city: "'s-Hertogenbosch", phone: "073 621 8648" };
+  const evidence = evaluateDocument(target, {
+    url: "https://www.oozo.nl/bedrijven/s-hertogenbosch/sluijter",
+    text: "Klussenbedrijf Sluijter 's-Hertogenbosch, 073 621 8648. E-mail: info@oozo.nl",
+  });
+  const decision = decideAcceptance(target, "info@oozo.nl", evidence);
+  assert.equal(decision.accepted, false, "directory-mailbox wordt nog steeds geweigerd");
+  assert.equal(isDirectoryPlatformEmail("info@oozo.nl"), true);
+});
+
+test("FETCH 4 — eigen bedrijfswebsite met sterk bewijs blijft ACCEPT", () => {
+  const target: EnrichmentTarget = { businessName: "Schildersbedrijf Meulenberg", city: "Heerlen", phone: "06 51492877" };
+  const evidence = evaluateDocument(target, {
+    url: "https://www.schildersbedrijfmeulenberg.nl/contact",
+    text: "Schildersbedrijf Meulenberg, 6414 BS Heerlen, 06-51492877. Mail ons: info@schildersbedrijfmeulenberg.nl",
+  });
+  const decision = decideAcceptance(target, "info@schildersbedrijfmeulenberg.nl", evidence);
+  assert.equal(decision.accepted, true, "eigen site + telefoon + plaats blijft geaccepteerd");
+  // Route B (e-maildomein == paginadomein, mét telefoon-anker) dragen: own_page_slug.
+  assert.equal(decision.rule, "own_page_slug");
+});
+
+test("FETCH 5 — verkeerde website (domein van een ander bedrijf) blijft REJECT", () => {
+  const target: EnrichmentTarget = { businessName: "Schildersbedrijf Ponsteen", city: "Arnhem", phone: "06 51910754" };
+  // domein klinkt zakelijk maar hoort bij een ander bedrijf: geen naam-, telefoon-
+  // of plaats-anker op de pagina.
+  const evidence = evaluateDocument(target, {
+    url: "https://www.degemeentegids.nl/arnhem/ponsteen",
+    text: "Ponsteen Schildersbedrijf Arnhem. E-mail: info@degemeentegids.nl",
+  });
+  const decision = decideAcceptance(target, "info@degemeentegids.nl", evidence);
+  assert.equal(decision.accepted, false, "verkeerde/gids-bron blijft geweigerd");
+  assert.equal(isDirectoryPlatformEmail("info@degemeentegids.nl"), true);
+});

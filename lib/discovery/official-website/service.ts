@@ -21,7 +21,7 @@ export type OfficialWebsiteDiscoveryResult =
     }
   | { status: "ambiguous"; inspectedCandidates: number }
   | { status: "not_found"; inspectedCandidates: number }
-  | { status: "technical_error"; reason: "INVALID_INPUT" | "SEARCH_NOT_CONFIGURED" | "SEARCH_FAILED" };
+  | { status: "technical_error"; reason: "INVALID_INPUT" | "SEARCH_NOT_CONFIGURED" | "SEARCH_FAILED"; detail?: string };
 
 interface Dependencies {
   search?: WebsiteSearchSource;
@@ -204,9 +204,16 @@ export class OfficialWebsiteDiscoveryService {
       searched = await search.search(candidate);
     } catch (error) {
       if (error instanceof OfficialWebsiteSearchError && error.code === "NOT_CONFIGURED") {
-        return { status: "technical_error", reason: "SEARCH_NOT_CONFIGURED" };
+        return { status: "technical_error", reason: "SEARCH_NOT_CONFIGURED", detail: error.detail ?? "AUTH" };
       }
-      return { status: "technical_error", reason: "SEARCH_FAILED" };
+      if (error instanceof OfficialWebsiteSearchError) {
+        return { status: "technical_error", reason: "SEARCH_FAILED", detail: error.detail ? `${error.code}: ${error.detail}` : error.code };
+      }
+      return {
+        status: "technical_error",
+        reason: "SEARCH_FAILED",
+        detail: (error instanceof Error ? `${error.name}: ${error.message}` : String(error)).slice(0, 180),
+      };
     }
 
     const candidates: string[] = [];

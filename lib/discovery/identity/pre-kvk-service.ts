@@ -168,9 +168,13 @@ export class GoogleNoWebsiteListedDiscoveryService {
           summary.officialWebsiteNotFound++;
           temporaryCandidates.push(candidate);
           break;
-        case "technical_error":
+        case "technical_error": {
           summary.officialWebsiteTechnicalErrors++;
+          const detail = outcome.detail ?? "";
+          const key = detail ? `${outcome.reason}: ${detail}` : outcome.reason;
+          websiteCheckFailures.set(key, (websiteCheckFailures.get(key) ?? 0) + 1);
           break;
+        }
       }
     }
 

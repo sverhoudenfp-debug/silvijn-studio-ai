@@ -95,6 +95,33 @@ const FREEMAIL_DOMAINS = [
   "zeelandnet.nl",
 ];
 
+/**
+ * DIRECTORY-/PLATFORM-DOMEINEN (2026-10-06): e-mailadressen op deze domeinen
+ * zijn eigendom van het platform (de gids), níet van het vermelde bedrijf.
+ * Ze mogen NOOIT als zakelijk bedrijfs-e-mailadres worden geaccepteerd, hoe
+ * sterk het omringende bewijs (naam/telefoon/adres) ook is. De gids zelf mag
+ * wél als BRON dienen: een OOZO-profiel met de juiste naam + telefoon die
+ * een écht bedrijfsadres (info@<bedrijf>.nl) vermeldt, is gewoon verifieer-
+ *baar via de bestaande regels. Alleen het platform-eigen postvak is verboden.
+ * Onderhoud: voeg alleen domeinen toe die daadwerkelijk als directory of
+ * platform voor bedrijfsvermeldingen fungeren.
+ */
+export const DIRECTORY_PLATFORM_DOMAINS: readonly string[] = [
+  "oozo.nl",
+  "degemeentegids.nl",
+  "besteautopoetser.nl",
+  "cylex.nl",
+  "drimble.nl",
+  "mkb-bedrijvengids.nl",
+  "123auto.nl",
+];
+
+/** True wanneer het e-maildomein eigendom is van een directory/platform. */
+export function isDirectoryPlatformEmail(email: string): boolean {
+  const domain = (email.split("@")[1] ?? "").toLowerCase().replace(/^www\./, "");
+  return DIRECTORY_PLATFORM_DOMAINS.includes(domain);
+}
+
 const EMAIL_PATTERN = /[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}/g;
 
 export function normalizeForMatch(value: string): string {
@@ -208,6 +235,17 @@ export function decideAcceptance(
   evidence: DocumentEvidence[]
 ): AcceptanceDecision {
   const slug = nameSlug(target.businessName);
+  // HARD RULE (2026-10-06): een e-mailadres op een directory-/platformdomein
+  // is nooit het zakelijke adres van het bedrijf — op geen enkele route.
+  // Vooraf en onvoorwaardelijk, zodat geen enkele verificatieregel eronder
+  // kan doorglippen.
+  if (isDirectoryPlatformEmail(email)) {
+    return {
+      accepted: false,
+      rule: null,
+      reason: "directory-/platform-e-mailadres: dit postvak is van de gids, niet van het bedrijf",
+    };
+  }
   if (target.businessName.trim().length < MIN_NAME_LENGTH) {
     return { accepted: false, rule: null, reason: "bedrijfsnaam te generiek om te verifiëren" };
   }

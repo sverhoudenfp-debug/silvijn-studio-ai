@@ -2,8 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   decideAcceptance,
+  DIRECTORY_PLATFORM_DOMAINS,
   evaluateDocument,
   extractEmails,
+  isDirectoryPlatformEmail,
   isRejectedLocalPart,
   rankAcceptedCandidates,
   type AcceptanceRule,
@@ -341,4 +343,119 @@ test("uitrol van de rangschikking is deterministisch (zelfde input → zelfde vo
     first.map((c) => c.email),
     second.map((c) => c.email)
   );
+});
+
+
+// ─── DIRECTORY-/PLATFORM-E-MAIL (2026-10-06) ─────────────────────────────
+// HARD RULE: een e-mailadres op een directory-/platformdomein is nooit het
+// zakelijke adres van het bedrijf, op geen enkele acceptatieroute. De gids
+// mag wél als bron dienen voor verificatie van een écht bedrijfsadres.
+
+const pitCameleon: EnrichmentTarget = {
+  businessName: "Pit Cameleon",
+  city: "Breda",
+  phone: "+31 6 27654956",
+};
+
+test("A — OOZO-profiel met info@oozo.nl wordt ALTIJD afgewezen", () => {
+  const evidence = evaluateDocument(pitCameleon, {
+    url: "https://www.oozo.nl/bedrijf/pit-cameleon-breda",
+    text: "Pit Cameleon — Schilders in Breda. Profiel op OOZO. Vragen over deze vermelding? Mail info@oozo.nl of bel 06 27654956.",
+  });
+  // Zonder de hard rule zou own_page_slug (URL bevat de bedrijfsnaam) én
+  // phone_cross_check (naam + lead-telefoon op de pagina) dit accepteren.
+  const decision = decideAcceptance(pitCameleon, "info@oozo.nl", evidence);
+  assert.equal(decision.accepted, false);
+  assert.equal(decision.rule, null);
+  assert.match(decision.reason, /directory/i);
+});
+
+test("B — DeGemeenteGids-profiel met info@degemeentegids.nl wordt ALTIJD afgewezen", () => {
+  const ponsteen: EnrichmentTarget = {
+    businessName: "Schildersbedrijf Ponsteen",
+    city: "Arnhem",
+    phone: "+31 6 51910754",
+  };
+  const evidence = evaluateDocument(ponsteen, {
+    url: "https://degemeentegids.nl/bedrijf/schildersbedrijf-ponsteen",
+    text: "Schildersbedrijf Ponsteen, Arnhem. Telefoon 06 51910754. Vermeldingen via info@degemeentegids.nl.",
+  });
+  const decision = decideAcceptance(ponsteen, "info@degemeentegids.nl", evidence);
+  assert.equal(decision.accepted, false);
+  assert.equal(decision.rule, null);
+  assert.match(decision.reason, /directory/i);
+});
+
+test("C — OOZO-profiel mag als BRON dienen voor een écht bedrijfsadres (telefoon-kruischeck)", () => {
+  const evidence = evaluateDocument(pitCameleon, {
+    url: "https://www.oozo.nl/bedrijf/84120",
+    text: "Pit Cameleon, schilder in Breda. Telefoon: 06 27654956. E-mail: info@pitcameleon.nl. Adres: Havenstraat 1, 4811 KL Breda.",
+  });
+  const decision = decideAcceptance(pitCameleon, "info@pitcameleon.nl", evidence);
+  assert.equal(decision.accepted, true);
+  assert.equal(decision.rule, "phone_cross_check");
+});
+
+test("D — tweede bron bevestigt een écht bedrijfsadres: second_source blijft werken", () => {
+  const docs: SourceDocument[] = [
+    {
+      url: "https://klusoverzicht-breda.nl/bedrijven/77341",
+      text: "Pit Cameleon is een schildersbedrijf in Breda. Mail info@pitcameleon.nl voor een offerte.",
+    },
+    {
+      url: "https://www.verfgids-noord-brabant.nl/profielen/2255",
+      text: "Pit Cameleon (Breda). Contact: info@pitcameleon.nl — schilderwerk en behang.",
+    },
+  ];
+  const evidence = docs.flatMap((doc) => evaluateDocument(pitCameleon, doc));
+  const decision = decideAcceptance(pitCameleon, "info@pitcameleon.nl", evidence);
+  assert.equal(decision.accepted, true);
+  assert.equal(decision.rule, "second_source");
+});
+
+test("E — social-profiel met platform-e-mailadres wordt afgewezen", () => {
+  const evidence = evaluateDocument(pitCameleon, {
+    url: "https://www.facebook.com/pitcameleon",
+    text: "Pit Cameleon op Facebook. Geschreven door onze partner OOZO. Bereik ons via info@oozo.nl of 06 27654956.",
+  });
+  const decision = decideAcceptance(pitCameleon, "info@oozo.nl", evidence);
+  assert.equal(decision.accepted, false);
+  assert.match(decision.reason, /directory/i);
+});
+
+test("F — social-profiel met écht bedrijfsadres blijft de bestaande regels volgen (own_page_slug)", () => {
+  const evidence = evaluateDocument(pitCameleon, {
+    url: "https://www.facebook.com/pitcameleon",
+    text: "Pit Cameleon, schilders in Breda. Stuur je offerte-aanvraag naar info@pitcameleon.nl.",
+  });
+  const decision = decideAcceptance(pitCameleon, "info@pitcameleon.nl", evidence);
+  assert.equal(decision.accepted, true);
+  assert.equal(decision.rule, "own_page_slug");
+});
+
+test("isDirectoryPlatformEmail herkent alle bekende directory-/platformdomeinen", () => {
+  for (const domain of DIRECTORY_PLATFORM_DOMAINS) {
+    assert.equal(isDirectoryPlatformEmail(`info@${domain}`), true, domain);
+    assert.equal(isDirectoryPlatformEmail(`contact@${domain}`), true, domain);
+  }
+  assert.equal(isDirectoryPlatformEmail("info@pitcameleon.nl"), false, "gewoon bedrijfsdomein");
+  assert.equal(isDirectoryPlatformEmail("info@oozo-bedrijf.nl"), false, "gelijkend maar eigen domein");
+  assert.equal(isDirectoryPlatformEmail("erik@oozo-loodgieters.nl"), false);
+});
+
+test("second_source-route: ook twee onafhankelijke bronnen met hetzelfde directory-adres worden afgewezen", () => {
+  const docs: SourceDocument[] = [
+    {
+      url: "https://www.oozo.nl/bedrijf/pit-cameleon",
+      text: "Pit Cameleon, Breda. Neem contact op via info@oozo.nl.",
+    },
+    {
+      url: "https://klussenplatform-brabant.nl/profiel/pit-cameleon",
+      text: "Pit Cameleon (Breda) — profiel aangemaakt via onze partner. E-mail info@oozo.nl voor vragen over dit profiel.",
+    },
+  ];
+  const evidence = docs.flatMap((doc) => evaluateDocument(pitCameleon, doc));
+  const decision = decideAcceptance(pitCameleon, "info@oozo.nl", evidence);
+  assert.equal(decision.accepted, false, "twee bronnen of niet: een platform-postvak is nooit het bedrijfsadres");
+  assert.match(decision.reason, /directory/i);
 });

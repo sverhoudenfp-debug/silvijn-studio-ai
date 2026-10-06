@@ -94,10 +94,11 @@ function stubProvider(
         if (options?.throwOn?.includes(target.businessName)) throw new Error("providerfout in stub");
         const email = accepted[target.businessName];
         if (!email) {
-          return { email: null, sourceUrl: null, rule: null, reason: "geen openbaar zakelijk adres gevonden", queries: [], pagesFetched: 0 };
+          return { email: null, sourceUrl: null, rule: null, websiteUrl: null, reason: "geen openbaar zakelijk adres gevonden", queries: [], pagesFetched: 0 };
         }
         return {
           email,
+          websiteUrl: null,
           sourceUrl: `https://${email.split("@")[1]}/contact`,
           rule: "second_source",
           reason: "twee onafhankelijke bronnen",

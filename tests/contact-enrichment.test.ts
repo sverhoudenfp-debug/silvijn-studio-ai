@@ -20,7 +20,7 @@ import {
   type ContactEnrichmentProvider,
   type EmailSearchResult,
 } from "../lib/discovery/contact-enrichment/provider";
-import { attemptContactEnrichment, enrichCreatedLeads } from "../lib/discovery/contact-enrichment/service";
+import { attemptContactEnrichment, enrichCreatedLeads, websiteUpdateAfterEnrichment } from "../lib/discovery/contact-enrichment/service";
 import { getLeadRepository, type LeadCreateInput } from "../lib/repositories/lead-repository";
 import { contactChannelFor, needsManualContact } from "../lib/outreach/contactability";
 import { isEligibleForInitialOutreach } from "../lib/outreach/orchestrator";
@@ -41,7 +41,7 @@ delete process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 delete process.env.BRAVE_SEARCH_API_KEY;
 
 function noEmailResult(): EmailSearchResult {
-  return { email: null, sourceUrl: null, rule: null, reason: "geen adres voldoet aan de verificatieregels", queries: [], pagesFetched: 0 };
+  return { email: null, sourceUrl: null, rule: null, websiteUrl: null, reason: "geen adres voldoet aan de verificatieregels", queries: [], pagesFetched: 0 };
 }
 
 function stubProvider(result: EmailSearchResult): ContactEnrichmentProvider {
@@ -190,6 +190,7 @@ test("TEST 1 — lead met gevonden e-mail wordt outreach-eligible en de mutatie 
       email: "info@verrijkingtest.nl",
       sourceUrl: "https://www.facebook.com/verrijkingtestbedrijf/about",
       rule: "own_page_slug",
+      websiteUrl: null,
       reason: "",
       queries: ['"Verrijking Testbedrijf" email'],
       pagesFetched: 0,
@@ -702,4 +703,116 @@ test("REGRESSIE — buitenlandse ccTLD mét telefoon-kruischeck kan nog steeds s
   const decision = decideAcceptance(garden, "kevin@mybeautifulgarden.ca", evidence);
   assert.equal(decision.accepted, true, "met de lead-telefoon op het officiële profiel is het adres geverifieerd");
   assert.equal(decision.rule, "own_page_slug");
+});
+
+// ===== Website-markering bij verrijking (Silvijn-goedkeuring 2026-10-06, optie 1) =====
+
+test("WEBSITE 1 — aantoonbaar eigen live website → status has_website + redesign-notitie", async () => {
+  const lead = await createTestLead({ businessName: "Verrijking Eigen Site B.V." });
+  try {
+    const provider = stubProvider({
+      email: "info@verrijkingeigensite.nl",
+      sourceUrl: "https://www.verrijkingeigensite.nl/contact",
+      rule: "own_page_slug",
+      websiteUrl: "https://www.verrijkingeigensite.nl/contact",
+      reason: "",
+      queries: [],
+      pagesFetched: 1,
+    });
+    const attempt = await attemptContactEnrichment(lead, { provider });
+    assert.equal(attempt.outcome, "email_found");
+    const updated = await getLeadRepository().get(lead.id);
+    assert.ok(updated);
+    assert.equal(updated.websiteStatus, "has_website", "eigen website markeert de lead als 'website aanwezig'");
+    assert.ok(updated.notes.some((n) => n.includes("mogelijke redesign/professionalisering")), "notitie noemt de redesign-hoek");
+    assert.ok(updated.notes.some((n) => n.includes("eigen website aanwezig")), "notitie documenteert de statuswijziging");
+    // Regel 2: de lead blijft outreach-eligible
+    assert.equal(
+      isEligibleForInitialOutreach(
+        { leadStatus: updated.leadStatus, outreachStatus: updated.outreachStatus, email: updated.email },
+        false,
+        false
+      ),
+      true
+    );
+  } finally {
+    await cleanupLead(lead.id);
+  }
+});
+
+test("WEBSITE 2 — alleen social-profiel (site onder constructie/niet gezien) → status ongewijzigd", async () => {
+  const lead = await createTestLead({ businessName: "Verrijking Social Only" });
+  try {
+    const provider = stubProvider({
+      email: "verrijkingsocial@gmail.com",
+      sourceUrl: "https://www.facebook.com/verrijking-social-only/about",
+      rule: "own_page_slug",
+      websiteUrl: null,
+      reason: "",
+      queries: [],
+      pagesFetched: 1,
+    });
+    await attemptContactEnrichment(lead, { provider });
+    const updated = await getLeadRepository().get(lead.id);
+    assert.ok(updated);
+    assert.equal(updated.websiteStatus, "no_website", "zonder bewezen eigen site blijft de status 'geen website'");
+    assert.ok(!updated.notes.some((n) => n.includes("redesign")), "geen redesign-notitie zonder eigen site");
+  } finally {
+    await cleanupLead(lead.id);
+  }
+});
+
+test("WEBSITE 3 — geen e-mail gevonden → status blijft no_website", async () => {
+  const lead = await createTestLead({ businessName: "Verrijking Geen Mail" });
+  try {
+    await attemptContactEnrichment(lead, { provider: stubProvider(noEmailResult()) });
+    const updated = await getLeadRepository().get(lead.id);
+    assert.ok(updated);
+    assert.equal(updated.email, null);
+    assert.equal(updated.websiteStatus, "no_website", "zonder vondst verandert de website-status nooit");
+  } finally {
+    await cleanupLead(lead.id);
+  }
+});
+
+test("WEBSITE 4 — directory-/platformpagina als bron → géén website-markering", () => {
+  // Pius Floris-patroon: geaccepteerd via phone_cross_check op een gids-pagina.
+  const pf: EnrichmentTarget = {
+    businessName: "Pius Floris Boomverzorging Amsterdam",
+    city: "Amsterdam",
+    phone: "020 301 3015",
+  };
+  const evidence = evaluateDocument(pf, {
+    url: "https://goudengids.nl/nl/bedrijf/Amsterdam/L118187280/Pius+Floris+Boomverzorging",
+    text: "Pius Floris Boomverzorging Amsterdam. Telefoon: 020 301 3015. E-mail: amsterdam@piusfloris.nl",
+  });
+  const decision = decideAcceptance(pf, "amsterdam@piusfloris.nl", evidence);
+  assert.equal(decision.accepted, true);
+  assert.equal(decision.rule, "phone_cross_check");
+  assert.equal(decision.websiteUrl ?? null, null, "een directory-bron markeert nooit een eigen website");
+});
+
+test("WEBSITE 5 — onbevestigde/verkeerde website (mail-subdomein, e-maildomein != paginadomein) → géén markering en geen acceptatie via eigen site", () => {
+  // Meulenberg-patroon: mail.schildersbedrijfmeulenberg.nl is niet het
+  // e-maildomein — een subdomein-pagina is geen bewijs van de eigen site.
+  const meulenberg: EnrichmentTarget = {
+    businessName: "Schildersbedrijf Meulenberg",
+    city: "Heerlen",
+    phone: "06 51492877",
+  };
+  const evidence = evaluateDocument(meulenberg, {
+    url: "http://mail.schildersbedrijfmeulenberg.nl/contact.html",
+    text: "Schildersbedrijf Meulenberg, 6414 BS Heerlen, 06-51492877. E-mail: info@schildersbedrijfmeulenberg.nl",
+  });
+  const decision = decideAcceptance(meulenberg, "info@schildersbedrijfmeulenberg.nl", evidence);
+  // De mail.-pagina kan route B niet dragen: e-maildomein != paginadomein.
+  if (decision.accepted) {
+    assert.notEqual(decision.reason, "eigen bedrijfswebsite: mail.schildersbedrijfmeulenberg.nl");
+    assert.equal(decision.websiteUrl ?? null, null, "onbevestigde pagina's worden nooit als eigen website gemarkeerd");
+  } else {
+    assert.equal(decision.websiteUrl ?? null, null);
+  }
+  // En de pure helper markeert alleen bij een bewezen URL
+  assert.equal(websiteUpdateAfterEnrichment({ websiteStatus: "no_website" }, null), null);
+  assert.equal(websiteUpdateAfterEnrichment({ websiteStatus: "has_website" }, "https://example.nl"), null, "bestaande status wordt niet opnieuw gemarkeerd");
 });

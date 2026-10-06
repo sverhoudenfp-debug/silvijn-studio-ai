@@ -20,11 +20,12 @@ function stubEnrichmentProvider(accepted: Record<string, string>): { provider: C
         calls.push(target.businessName);
         const email = accepted[target.businessName];
         if (!email) {
-          return { email: null, sourceUrl: null, rule: null, reason: "geen openbaar adres gevonden", queries: [], pagesFetched: 0 };
+          return { email: null, sourceUrl: null, rule: null, websiteUrl: null, reason: "geen openbaar adres gevonden", queries: [], pagesFetched: 0 };
         }
         return {
           email,
           sourceUrl: `https://${email.split("@")[1]}/contact`,
+          websiteUrl: null,
           rule: "own_page_slug" as const,
           reason: "zakelijk adres op eigen contactpagina",
           queries: [],

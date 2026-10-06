@@ -38,6 +38,26 @@ export function contactEnrichmentFoundNote(email: string, sourceUrl: string | nu
   return `${notePrefix()}: zakelijk e-mailadres ${email} gevonden via ${sourceUrl ?? "onbekende bron"} (regel: ${rule}).`;
 }
 
+/**
+ * Website-markering bij verrijking (Silvijn-goedkeuring 2026-10-06, optie 1):
+ * een via route B aantoonbaar gevonden eigen bedrijfswebsite corrigeert de
+ * lead eerlijk — de lead blijft in de pool, blijft outreach-eligible en
+ * behoudt alle bron-/auditinformatie. Alleen een wettig bewezen eigen site
+ * markeert; social-profielen, directory-/platformpagina's en onbevestigde
+ * domeinen veranderen de status nooit. Puur en side-effectvrij.
+ */
+export function websiteUpdateAfterEnrichment(
+  lead: Pick<Lead, "websiteStatus">,
+  websiteUrl: string | null
+): { websiteStatus: "has_website"; note: string } | null {
+  if (!websiteUrl) return null;
+  if (lead.websiteStatus !== "no_website" && lead.websiteStatus !== "unknown") return null;
+  return {
+    websiteStatus: "has_website",
+    note: `${notePrefix()}: eigen website aanwezig (${websiteUrl}) — website-status gewijzigd van '${lead.websiteStatus}' naar 'has_website'. Bestaande website: mogelijke redesign/professionalisering.`,
+  };
+}
+
 export async function attemptContactEnrichment(
   lead: Lead,
   options?: { provider?: ContactEnrichmentProvider }
@@ -67,9 +87,15 @@ export async function attemptContactEnrichment(
       return base;
     }
     const repository = getLeadRepository();
+    const websiteUpdate = websiteUpdateAfterEnrichment(lead, result.websiteUrl ?? null);
     await repository.updateContact(lead.id, {
       email: result.email,
-      notes: [...lead.notes, contactEnrichmentFoundNote(result.email, result.sourceUrl, String(result.rule))],
+      ...(websiteUpdate ? { websiteStatus: websiteUpdate.websiteStatus } : {}),
+      notes: [
+        ...lead.notes,
+        contactEnrichmentFoundNote(result.email, result.sourceUrl, String(result.rule)),
+        ...(websiteUpdate ? [websiteUpdate.note] : []),
+      ],
     });
     return { outcome: "email_found", leadId: lead.id, email: result.email, sourceUrl: result.sourceUrl };
   } catch (error) {

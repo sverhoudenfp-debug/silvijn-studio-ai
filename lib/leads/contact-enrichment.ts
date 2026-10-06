@@ -53,6 +53,13 @@ export interface AcceptanceDecision {
   accepted: boolean;
   rule: AcceptanceRule | null;
   reason: string;
+  /**
+   * Aantoonbaar eigen bedrijfswebsite (route B): de pagina waarop het adres
+   * werd aangetroffen staat op het eigen e-maildomein én is live bevraagd.
+   * Null bij social-route, directory-/platformbronnen of afwijzing — nooit
+   * een site die niet als de officiele website van de lead bewezen is.
+   */
+  websiteUrl?: string | null;
 }
 
 const NEAR_MATCH_DISTANCE = 300;
@@ -452,7 +459,14 @@ export function decideAcceptance(
     });
 
     if (social) return { accepted: true, rule: "own_page_slug", reason: `officieel social-profiel: ${social.domain}` };
-    if (ownSite) return { accepted: true, rule: "own_page_slug", reason: `eigen bedrijfswebsite: ${ownSite.domain}` };
+    if (ownSite) {
+      return {
+        accepted: true,
+        rule: "own_page_slug",
+        reason: `eigen bedrijfswebsite: ${ownSite.domain}`,
+        websiteUrl: ownSite.url,
+      };
+    }
   }
 
   // Regel 2 — telefoon-kruischeck: exacte bedrijfsnaam + het telefoonnummer

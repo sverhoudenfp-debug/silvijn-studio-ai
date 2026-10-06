@@ -31,6 +31,8 @@ const SEARCH_RESULTS_PER_QUERY = 8;
 const BRAVE_ENDPOINT = "https://api.search.brave.com/res/v1/web/search";
 
 export interface EmailSearchResult {
+  /** Aantoonbaar eigen bedrijfswebsite (alleen bij route-B-acceptatie), anders null. */
+  websiteUrl: string | null;
   email: string | null;
   sourceUrl: string | null;
   rule: AcceptanceRule | null;
@@ -200,6 +202,7 @@ export class BraveSearchEmailProvider implements ContactEnrichmentProvider {
         email: null,
         sourceUrl: null,
         rule: null,
+        websiteUrl: null,
         reason: documents.length === 0 ? "geen zoekresultaten beschikbaar" : "geen adres voldoet aan de verificatieregels",
         queries,
         pagesFetched,
@@ -207,10 +210,11 @@ export class BraveSearchEmailProvider implements ContactEnrichmentProvider {
     }
     const best = rankAcceptedCandidates(accepted)[0];
     const evidence = documents.find((d) => extractEmails(d.text).includes(best.email));
-    return { email: best.email, sourceUrl: evidence?.url ?? null, rule: best.rule, reason: "", queries, pagesFetched };
+    const websiteUrl = (accepted.find((a) => a.email === best.email)?.websiteUrl ?? null) || null;
+    return { email: best.email, sourceUrl: evidence?.url ?? null, rule: best.rule, websiteUrl, reason: "", queries, pagesFetched };
   }
 
-  private evaluateDocuments(target: EnrichmentTarget, documents: SourceDocument[]): { email: string; rule: AcceptanceRule }[] {
+  private evaluateDocuments(target: EnrichmentTarget, documents: SourceDocument[]): { email: string; rule: AcceptanceRule; websiteUrl: string | null }[] {
     const byEmail = new Map<string, DocumentEvidence[]>();
     for (const doc of documents) {
       for (const evidence of evaluateDocument(target, doc)) {
@@ -219,10 +223,10 @@ export class BraveSearchEmailProvider implements ContactEnrichmentProvider {
         byEmail.set(evidence.email, list);
       }
     }
-    const out: { email: string; rule: AcceptanceRule }[] = [];
+    const out: { email: string; rule: AcceptanceRule; websiteUrl: string | null }[] = [];
     for (const [email, evidence] of byEmail) {
       const decision = decideAcceptance(target, email, evidence);
-      if (decision.accepted && decision.rule) out.push({ email, rule: decision.rule });
+      if (decision.accepted && decision.rule) out.push({ email, rule: decision.rule, websiteUrl: decision.websiteUrl ?? null });
     }
     return out;
   }

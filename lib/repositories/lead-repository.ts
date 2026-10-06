@@ -49,12 +49,13 @@ export interface LeadRepository {
    * contactgegevens en audit-notities op een bestaande lead. Statussen,
    * score en lifecycle worden hier nooit aangeraakt.
    */
-  updateContact(id: string, update: { email?: string | null; notes?: string[] }): Promise<Lead | null>;
+  updateContact(id: string, update: { email?: string | null; notes?: string[]; websiteStatus?: Lead["websiteStatus"] }): Promise<Lead | null>;
 }
 
 export interface LeadContactUpdate {
   email?: string | null;
   notes?: string[];
+  websiteStatus?: Lead["websiteStatus"];
 }
 
 /**
@@ -221,6 +222,7 @@ export class MockLeadRepository implements LeadRepository {
     if (!lead) return null;
     if (update.email !== undefined) lead.email = update.email;
     if (update.notes !== undefined) lead.notes = update.notes;
+    if (update.websiteStatus !== undefined) lead.websiteStatus = update.websiteStatus;
     lead.updatedAt = new Date().toISOString();
     return lead;
   }
@@ -280,6 +282,7 @@ export class SupabaseLeadRepository implements LeadRepository {
       .update({
         ...(update.email !== undefined ? { email: update.email } : {}),
         ...(update.notes !== undefined ? { notes: update.notes } : {}),
+        ...(update.websiteStatus !== undefined ? { website_status: update.websiteStatus } : {}),
       })
       .eq("id", id)
       .select("*")

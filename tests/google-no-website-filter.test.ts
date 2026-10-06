@@ -146,6 +146,7 @@ test("pre-KVK selection service itself stays free of KVK, repositories, scoring 
         email: "info@schildersbedrijf-productiecheck.example",
         sourceUrl: "https://schildersbedrijf-productiecheck.example/contact",
         rule: "phone_cross_check",
+        websiteUrl: null,
         reason: "telefoonkruiscontrole op bronpagina",
         queries: [],
         pagesFetched: 1,

@@ -24,6 +24,8 @@ export interface EnrichmentTarget {
   businessName: string;
   city: string | null;
   phone: string | null;
+  address: string | null;
+  postalCode: string | null;
 }
 
 export interface SourceDocument {
@@ -41,8 +43,11 @@ export interface DocumentEvidence {
   nameInUrl: boolean;
   nameInText: boolean;
   phoneInText: boolean;
+  addressInText: boolean;
   nearName: boolean;
   nearPhone: boolean;
+  nearAddress: boolean;
+  sourceKind: "official_or_social" | "directory_or_aggregator" | "other";
 }
 
 export interface AcceptanceDecision {
@@ -55,6 +60,11 @@ const NEAR_MATCH_DISTANCE = 300;
 /** Korte/generieke namen krijgen geen slug-regel: te veel valse treffers. */
 const MIN_NAME_SLUG_LENGTH = 8;
 const MIN_NAME_LENGTH = 4;
+const MIN_ADDRESS_LENGTH = 6;
+
+const KNOWN_SOCIAL_HOSTS = new Set(["facebook.com", "instagram.com", "linkedin.com", "x.com", "twitter.com"]);
+const KNOWN_DIRECTORY_HOSTS = new Set(["cylex.nl", "drimble.nl", "oozo.nl", "mkb-bedrijvengids.nl", "besteautopoetser.nl", "123auto.nl"]);
+const DIRECTORY_HOST_MARKERS = ["gids", "bedrijvengids", "directory", "bedrijven", "bedrijfsgids", "telefoongids", "reviews", "vergelijk", "zoekbedrijf"];
 
 const REJECTED_LOCAL_PARTS = [
   "noreply",
@@ -96,6 +106,33 @@ const FREEMAIL_DOMAINS = [
 ];
 
 const EMAIL_PATTERN = /[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}/g;
+
+function emailDomain(email: string): string {
+  return (email.split("@")[1] ?? "").toLowerCase().replace(/^www\./, "");
+}
+
+function rootDomain(host: string): string {
+  const parts = host.toLowerCase().replace(/^www\./, "").split(".").filter(Boolean);
+  return parts.length >= 2 ? parts.slice(-2).join(".") : host.toLowerCase();
+}
+
+function sourceKind(url: string): "official_or_social" | "directory_or_aggregator" | "other" {
+  const host = rootDomain(domainOf(url));
+  if (KNOWN_SOCIAL_HOSTS.has(host)) return "official_or_social";
+  if (KNOWN_DIRECTORY_HOSTS.has(host) || DIRECTORY_HOST_MARKERS.some((marker) => host.includes(marker))) return "directory_or_aggregator";
+  return "other";
+}
+
+function addressMatches(target: EnrichmentTarget, text: string): boolean {
+  const normalizedText = normalizeForMatch(text);
+  const postal = normalizeForMatch(target.postalCode ?? "");
+  if (postal.length >= 6 && normalizedText.includes(postal)) return true;
+  const address = (target.address ?? "").trim();
+  if (address.length < MIN_ADDRESS_LENGTH) return false;
+  const normalizedAddress = normalizeForMatch(address);
+  const streetNumber = normalizedAddress.match(/[a-z]+\d+[a-z]?/);
+  return Boolean((streetNumber?.[0] && normalizedText.includes(streetNumber[0])) || normalizedText.includes(normalizedAddress));
+}
 
 export function normalizeForMatch(value: string): string {
   return value
@@ -171,6 +208,8 @@ export function evaluateDocument(target: EnrichmentTarget, doc: SourceDocument):
   const lowerText = doc.text.toLowerCase();
   const phone = phoneSuffix(target.phone);
   const phoneRe = phone ? phonePattern(phone) : null;
+  const kind = sourceKind(doc.url);
+  const addressInText = addressMatches(target, lowerText);
 
   const phoneHits: { index: number; length: number }[] = [];
   if (phoneRe) {
@@ -189,10 +228,16 @@ export function evaluateDocument(target: EnrichmentTarget, doc: SourceDocument):
       nameInUrl: slug.length >= MIN_NAME_SLUG_LENGTH && normalizedUrl.includes(slug),
       nameInText: rawName.length >= MIN_NAME_LENGTH && lowerText.includes(rawName),
       phoneInText: phoneHits.length > 0,
+      addressInText,
       nearName: withinDistance(lowerText, rawName, emailIndex, NEAR_MATCH_DISTANCE),
       nearPhone: phoneHits.some(
         (hit) => Math.abs(hit.index - emailIndex) <= NEAR_MATCH_DISTANCE || Math.abs(hit.index + hit.length - emailIndex) <= NEAR_MATCH_DISTANCE
       ),
+      nearAddress:
+        addressInText &&
+        (withinDistance(lowerText, normalizeForMatch(target.address ?? ""), emailIndex, NEAR_MATCH_DISTANCE) ||
+          (target.postalCode ? withinDistance(lowerText, normalizeForMatch(target.postalCode), emailIndex, NEAR_MATCH_DISTANCE) : false)),
+      sourceKind: kind,
     });
   }
   return evidence.filter((e) => !isRejectedLocalPart(e.email));
@@ -215,25 +260,45 @@ export function decideAcceptance(
     return { accepted: false, rule: null, reason: "geen brondocument met dit adres" };
   }
 
-  // Regel 1 — eigen pagina: de bedrijfsnaam zit in de URL van een bron die
-  // het adres vermeldt (facebook.com/<bedrijfsnaam>, <bedrijfsnaam>.wixsite.com, …).
+  // Regel 1 — eigen/sociale pagina: directory-URL's zijn geen eigen pagina's.
   if (slug.length >= MIN_NAME_SLUG_LENGTH) {
-    const ownPage = evidence.find((e) => e.nameInUrl && (e.nameInText || e.nearName));
-    if (ownPage) return { accepted: true, rule: "own_page_slug", reason: `eigen webpagina: ${ownPage.domain}` };
+    const ownPage = evidence.find((e) => e.nameInUrl && e.nameInText && (e.sourceKind === "official_or_social" || rootDomain(e.domain).includes(slug)));
+    if (ownPage) {
+      const sourceDomain = rootDomain(ownPage.domain);
+      const candidateDomain = emailDomain(ownPage.email);
+      const looksLikeOwnDomain = candidateDomain === sourceDomain || candidateDomain.endsWith("." + sourceDomain);
+      const isSameAsPlatform = ownPage.sourceKind === "official_or_social" && candidateDomain === sourceDomain;
+      if ((looksLikeOwnDomain || ownPage.sourceKind === "official_or_social") && !isSameAsPlatform) {
+        return { accepted: true, rule: "own_page_slug", reason: `eigen/sociale pagina: ${ownPage.domain}` };
+      }
+    }
   }
 
-  // Regel 2 — telefoon-kruischeck: exacte bedrijfsnaam + het telefoonnummer
-  // van de lead op dezelfde bron, adres in de buurt van naam of nummer.
-  const phoneMatch = evidence.find((e) => e.nameInText && e.phoneInText && (e.nearName || e.nearPhone));
+  // Regel 2 — naam + telefoon + adres moeten op dezelfde bron staan.
+  // Een directory mag niet zijn eigen algemene mailbox aan een bedrijf koppelen.
+  const phoneMatch = evidence.find(
+    (e) =>
+      e.nameInText &&
+      e.phoneInText &&
+      e.addressInText &&
+      (e.nearName || e.nearPhone || e.nearAddress) &&
+      !(e.sourceKind === "directory_or_aggregator" && emailDomain(e.email) === rootDomain(e.domain))
+  );
   if (phoneMatch) {
-    return { accepted: true, rule: "phone_cross_check", reason: `naam en telefoonnummer bevestigd op ${phoneMatch.domain}` };
+    return { accepted: true, rule: "phone_cross_check", reason: `naam + telefoon + adres bevestigd op ${phoneMatch.domain}` };
   }
 
-  // Regel 3 — twee onafhankelijke bronnen noemen hetzelfde adres bij de naam.
-  const corroborating = evidence.filter((e) => e.nameInText && (e.nearName || e.nearPhone));
-  const distinctDomains = new Set(corroborating.map((e) => e.domain));
+  // Regel 3 — twee onafhankelijke domeinen moeten hetzelfde e-mailadres én hetzelfde adres bevestigen.
+  const corroborating = evidence.filter(
+    (e) =>
+      e.nameInText &&
+      e.addressInText &&
+      (e.nearName || e.nearAddress) &&
+      !(e.sourceKind === "directory_or_aggregator" && emailDomain(e.email) === rootDomain(e.domain))
+  );
+  const distinctDomains = new Set(corroborating.map((e) => rootDomain(e.domain)));
   if (distinctDomains.size >= 2) {
-    return { accepted: true, rule: "second_source", reason: `onafhankelijk bevestigd door ${distinctDomains.size} bronnen` };
+    return { accepted: true, rule: "second_source", reason: `e-mailadres + bedrijfsadres onafhankelijk bevestigd door ${distinctDomains.size} bronnen` };
   }
 
   return {

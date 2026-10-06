@@ -4,8 +4,8 @@ import { getAIConfig, requireLiveAPIKey } from "@/lib/ai/config";
 import type { TemporaryGoogleCandidate } from "../identity/types";
 
 export class OfficialWebsiteSearchError extends Error {
-  constructor(readonly code: "NOT_CONFIGURED" | "REQUEST_FAILED" | "INVALID_RESPONSE") {
-    super(code);
+  constructor(readonly code: "NOT_CONFIGURED" | "REQUEST_FAILED" | "INVALID_RESPONSE", readonly detail?: string) {
+    super(detail ? `${code}: ${detail}` : code);
     this.name = "OfficialWebsiteSearchError";
   }
 }
@@ -90,14 +90,17 @@ export class AnthropicOfficialWebsiteSearch implements WebsiteSearchSource {
       }, { signal: AbortSignal.timeout(this.timeoutMs) });
 
       if ((response.usage.server_tool_use?.web_search_requests ?? 0) !== 1) {
-        throw new OfficialWebsiteSearchError("INVALID_RESPONSE");
+        throw new OfficialWebsiteSearchError(
+          "INVALID_RESPONSE",
+          `web_search_requests=${response.usage.server_tool_use?.web_search_requests ?? 0}, model=${this.model}`
+        );
       }
 
       const urls: string[] = [];
       for (const block of response.content) {
         if (block.type !== "web_search_tool_result") continue;
         if (!Array.isArray(block.content)) {
-          throw new OfficialWebsiteSearchError("REQUEST_FAILED");
+          throw new OfficialWebsiteSearchError("REQUEST_FAILED", "web_search_tool_result.content is geen array");
         }
         for (const result of block.content) {
           if (result.type !== "web_search_result") continue;
@@ -108,9 +111,21 @@ export class AnthropicOfficialWebsiteSearch implements WebsiteSearchSource {
     } catch (error) {
       if (error instanceof OfficialWebsiteSearchError) throw error;
       if (error instanceof Anthropic.AuthenticationError) {
-        throw new OfficialWebsiteSearchError("NOT_CONFIGURED");
+        throw new OfficialWebsiteSearchError("NOT_CONFIGURED", `HTTP ${error.status ?? "?"} ${String(error.message ?? "").slice(0, 160)}`);
       }
-      throw new OfficialWebsiteSearchError("REQUEST_FAILED");
+      if (error instanceof Anthropic.APIError) {
+        throw new OfficialWebsiteSearchError(
+          "REQUEST_FAILED",
+          `HTTP ${error.status ?? "?"} ${error.constructor.name}: ${String(error.message ?? "").slice(0, 160)}`
+        );
+      }
+      if (error instanceof Error && /timeout|abort/i.test(`${error.name} ${error.message}`)) {
+        throw new OfficialWebsiteSearchError("REQUEST_FAILED", `TIMEOUT na ${this.timeoutMs}ms: ${error.name}`);
+      }
+      throw new OfficialWebsiteSearchError(
+        "REQUEST_FAILED",
+        `${error instanceof Error ? `${error.name}: ${String(error.message).slice(0, 160)}` : String(error).slice(0, 160)}`
+      );
     }
   }
 }

@@ -292,3 +292,56 @@ test("mock source keeps the legacy behavior: candidates without email are still 
   assert.equal(pietersen!.email, null, "er wordt nooit een e-mail verzonnen");
   assert.equal(after.length, before.length + result.createdLeads);
 });
+
+// ---------------------------------------------------------------------------
+// OBSERVABILITY (2026-10-06): een falende official-websitecheck moet de exacte
+// reden in de run-errors vastleggen, zonder het outcome-gedrag te veranderen.
+// ---------------------------------------------------------------------------
+import { OfficialWebsiteSearchError } from "../lib/discovery/official-website/anthropic-search";
+
+test("REGRESSIE — falende official-websitecheck legt exacte reden vast in run-errors", async () => {
+  const pool = [
+    temp("wc-fail-1", "Schoorsteenveger Beta"),
+    temp("wc-fail-2", "Schoorsteenveger Gamma"),
+  ];
+  const service = new GoogleNoWebsiteListedDiscoveryService({
+    provider: {
+      async searchPage() {
+        return { candidates: pool, nextPageToken: null };
+      },
+    },
+    officialWebsite: {
+      async discover() {
+        throw new OfficialWebsiteSearchError("REQUEST_FAILED", "HTTP 429 RateLimitError: rate_limit_error");
+      },
+    },
+  });
+  const result = await service.discover({ ...baseRequest, industry: "schoorsteenvegers" });
+  assert.equal(result.preKvk?.officialWebsiteTechnicalErrors, 2, "beide kandidaten blijven technical_error");
+  assert.equal(result.preKvk?.potentialNoWebsiteCandidates, 0, "niets stroomt door zonder bewijs");
+  const checkError = result.errors.find((e) => e.startsWith("OFFICIAL_WEBSITE_CHECK_FAILED"));
+  assert.ok(checkError, "foutreden staat in de run-errors");
+  assert.match(checkError, /REQUEST_FAILED: HTTP 429 RateLimitError/);
+  assert.match(checkError, /x2/, "identieke fouten worden geteld, niet herhaald");
+});
+
+test("REGRESSIE — onbekende fout bij de websitecheck krijgt een generieke maar zichtbare reden", async () => {
+  const pool = [temp("wc-fail-3", "Schoorsteenveger Delta")];
+  const service = new GoogleNoWebsiteListedDiscoveryService({
+    provider: {
+      async searchPage() {
+        return { candidates: pool, nextPageToken: null };
+      },
+    },
+    officialWebsite: {
+      async discover() {
+        throw new Error("netwerk onverwacht");
+      },
+    },
+  });
+  const result = await service.discover({ ...baseRequest, industry: "schoorsteenvegers" });
+  assert.equal(result.preKvk?.officialWebsiteTechnicalErrors, 1);
+  const checkError = result.errors.find((e) => e.startsWith("OFFICIAL_WEBSITE_CHECK_FAILED"));
+  assert.ok(checkError);
+  assert.match(checkError, /SEARCH_FAILED: netwerk onverwacht/);
+});

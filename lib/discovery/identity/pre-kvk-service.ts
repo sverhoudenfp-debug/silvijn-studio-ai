@@ -1,5 +1,6 @@
 import "server-only";
 import { OfficialWebsiteDiscoveryService, type OfficialWebsiteDiscoveryResult } from "../official-website/service";
+import { OfficialWebsiteSearchError } from "../official-website/anthropic-search";
 import { GooglePlacesDiscoveryProvider } from "../providers/google-places-provider";
 import type { DiscoveryRequest, DiscoveryResult, GooglePreKvkSummary } from "../types";
 import type { GoogleDiscoveryPage, TemporaryGoogleCandidate } from "./types";
@@ -139,11 +140,21 @@ export class GoogleNoWebsiteListedDiscoveryService {
     }
 
     const officialWebsite = this.dependencies?.officialWebsite ?? new OfficialWebsiteDiscoveryService();
+    const websiteCheckFailures = new Map<string, number>();
     for (const candidate of unlistedCandidates) {
       let outcome: OfficialWebsiteDiscoveryResult;
       try {
         outcome = await officialWebsite.discover(candidate);
-      } catch {
+      } catch (error) {
+        // Observability (2026-10-06): de exacte reden vastleggen in de run-errors,
+        // zonder het gedrag te veranderen — de kandidaat blijft technical_error.
+        const reason = error instanceof OfficialWebsiteSearchError ? error.code : "SEARCH_FAILED";
+        const detail =
+          error instanceof OfficialWebsiteSearchError
+            ? error.detail ?? ""
+            : (error instanceof Error ? error.message : String(error)).slice(0, 180);
+        const key = detail ? `${reason}: ${detail}` : reason;
+        websiteCheckFailures.set(key, (websiteCheckFailures.get(key) ?? 0) + 1);
         outcome = { status: "technical_error", reason: "SEARCH_FAILED" };
       }
       switch (outcome.status) {
@@ -163,6 +174,9 @@ export class GoogleNoWebsiteListedDiscoveryService {
       }
     }
 
+    for (const [key, count] of websiteCheckFailures) {
+      errors.push(`OFFICIAL_WEBSITE_CHECK_FAILED [${key}]${count > 1 ? ` (x${count})` : ""}`);
+    }
     summary.potentialNoWebsiteCandidates = temporaryCandidates.length;
     summary.quotaMet = temporaryCandidates.length >= requested;
     if (summary.stopReason === "quota_met" && !summary.quotaMet) summary.stopReason = "search_budget";

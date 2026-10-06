@@ -267,7 +267,8 @@ export function decideAcceptance(
       const sourceDomain = rootDomain(ownPage.domain);
       const candidateDomain = emailDomain(ownPage.email);
       const looksLikeOwnDomain = candidateDomain === sourceDomain || candidateDomain.endsWith("." + sourceDomain);
-      if (looksLikeOwnDomain || ownPage.sourceKind === "official_or_social") {
+      const isSameAsPlatform = ownPage.sourceKind === "official_or_social" && candidateDomain === sourceDomain;
+      if ((looksLikeOwnDomain || ownPage.sourceKind === "official_or_social") && !isSameAsPlatform) {
         return { accepted: true, rule: "own_page_slug", reason: `eigen/sociale pagina: ${ownPage.domain}` };
       }
     }

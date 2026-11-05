@@ -46,6 +46,26 @@ export async function generateContentPlanAction(designPlanId: string): Promise<G
   }
 }
 
+export type ApproveGContentResult = { ok: true; record: ContentPlanRecord } | { ok: false; error: string };
+
+/**
+ * Goedkeuring van G-branchetekst: een expliciete menselijke handeling in het
+ * dashboard. Zonder deze stap blijft G-tekst buiten het thema.
+ */
+export async function approveGContentAction(planId: string): Promise<ApproveGContentResult> {
+  const { user } = await requireStudioOwner();
+  try {
+    const record = await new ContentPlanService().approveGContent(planId, user.email ?? "studio-owner");
+    revalidatePath(`/projects/${record.projectId}`);
+    return { ok: true, record };
+  } catch (error) {
+    if (error instanceof ContentPlanError || error instanceof ContentPlanValidationError) {
+      return { ok: false, error: error.message };
+    }
+    throw error;
+  }
+}
+
 export async function listContentPlansAction(designPlanId: string): Promise<ContentPlanRecord[]> {
   await requireStudioOwner();
   return new ContentPlanService().listByDesignPlan(designPlanId);

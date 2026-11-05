@@ -3,6 +3,7 @@ import { join, dirname } from "node:path";
 import { chromium } from "playwright";
 import axe from "axe-core";
 import { buildShopifyTheme, type ThemeImage } from "../../lib/websites/theme-zip/theme-builder";
+import { goldenContentPlan } from "../../tests/fixtures/golden-content";
 import { renderThemePageHtml } from "../../lib/websites/theme-zip/html-preview";
 import {
   GOLDEN_PAGES,
@@ -83,6 +84,9 @@ const built = buildShopifyTheme({
   designPlan: goldenDesignPlan,
   contact: goldenContact,
   images: loadImages(),
+  // W2: de contentpass levert de teksten; zonder plan valt de compositie
+  // terug op de (dunne) specificatie.
+  contentPlan: goldenContentPlan,
 });
 
 rmSync(OUT, { recursive: true, force: true });
@@ -166,7 +170,9 @@ const MEASURE_SCRIPT = `(() => {
     h1MobileSafe: vw > 500 ? true : h1Px <= 46,
     h2: h2s.length ? Math.round(Math.max(...h2s.map((h) => px(cs(h).fontSize))) * 10) / 10 : 0,
     typeRange: sizes.length ? Math.round((Math.max(...sizes) / Math.min(...sizes)) * 10) / 10 : 0,
-    words: document.body.innerText.trim().split(/\\s+/).filter(Boolean).length,
+    // textContent i.p.v. innerText: FAQ-antwoorden in dichte accordeons tellen
+    // mee — anders lijkt een gevulde FAQ leeg in de meetlat.
+    words: (document.body.textContent ?? '').trim().split(/\\s+/).filter(Boolean).length,
     sections: sections.length,
     distinctLayouts: new Set(layouts).size,
     sectionHeightVariation: Math.round(sd),

@@ -129,6 +129,8 @@ export const CONTENT_SLOT_REGISTRY: Record<BlueprintSectionType, readonly Conten
     slot("stat_value", "Statistiek-waarde", "Het cijfer zelf — alleen echte data.", true, true),
   ],
   services: [
+    slot("heading", "Diensten-kop", "Kop boven het dienstenoverzicht.", false, false),
+    slot("subheading", "Diensten-intro", "Korte introductie die de samenhang van het aanbod uitlegt.", false, false),
     slot("item_title", "Dienstitel", "Naam van één dienst uit het echte aanbod — nooit verzinnen.", true, true),
     slot("item_body", "Dienstomschrijving", "Korte omschrijving van de dienst, gedragen door echte input.", false, false),
   ],

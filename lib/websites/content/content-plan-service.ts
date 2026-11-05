@@ -14,6 +14,8 @@ import {
   type QuestionnaireSourceInput,
 } from "./content-source";
 import { validateContentPlanConsistency, contentPlanSchema } from "./content-plan";
+import { auditClaims, normalizeClaims } from "./claims";
+import { auditContentQuality, summarizeQuality } from "./content-quality";
 import type { ContentPlan } from "./content-plan";
 import {
   finalizeRawContentPlan,
@@ -165,6 +167,39 @@ export class ContentPlanService {
     return record;
   }
 
+  /**
+   * Menselijke goedkeuring van G-branchetekst (W2). Dit is de ENIGE manier
+   * waarop G-units in het thema mogen verschijnen; de consumptiepoort leest
+   * approvals.gContent. De claimkeuring moet groen zijn: een plan met
+   * onbevestigde bedrijfsfeiten kan niet worden goedgekeurd.
+   */
+  async approveGContent(planId: string, approvedBy: string): Promise<ContentPlanRecord> {
+    const record = await getContentPlanRepository().getById(planId);
+    if (!record || !record.plan) throw new ContentPlanError("ContentPlan niet gevonden of nog niet voltooid");
+    if (record.status !== "completed") throw new ContentPlanError("Alleen een voltooid ContentPlan kan worden goedgekeurd");
+
+    const audit = auditClaims(record.plan);
+    if (audit.blocking.length > 0) {
+      throw new ContentPlanValidationError(
+        audit.blocking.slice(0, 5).map((issue) => `${issue.page}: ${issue.message}`)
+      );
+    }
+
+    const plan: ContentPlan = {
+      ...record.plan,
+      approvals: {
+        ...record.plan.approvals,
+        gContent: { approvedAt: new Date().toISOString(), approvedBy },
+      },
+    };
+    const updated = await getContentPlanRepository().update(planId, {
+      plan,
+      generationNotes: `${record.generationNotes} G-content (${audit.totals.G} units) goedgekeurd door ${approvedBy}.`.trim(),
+    });
+    if (!updated) throw new ContentPlanError("Goedkeuring kon niet worden opgeslagen");
+    return updated;
+  }
+
   async listByDesignPlan(designPlanId: string): Promise<ContentPlanRecord[]> {
     return getContentPlanRepository().listByDesignPlan(designPlanId);
   }
@@ -300,6 +335,14 @@ export class ContentPlanService {
           copywriting: project.requirements.copywriting === true,
           bundle,
           blueprint,
+          // W2: brancheprofiel bepaalt toon, invalshoeken en FAQ-thema's.
+          industry: lead.industry,
+          description: designPlan.plan?.goals?.primaryGoal ?? null,
+          serviceTitles: blueprint.pages
+            .flatMap((page) => page.sectionInstances)
+            .filter((instance) => instance.type === "services")
+            .flatMap((instance) => instance.blocks.map((block) => block.hint))
+            .filter((hint): hint is string => typeof hint === "string" && hint.trim().length > 0),
         },
         lead.id
       );
@@ -341,6 +384,37 @@ export class ContentPlanService {
         throw error;
       }
 
+      // ---- 6b. CLAIMMODEL + KWALITEIT (W2)
+      //      Ontbrekende categorieën worden deterministisch ingevuld (F bij
+      //      bewijs, C bij klantslots). Wat overblijft wordt gekeurd: diepgang,
+      //      FAQ-volledigheid, placeholders, herhaling en claimveiligheid.
+      plan = normalizeClaims(plan);
+      const ctaSectionsByPage = new Map<string, number>(
+        blueprint.pages.map((page) => [
+          page.key,
+          page.sectionInstances.filter((instance) => instance.type === "cta").length,
+        ])
+      );
+      const quality = auditContentQuality({ plan, ctaSectionsByPage });
+      if (!quality.ok) {
+        const blocking = quality.issues.filter((issue) => issue.severity === "blocking");
+        await getContentPlanRepository().update(record.id, {
+          status: "failed",
+          validationErrors: blocking.map((issue) => `${issue.page}: ${issue.message}`),
+          model: raw.model,
+          mode: raw.mode,
+          generationNotes: `ContentPlan v${version} afgekeurd door de contentkeuring: ${summarizeQuality(quality)}`,
+        });
+        await getAIActivityRepository().log({
+          leadId: lead.id,
+          type: "content_generation",
+          status: "failed",
+          message: `ContentPlan voor "${lead.businessName}" (v${version}) faalde de contentkeuring: ${blocking[0]?.message ?? "onbekend"}`,
+          metadata: { designPlanId, version, issues: blocking.slice(0, 8) },
+        });
+        throw new ContentPlanValidationError(blocking.map((issue) => `${issue.page}: ${issue.message}`));
+      }
+
       // ---- 7. C3A-CONSISTENCY (schema + slot-conformance + coverage dubbel)
       const consistency = validateContentPlanConsistency(plan, blueprint, bundle);
       if (!consistency.passed) {
@@ -368,6 +442,12 @@ export class ContentPlanService {
       ];
       if (corrections.length > 0) {
         notesParts.push(`Deterministische correcties (${corrections.length}): ${corrections.slice(0, 5).join(" | ")}`);
+      }
+      notesParts.push(`Contentkeuring: ${summarizeQuality(quality)}.`);
+      if (quality.claims.gUnits > 0) {
+        notesParts.push(
+          `${quality.claims.gUnits} G-unit(s) wachten op menselijke goedkeuring en verschijnen pas daarna in het thema.`
+        );
       }
       const completed = await getContentPlanRepository().update(record.id, {
         status: "completed",

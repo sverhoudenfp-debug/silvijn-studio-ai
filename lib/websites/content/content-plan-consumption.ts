@@ -1,4 +1,5 @@
 import type { ContentPlan, ContentUnit } from "./content-plan";
+import { isGContentApproved } from "./claims";
 import type { ContentUnitKind } from "./content-slots";
 
 /**
@@ -32,11 +33,24 @@ export interface PageContentIndex {
  * Dubbele paden kunnen niet voorkomen (de unit-path is per pagina uniek
  * gepland; de finalizer dedupliceert per pad+kind).
  */
-export function buildContentPlanIndex(plan: ContentPlan): Map<string, PageContentIndex> {
+export interface ContentIndexOptions {
+  /**
+   * LEVERINGSPOORT (W2): G-branchetekst verschijnt pas in het thema nadat de
+   * studio hem heeft goedgekeurd. Zonder deze vlag blijft de index een
+   * volledig intern overzicht (dashboard, QA, tests).
+   */
+  gateGContent?: boolean;
+}
+
+export function buildContentPlanIndex(plan: ContentPlan, options?: ContentIndexOptions): Map<string, PageContentIndex> {
   const index = new Map<string, PageContentIndex>();
+  const holdG = options?.gateGContent === true && !isGContentApproved(plan);
   for (const page of plan.pages) {
     const unitsByPath = new Map<string, Map<ContentUnitKind, ContentUnit[]>>();
     for (const unit of page.units) {
+      // Niet-goedgekeurde G-content wordt niet gerenderd: het thema valt
+      // terug op de bestaande specificatie of een invulbaar slot.
+      if (holdG && unit.claim === "G") continue;
       const slash = unit.path.indexOf("/");
       if (slash <= 0) continue; // Ongeldige paden zijn upstream al afgewezen.
       const path = unit.path;

@@ -1,9 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { generateContentPlanAction } from "@/app/actions/content-plans";
+import { approveGContentAction, generateContentPlanAction } from "@/app/actions/content-plans";
 import type { ContentPlanRecord } from "@/lib/websites/content/content-plan-repository";
 import type { DesignPlanRecord } from "@/lib/websites/design-plan";
+import { auditClaims } from "@/lib/websites/content/claims";
+import { auditContentQuality, summarizeQuality } from "@/lib/websites/content/content-quality";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 
@@ -19,6 +21,12 @@ const planStatusMeta: Record<string, { label: string; variant: "info" | "success
   draft: { label: "Bezig", variant: "info" },
   completed: { label: "Voltooid", variant: "success" },
   failed: { label: "Mislukt", variant: "danger" },
+};
+
+const claimMeta: Record<string, { label: string; variant: "info" | "warning" | "neutral" | "success" }> = {
+  F: { label: "F · feit uit bron", variant: "success" },
+  C: { label: "C · klant levert aan", variant: "warning" },
+  G: { label: "G · branche (goedkeuring)", variant: "info" },
 };
 
 const unitStatusMeta: Record<string, { label: string; variant: "info" | "warning" | "neutral" | "success" }> = {
@@ -60,6 +68,9 @@ function UnitTable({ record }: { record: ContentPlanRecord }) {
                       <li key={`${unit.path}-${unit.kind}-${index}`} className="text-xs leading-relaxed">
                         <div className="flex flex-wrap items-center gap-2">
                           <Badge variant={meta.variant}>{meta.label}</Badge>
+                          {unit.claim && claimMeta[unit.claim] && (
+                            <Badge variant={claimMeta[unit.claim].variant}>{claimMeta[unit.claim].label}</Badge>
+                          )}
                           <span className="font-mono text-[11px] text-zinc-400">{unit.kind}</span>
                           {unit.sourceOrigin && (
                             <span className="text-[11px] text-zinc-500">bron: {unit.sourceOrigin}</span>
@@ -84,6 +95,69 @@ function UnitTable({ record }: { record: ContentPlanRecord }) {
           })()}
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Claimoverzicht (W2): hoeveel F/C/G-units het plan bevat, of de content de
+ * keuring haalt en of de G-branchetekst al is goedgekeurd. Goedkeuren is een
+ * expliciete menselijke handeling; zonder die stap blijft G buiten het thema.
+ */
+function ClaimPanel({ record }: { record: ContentPlanRecord }) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const plan = record.plan;
+  if (!plan) return null;
+
+  const claims = auditClaims(plan);
+  const quality = auditContentQuality({ plan });
+  const approved = claims.gApproved;
+
+  async function approve() {
+    setPending(true);
+    setError(null);
+    try {
+      const result = await approveGContentAction(record.id);
+      if (!result.ok) setError(result.error);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Goedkeuren mislukt");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <Badge variant="success">F {claims.totals.F}</Badge>
+        <Badge variant="warning">C {claims.totals.C}</Badge>
+        <Badge variant="info">G {claims.totals.G}</Badge>
+        <span className="text-zinc-400">{summarizeQuality(quality)}</span>
+      </div>
+      <p className="text-[11px] text-zinc-500">
+        F = bedrijfsfeit met bron · C = klant levert aan · G = branchetekst zonder bedrijfsfeiten
+      </p>
+      {claims.gUnits > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-zinc-400">
+            {approved
+              ? `G-content goedgekeurd op ${new Date(plan.approvals?.gContent?.approvedAt ?? "").toLocaleDateString("nl-NL")} — verschijnt in het thema.`
+              : "G-content wacht op jouw goedkeuring; tot dan blijft die buiten het thema."}
+          </span>
+          {!approved && (
+            <button
+              type="button"
+              onClick={approve}
+              disabled={pending}
+              className="h-8 rounded-lg border border-emerald-500/40 bg-emerald-600/20 px-3 text-xs font-semibold text-emerald-200 transition-colors hover:bg-emerald-600/30 disabled:opacity-60"
+            >
+              {pending ? "Goedkeuren..." : "G-content goedkeuren"}
+            </button>
+          )}
+        </div>
+      )}
+      {error && <p className="text-xs text-red-400">{error}</p>}
     </div>
   );
 }
@@ -198,6 +272,8 @@ export function ContentPlanSection({
               </span>
             </div>
             <p className="text-xs text-zinc-500">{latest.generationNotes}</p>
+
+            {latest.status === "completed" && <ClaimPanel record={latest} />}
 
             {latest.status === "completed" && <UnitTable record={latest} />}
 

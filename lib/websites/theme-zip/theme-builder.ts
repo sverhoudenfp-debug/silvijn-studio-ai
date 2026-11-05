@@ -1346,6 +1346,16 @@ main#main-content > section.section--bg-surface:nth-of-type(3n+3) {
 .services--list .card-grid { grid-template-columns: 1fr; max-width: 820px; gap: 12px; }
 .services--list .card--media { flex-direction: row; align-items: center; }
 .services--list .card--media .card__media { display: none; }
+.card--plain { border-top: 2px solid var(--color-primary); padding-top: 20px; }
+.card--plain .card__body { padding: 0; }
+.card--plain .card__index {
+  display: block;
+  font-size: .8rem;
+  letter-spacing: .12em;
+  color: var(--color-muted);
+  margin-bottom: 6px;
+  font-variant-numeric: tabular-nums;
+}
 .services--alternating .card-grid { grid-template-columns: 1fr; max-width: 720px; }
 .services--alternating .card--media { flex-direction: row-reverse; }
 .services--alternating .card-grid > *:nth-child(even) .card--media { flex-direction: row; }
@@ -2645,17 +2655,31 @@ function buildServicesSection(): ThemeFile {
     </div>
     <div class="card-grid">
       {%- for block in section.blocks -%}
-        <article class="card card--media" {{ block.shopify_attributes }}>
-          <div class="card__media">
-            {%- render 'theme-media', image: block.settings.image, asset: block.settings.image_asset, asset_w: block.settings.image_asset_width, asset_h: block.settings.image_asset_height, alt: block.settings.image_alt, aspect: 'landscape_4_3', sizes: '(min-width: 990px) 360px, 100vw', loading: 'lazy', placeholder_svg: 'placeholder-service.svg' -%}
-          </div>
-          <div class="card__body">
-            <h3>{{ block.settings.title }}</h3>
-            {%- if block.settings.description != blank -%}
-              <p>{{ block.settings.description }}</p>
-            {%- endif -%}
-          </div>
-        </article>
+        {%- if block.settings.image != blank or block.settings.image_asset != blank -%}
+          <article class="card card--media" {{ block.shopify_attributes }}>
+            <div class="card__media">
+              {%- render 'theme-media', image: block.settings.image, asset: block.settings.image_asset, asset_w: block.settings.image_asset_width, asset_h: block.settings.image_asset_height, alt: block.settings.image_alt, aspect: 'landscape_4_3', sizes: '(min-width: 990px) 360px, 100vw', loading: 'lazy', placeholder_svg: 'placeholder-service.svg' -%}
+            </div>
+            <div class="card__body">
+              <h3>{{ block.settings.title }}</h3>
+              {%- if block.settings.description != blank -%}
+                <p>{{ block.settings.description }}</p>
+              {%- endif -%}
+            </div>
+          </article>
+        {%- else -%}
+          {%- comment -%} Geen beeld: geen grijs placeholder-vlak. Een tekstkaart met
+          nummer houdt de compositie rustig en leesbaar. {%- endcomment -%}
+          <article class="card card--plain" {{ block.shopify_attributes }}>
+            <div class="card__body">
+              <span class="card__index">{{ forloop.index }}</span>
+              <h3>{{ block.settings.title }}</h3>
+              {%- if block.settings.description != blank -%}
+                <p>{{ block.settings.description }}</p>
+              {%- endif -%}
+            </div>
+          </article>
+        {%- endif -%}
       {%- endfor -%}
     </div>
   </div>

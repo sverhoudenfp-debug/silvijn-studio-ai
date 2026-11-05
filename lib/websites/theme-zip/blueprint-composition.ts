@@ -302,7 +302,11 @@ function instanceToSectionEntry(
       }
       return {
         type: SECTION_FILE_NAMES.services,
-        settings: { ...variantSettings(instance, "default"), heading: "Onze diensten", subheading: null },
+        settings: {
+          ...variantSettings(instance, "default"),
+          heading: resolveSlotText(units, "heading", "Onze diensten"),
+          subheading: resolveSlotText(units, "subheading", null),
+        },
         blocks,
         block_order: order,
       };
@@ -815,7 +819,7 @@ export function composeBlueprintTemplates(input: {
   const ctx: CompositionContext = { spec, contact, trust: blueprint.trustElements, pageKeyToSlug, contactPageSlug };
 
   // C3d: deterministische unit-index (puur; herbruikbaar en testbaar).
-  const contentIndex = contentPlan ? buildContentPlanIndex(contentPlan) : null;
+  const contentIndex = contentPlan ? buildContentPlanIndex(contentPlan, { gateGContent: true }) : null;
   const log: ContentApplicationLog = {
     appliedPaths: new Set<string>(),
     appliedCount: 0,

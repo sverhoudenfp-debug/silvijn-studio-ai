@@ -47,6 +47,16 @@ import {
 // ---------------------------------------------------------------------------
 
 export const CONTENT_UNIT_STATUSES = ["generated", "customer_slot", "merchant_slot", "fixed"] as const;
+
+/**
+ * Claimcategorie (W2, zie claims.ts):
+ * - F: bedrijfsfeit met bewijsvoering uit de bronnen;
+ * - C: de klant levert dit aan (customer_slot);
+ * - G: algemene branchetekst zonder bedrijfsfeiten — pas live na
+ *   menselijke goedkeuring (plan.approvals.gContent).
+ * null = nog niet geclassificeerd (alleen bij merchant_slot of legacy).
+ */
+export const CONTENT_CLAIM_CATEGORIES = ["F", "C", "G"] as const;
 export type ContentUnitStatus = (typeof CONTENT_UNIT_STATUSES)[number];
 
 export const contentUnitSchema = z
@@ -58,6 +68,8 @@ export const contentUnitSchema = z
     path: z.string().min(1).max(120),
     kind: z.enum(CONTENT_UNIT_KINDS),
     status: z.enum(CONTENT_UNIT_STATUSES),
+    /** F/C/G — verplicht voor nieuwe plannen, nullable voor legacy/merchant. */
+    claim: z.enum(CONTENT_CLAIM_CATEGORIES).nullable().optional(),
     text: z.string().nullable(),
     /** Alleen relevant bij status=generated: verbatim bewijsfragmenten. */
     evidence: z.array(z.string().min(2).max(300)).max(6),
@@ -66,8 +78,17 @@ export const contentUnitSchema = z
     instruction: z.string().min(10).max(400).nullable(),
   })
   .superRefine((unit, ctx) => {
-    if (unit.status === "generated" && unit.evidence.length === 0) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Een generated unit vereist minimaal één evidence-fragment." });
+    if (unit.status === "generated" && unit.claim !== "G" && unit.evidence.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Een generated unit vereist minimaal één evidence-fragment (behalve G-branchetekst, die geen bedrijfsbewijs draagt).",
+      });
+    }
+    if (unit.claim === "G" && unit.evidence.length > 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Een G-unit draagt geen bedrijfsbewijs; gebruik F met bewijs." });
+    }
+    if (unit.claim != null && unit.claim !== "G" && unit.status === "merchant_slot") {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Een merchant_slot heeft geen claimcategorie." });
     }
     if (unit.status === "customer_slot" && unit.instruction == null) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Een customer_slot vereist een instructie voor de klant." });
@@ -109,6 +130,20 @@ export const contentPlanSchema = z.object({
   sourceFingerprint: z.string().min(1),
   pages: z.array(contentPlanPageSchema).min(1).max(10),
   missingInformation: z.array(z.string().min(3).max(200)).max(20),
+  /**
+   * Menselijke goedkeuringen (W2). G-content mag pas live nadat de studio
+   * hem heeft gezien: dat moment staat hier vast, met datum en door wie.
+   */
+  approvals: z
+    .object({
+      gContent: z
+        .object({
+          approvedAt: z.string().min(10).max(40),
+          approvedBy: z.string().min(2).max(120).nullable(),
+        })
+        .nullable(),
+    })
+    .optional(),
 });
 
 export type ContentPlanPage = z.infer<typeof contentPlanPageSchema>;

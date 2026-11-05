@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { buildShopifyTheme, type ThemeImage } from "../lib/websites/theme-zip/theme-builder";
+import { applyThemeImagesToTemplates, buildShopifyTheme, type ThemeImage } from "../lib/websites/theme-zip/theme-builder";
 import { renderThemePageHtml } from "../lib/websites/theme-zip/html-preview";
 import { goldenContact, goldenDesignPlan, goldenSpecification } from "./fixtures/golden-hovenier";
 
@@ -79,4 +79,80 @@ test("beeld: zonder images blijft de output exact zoals fase 2 (placeholders)", 
   assert.ok(index);
   assert.ok(!index.content.includes("image_asset"), "geen beeld betekent geen beeldinstelling");
   assert.ok(!built.files.some((f) => f.path.startsWith("assets/media-")), "geen ongebruikte assets");
+});
+
+test("beeld: dienstkaarten krijgen elk hun eigen beeld, in volgorde", () => {
+  const images: ThemeImage[] = ["a", "b", "c", "d"].map((n) => ({
+    slot: "services" as const,
+    file: `service-${n}.webp`,
+    bytes: new Uint8Array([1, 2, 3]),
+    width: 900,
+    height: 675,
+    alt: `Dienst ${n}`,
+  }));
+  const template = {
+    path: "templates/index.json",
+    data: {
+      sections: {
+        services: {
+          type: "services",
+          settings: {},
+          blocks: {
+            service_1: { settings: { title: "Ontwerp" } },
+            service_2: { settings: { title: "Aanleg" } },
+            service_3: { settings: { title: "Onderhoud" } },
+            service_4: { settings: { title: "Beplanting" } },
+          },
+        },
+      },
+    },
+  };
+  applyThemeImagesToTemplates([template], images);
+  const blocks = (template.data.sections.services as { blocks: Record<string, { settings: Record<string, unknown> }> }).blocks;
+  assert.equal(blocks.service_1.settings.image_asset, "service-a.webp");
+  assert.equal(blocks.service_4.settings.image_asset, "service-d.webp");
+  assert.equal(blocks.service_3.settings.image_alt, "Dienst c");
+  assert.equal(blocks.service_1.settings.title, "Ontwerp", "bestaande instellingen blijven staan");
+});
+
+test("beeld: minder beelden dan kaarten laat de rest zijn placeholder houden", () => {
+  const images: ThemeImage[] = [
+    { slot: "services", file: "enige.webp", bytes: new Uint8Array([1]), width: 900, height: 675, alt: null },
+  ];
+  const template = {
+    path: "templates/index.json",
+    data: {
+      sections: {
+        services: {
+          type: "services",
+          settings: {},
+          blocks: { service_1: { settings: {} }, service_2: { settings: {} } },
+        },
+      },
+    },
+  };
+  applyThemeImagesToTemplates([template], images);
+  const blocks = (template.data.sections.services as { blocks: Record<string, { settings: Record<string, unknown> }> }).blocks;
+  assert.equal(blocks.service_1.settings.image_asset, "enige.webp");
+  assert.equal(blocks.service_2.settings.image_asset, undefined, "geen herhaalde foto op kaart 2");
+});
+
+test("beeld: galerij gebruikt zijn eigen beelden, niet die van de diensten", () => {
+  const images: ThemeImage[] = [
+    { slot: "services", file: "dienst.webp", bytes: new Uint8Array([1]), width: 900, height: 675, alt: null },
+    { slot: "gallery", file: "project.webp", bytes: new Uint8Array([1]), width: 900, height: 900, alt: "Tuin" },
+  ];
+  const template = {
+    path: "templates/index.json",
+    data: {
+      sections: {
+        gallery: { type: "gallery", settings: {}, blocks: { g1: { settings: {} } } },
+        services: { type: "services", settings: {}, blocks: { s1: { settings: {} } } },
+      },
+    },
+  };
+  applyThemeImagesToTemplates([template], images);
+  const t = template.data.sections as Record<string, { blocks: Record<string, { settings: Record<string, unknown> }> }>;
+  assert.equal(t.gallery.blocks.g1.settings.image_asset, "project.webp");
+  assert.equal(t.services.blocks.s1.settings.image_asset, "dienst.webp");
 });

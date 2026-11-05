@@ -2615,7 +2615,7 @@ function buildServicesSection(): ThemeFile {
       {%- for block in section.blocks -%}
         <article class="card card--media" {{ block.shopify_attributes }}>
           <div class="card__media">
-            {%- render 'theme-media', image: block.settings.image, aspect: 'landscape', sizes: '(min-width: 990px) 360px, 100vw', loading: 'lazy', placeholder_svg: 'placeholder-service.svg' -%}
+            {%- render 'theme-media', image: block.settings.image, asset: block.settings.image_asset, asset_w: block.settings.image_asset_width, asset_h: block.settings.image_asset_height, alt: block.settings.image_alt, aspect: 'landscape_4_3', sizes: '(min-width: 990px) 360px, 100vw', loading: 'lazy', placeholder_svg: 'placeholder-service.svg' -%}
           </div>
           <div class="card__body">
             <h3>{{ block.settings.title }}</h3>
@@ -2644,6 +2644,10 @@ ${blueprintVariantSettings("services", "default")},
       "name": "Dienst",
       "settings": [
         { "type": "image_picker", "id": "image", "label": "Afbeelding (optioneel)" },
+        { "type": "text", "id": "image_asset", "label": "Automatisch aangeleverde afbeelding (bestandsnaam in assets)" },
+        { "type": "number", "id": "image_asset_width", "label": "Breedte van die afbeelding (px)" },
+        { "type": "number", "id": "image_asset_height", "label": "Hoogte van die afbeelding (px)" },
+        { "type": "text", "id": "image_alt", "label": "Alt-tekst afbeelding" },
         { "type": "text", "id": "title", "label": "Titel" },
         { "type": "textarea", "id": "description", "label": "Omschrijving" }
       ]
@@ -2731,7 +2735,7 @@ function buildGallerySection(): ThemeFile {
     <div class="gallery-grid">
       {%- for block in section.blocks -%}
         <figure class="gallery-item" {{ block.shopify_attributes }}>
-          {%- render 'theme-media', image: block.settings.image, aspect: 'square', alt: block.settings.alt, sizes: '(min-width: 990px) 33vw, (min-width: 750px) 50vw, 100vw', loading: 'lazy', placeholder_svg: 'placeholder-gallery.svg' -%}
+          {%- render 'theme-media', image: block.settings.image, asset: block.settings.image_asset, asset_w: block.settings.image_asset_width, asset_h: block.settings.image_asset_height, alt: block.settings.image_alt, aspect: 'square', sizes: '(min-width: 990px) 33vw, (min-width: 750px) 50vw, 100vw', loading: 'lazy', placeholder_svg: 'placeholder-gallery.svg' -%}
           {%- if block.settings.caption != blank -%}
             <figcaption class="gallery-item__caption">{{ block.settings.caption }}</figcaption>
           {%- endif -%}
@@ -2756,6 +2760,10 @@ ${blueprintVariantSettings("gallery", "default")},
       "name": "Beeld",
       "settings": [
         { "type": "image_picker", "id": "image", "label": "Afbeelding" },
+        { "type": "text", "id": "image_asset", "label": "Automatisch aangeleverde afbeelding (bestandsnaam in assets)" },
+        { "type": "number", "id": "image_asset_width", "label": "Breedte van die afbeelding (px)" },
+        { "type": "number", "id": "image_asset_height", "label": "Hoogte van die afbeelding (px)" },
+        { "type": "text", "id": "image_alt", "label": "Alt-tekst afbeelding" },
         { "type": "text", "id": "caption", "label": "Bijschrift (optioneel)" },
         { "type": "text", "id": "alt", "label": "Alt-tekst (voor echte afbeelding)" }
       ]
@@ -3997,7 +4005,7 @@ function applyThemeImages(sections: Record<string, Record<string, unknown>>, ima
  * sleutelnaam. Alleen de homepage krijgt beelden: subpagina's houden hun eigen
  * (placeholder-)hero, anders herhaalt dezelfde foto zich op elke pagina.
  */
-function applyThemeImagesToTemplates(
+export function applyThemeImagesToTemplates(
   templates: ReadonlyArray<{ path: string; data: unknown }>,
   images: readonly ThemeImage[],
 ) {
@@ -4007,6 +4015,25 @@ function applyThemeImagesToTemplates(
     const data = template.data as { sections?: Record<string, { type?: string; settings?: Record<string, unknown> }> };
     if (!data.sections) continue;
     for (const section of Object.values(data.sections)) {
+      if (section.type === "services" || section.type === "gallery") {
+        const forSection = images.filter((candidate) => candidate.slot === section.type && candidate.file && candidate.bytes?.length);
+        if (!forSection.length) continue;
+        const blocks = Object.values((section as { blocks?: Record<string, { settings?: Record<string, unknown> }> }).blocks ?? {});
+        // Volgorde is beleid: kaart 1 krijgt beeld 1. Tekort? Dan houdt die
+        // kaart zijn placeholder in plaats van een herhaalde foto.
+        blocks.forEach((block, index) => {
+          const image = forSection[index];
+          if (!image) return;
+          block.settings = {
+            ...(block.settings ?? {}),
+            image_asset: image.file,
+            image_asset_width: image.width,
+            image_asset_height: image.height,
+            ...(image.alt ? { image_alt: image.alt } : {}),
+          };
+        });
+        continue;
+      }
       const slot = section.type === "hero" ? "hero" : section.type === "about" ? "about" : null;
       if (!slot) continue;
       const image = images.find((candidate) => candidate.slot === slot);
@@ -4061,8 +4088,11 @@ export interface BuildThemeInput {
 }
 
 export interface ThemeImage {
-  /** Mediaslot waar dit beeld thuishoort. */
-  slot: "hero" | "about";
+  /**
+   * Mediaslot waar dit beeld thuishoort. services en gallery mogen meerdere
+   * keren voorkomen; ze worden op volgorde over de kaarten verdeeld.
+   */
+  slot: "hero" | "about" | "services" | "gallery";
   /** Bestandsnaam in assets/ (webp/png/jpg). */
   file: string;
   /** Rauwe bytes; de builder schrijft ze naar assets/<file>. */

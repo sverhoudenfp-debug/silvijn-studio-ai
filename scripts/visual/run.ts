@@ -52,11 +52,13 @@ function loadImages(): ThemeImage[] {
   if (!existsSync(metaPath)) return [];
   const meta = JSON.parse(readFileSync(metaPath, "utf8")) as Record<string, { file: string; width: number; height: number; license?: string; title?: string | null; landing?: string | null }>;
   const images: ThemeImage[] = [];
-  for (const slot of ["hero", "about"] as const) {
-    const entry = meta[slot];
+  const slotsByKey = ["hero", "about", "services_1", "services_2", "services_3", "services_4", "gallery_1", "gallery_2"];
+  for (const key of slotsByKey) {
+    const entry = meta[key];
     if (!entry) continue;
     const file = join(dir, entry.file);
     if (!existsSync(file)) continue;
+    const slot = key.startsWith("services") ? "services" : key.startsWith("gallery") ? "gallery" : (key as "hero" | "about");
     images.push({
       slot,
       file: entry.file,

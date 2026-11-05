@@ -45,10 +45,28 @@ const realFetcher: Fetcher = async (url, init) => {
   } as never;
 };
 
+/**
+ * De acht beelden van de hovenierssite. Volgorde is beleid: hero en about zijn
+ * dragend, de vier dienstkaarten krijgen elk een eigen detailbeeld en de
+ * galerij krijgt twee projectbeelden. Geen enkel slot wordt twee keer gevuld
+ * met dezelfde foto.
+ */
 const slots = [
-  { slot: "hero", aspect: "wide", alt: "Tuin met vaste beplanting en grindpad" },
-  { slot: "about", aspect: "landscape", alt: "Werkplaats met gereedschap en materialen" },
+  { key: "hero", slot: "hero", aspect: "wide", target: 1600, alt: "Tuin met vaste beplanting en grindpad" },
+  { key: "about", slot: "about", aspect: "landscape", target: 1100, alt: "Werkplaats met gereedschap en materialen" },
+  { key: "services_1", slot: "services", aspect: "landscape", target: 900, alt: "Beplantingsplan met vaste planten" },
+  { key: "services_2", slot: "services", aspect: "landscape", target: 900, alt: "Aanleg van een terras met natuursteen" },
+  { key: "services_3", slot: "services", aspect: "landscape", target: 900, alt: "Onderhoud van een haag en gazon" },
+  { key: "services_4", slot: "services", aspect: "landscape", target: 900, alt: "Snoeien van vaste beplanting" },
+  { key: "gallery_1", slot: "gallery", aspect: "square", target: 900, alt: "Afgeronde tuin in late zomer" },
+  { key: "gallery_2", slot: "gallery", aspect: "square", target: 900, alt: "Detail van een gazonrand langs grind" },
 ] as const;
+
+/** $0,03 voor de eerste MP, $0,015 per extra MP (FLUX.2 [pro], fal.ai). */
+function costFor(width: number, height: number) {
+  const mp = (width * height) / 1_000_000;
+  return 0.03 + Math.max(0, mp - 1) * 0.015;
+}
 
 async function main() {
   loadEnvFiles();
@@ -61,7 +79,10 @@ async function main() {
   const metaPath = join(OUT, "meta.json");
   const meta = existsSync(metaPath) ? (JSON.parse(readFileSync(metaPath, "utf8")) as Record<string, unknown>) : {};
 
+  const only = (process.env.MEDIA_KEYS ?? "").split(",").map((k) => k.trim()).filter(Boolean);
+  let totalCost = 0;
   for (const entry of slots) {
+    if (only.length && !only.includes(entry.key)) continue;
     const request: ImageRequest = {
       slot: entry.slot,
       industry: "hoveniersbedrijf",
@@ -69,7 +90,7 @@ async function main() {
       mood: ["natural", "ambachtelijk", "rustig"],
       aspect: entry.aspect,
       alt: entry.alt,
-      seed: `golden-hovenier-${entry.slot}-v1`,
+      seed: `golden-hovenier-${entry.key}-v1`,
     };
 
     const { image: resolved, trail } = await resolveSlotImageWithTrail(request, { sources, fetcher: realFetcher });
@@ -89,10 +110,10 @@ async function main() {
     if (!imageResponse.ok) throw new Error(`download mislukt: HTTP ${imageResponse.status}`);
     const raw = Buffer.from(await imageResponse.arrayBuffer());
 
-    const target = entry.slot === "hero" ? 1600 : 1100;
-    const tmp = join(OUT, `.${entry.slot}-raw`);
+    const target = entry.target;
+    const tmp = join(OUT, `.${entry.key}-raw`);
     writeFileSync(tmp, raw);
-    const file = `${entry.slot}.webp`;
+    const file = `${entry.key}.webp`;
     execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", tmp, "-vf", `scale='min(${target},iw)':-2`, "-quality", "82", join(OUT, file)]);
 
     const output = join(OUT, file);
@@ -100,7 +121,7 @@ async function main() {
       execFileSync("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "json", output]).toString(),
     ) as { streams: Array<{ width: number; height: number }> };
 
-    meta[entry.slot] = {
+    meta[entry.key] = {
       file,
       width: probe.streams[0].width,
       height: probe.streams[0].height,
@@ -115,9 +136,11 @@ async function main() {
       generated: resolved.sourceId === "generated",
     };
     writeFileSync(metaPath, `${JSON.stringify(meta, null, 2)}\n`);
-    console.log(`  → ${file} ${probe.streams[0].width}x${probe.streams[0].height} (${Math.round(raw.length / 1024)} KB bron)`);
+    const cost = costFor(resolved.candidate.width, resolved.candidate.height);
+    if (resolved.sourceId === "generated") totalCost += cost;
+    console.log(`  → ${file} ${probe.streams[0].width}x${probe.streams[0].height} (${Math.round(raw.length / 1024)} KB bron, $${cost.toFixed(3)})`);
   }
-  console.log("klaar");
+  console.log(`klaar — geschatte kosten deze run: $${totalCost.toFixed(3)}`);
 }
 
 main().catch((error) => {

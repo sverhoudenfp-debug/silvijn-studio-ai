@@ -19,7 +19,13 @@ import {
 } from "./media-slots";
 import { buildGenericPlaceholderSvg, buildMediaPlaceholderSvgs } from "./placeholders";
 import { THEME_NAME_MAX_LENGTH } from "./theme-structure";
-import { composeBlueprintTemplates, slugifyPageKey } from "./blueprint-composition";
+import {
+  composeBlueprintTemplates,
+  composeSiteNavigation,
+  slugifyPageKey,
+  type ComposedSitePage,
+  type CompositionNavigationItem,
+} from "./blueprint-composition";
 import type { ContentPlan } from "../content/content-plan";
 import { BLUEPRINT_SECTION_REGISTRY, type BlueprintSectionType } from "../blueprint/section-registry";
 import type { WebsiteContactContext } from "../generator";
@@ -1077,6 +1083,32 @@ img { max-width: 100%; height: auto; display: block; }
 .section--surface { background: var(--color-surface); }
 .section__header { max-width: 720px; margin-bottom: 32px; }
 .section__header p { color: var(--color-muted); }
+
+/* Paginakop (W1): één H1 per pagina, zelfde ritme als de hero-kop */
+.page-header { padding-block: calc(var(--section-spacing) * 0.85) calc(var(--section-spacing) * 0.5); }
+.page-header__eyebrow {
+  font-size: var(--font-size-small);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  margin: 0 0 12px;
+}
+.page-header__title {
+  font-size: var(--h1-size);
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+  max-width: 22ch;
+  margin: 0;
+}
+.page-header__intro {
+  font-size: var(--h2-size);
+  color: var(--color-muted);
+  max-width: 58ch;
+  margin: 20px 0 0;
+}
+@media (max-width: 760px) {
+  .page-header__title { max-width: none; }
+}
 
 /* Cards */
 .card-grid { display: grid; gap: 20px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
@@ -3042,6 +3074,62 @@ ${blueprintVariantSettings("contact", "surface")},
   return { path: "sections/contact.liquid", content: liquid };
 }
 
+
+/**
+ * W1 — paginakop. Elke subpagina begint met precies één H1. De blueprint-
+ * compositie zet deze sectie deterministisch vooraan wanneer de AI-pagina
+ * niet met een hero begint; de AI kan hem ook zelf als eerste sectie plannen
+ * (dan is er geen extra kop nodig).
+ */
+function buildPageHeaderSection(): ThemeFile {
+  const liquid = `<section class="section page-header section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
+  <div class="container">
+    {%- if section.settings.eyebrow != blank -%}
+      <p class="page-header__eyebrow">{{ section.settings.eyebrow }}</p>
+    {%- endif -%}
+    <h1 class="page-header__title">{{ section.settings.heading }}</h1>
+    {%- if section.settings.subheading != blank -%}
+      <p class="page-header__intro">{{ section.settings.subheading }}</p>
+    {%- endif -%}
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Paginakop",
+  "settings": [
+    { "type": "text", "id": "eyebrow", "label": "Label boven de titel" },
+    { "type": "text", "id": "heading", "label": "Paginatitel", "default": "Paginatitel" },
+    { "type": "textarea", "id": "subheading", "label": "Korte inleiding" },
+    {
+      "type": "select",
+      "id": "background",
+      "label": "Achtergrond",
+      "default": "default",
+      "options": [
+        { "value": "default", "label": "Standaard" },
+        { "value": "surface", "label": "Contrastvlak" },
+        { "value": "accent_band", "label": "Accentband" }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "motion",
+      "label": "Animatie",
+      "default": "none",
+      "options": [
+        { "value": "none", "label": "Geen" },
+        { "value": "fade_up", "label": "Vloeiend invliegen" }
+      ]
+    }
+  ],
+  "presets": [{ "name": "Paginakop" }]
+}
+{% endschema %}
+`;
+  return { path: "sections/page-header.liquid", content: liquid };
+}
+
 function buildRichTextSection(): ThemeFile {
   const liquid = `<section class="section rich-text rich-text--{{ section.settings.layout | default: 'article' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
   {%- if section.settings.background == 'image' -%}
@@ -3841,6 +3929,175 @@ function buildFooterGroup(input: {
   });
 }
 
+
+/**
+ * W1 — subpagina's zonder blueprint (v1-Design Plan).
+ *
+ * Tot nu toe kreeg zo'n pagina één leeg `main-page`-template. Nu wordt de
+ * pagina opgebouwd uit dezelfde, al bestaande secties, gevuld met wat de
+ * specification écht bevat: geen verzonnen diensten, geen verzonnen
+ * vragen. De kop (H1) staat altijd vooraan, de CTA altijd achteraan, en
+ * tussenliggende secties wisselen van achtergrond voor ritme.
+ */
+type LegacyPageKind = "about" | "services" | "projects" | "faq" | "generic";
+
+const LEGACY_PAGE_PATTERNS: ReadonlyArray<readonly [RegExp, LegacyPageKind]> = [
+  [/over\s*-?\s*ons|about|team|bedrijf|wie\s*zijn/i, "about"],
+  [/dienst|service|werkzaam|expertise|behandel/i, "services"],
+  [/project|portfolio|realis|werk|galerij|gallerij|impressie/i, "projects"],
+  [/faq|vragen|veelgesteld/i, "faq"],
+];
+
+function legacyPageKind(page: { key: string; title: string | null; sections: string[] }): LegacyPageKind {
+  const haystack = [page.key, page.title ?? "", ...page.sections].join(" ");
+  for (const [pattern, kind] of LEGACY_PAGE_PATTERNS) {
+    if (pattern.test(haystack)) return kind;
+  }
+  return "generic";
+}
+
+function legacyPageComposition(
+  spec: WebsiteSpecification,
+  contact: WebsiteContactContext,
+  page: { key: string; title: string | null; purpose: string | null; sections: string[] },
+  images: readonly ThemeImage[]
+): { data: { sections: Record<string, Record<string, unknown>>; order: string[] }; order: string[]; summary: string } {
+  const sections: Record<string, Record<string, unknown>> = {};
+  const order: string[] = [];
+  const backgrounds = ["default", "surface"];
+  const usedTypeKeys = new Set<string>();
+
+  const add = (type: string, settings: Record<string, unknown>, blocks?: Record<string, Record<string, unknown>>, blockOrder?: string[]) => {
+    const base = type.replace(/-/g, "_");
+    let key = base;
+    let n = 2;
+    while (usedTypeKeys.has(key)) {
+      key = `${base}_${n}`;
+      n += 1;
+    }
+    usedTypeKeys.add(key);
+    const background = backgrounds[order.length % backgrounds.length] ?? "default";
+    const entry: Record<string, unknown> = { type, settings: { background, motion: "none", ...settings } };
+    if (blocks && blockOrder) {
+      entry.blocks = blocks;
+      entry.block_order = blockOrder;
+    }
+    sections[key] = entry;
+    order.push(key);
+  };
+
+  const title = page.title ?? page.key;
+  const kind = legacyPageKind(page);
+
+  // 1. Kop met de enige H1 van deze pagina.
+  add("page-header", { heading: title, subheading: legacyIntroFor(spec, page, kind) });
+
+  // 2. Inhoud uit de specification.
+  const services = spec.content.services;
+  if (kind === "about" && spec.content.about) {
+    add("about", {
+      heading: `Over ${spec.business.businessName}`,
+      body: `<p>${escapeHtml(spec.content.about)}</p>`,
+      layout: "split",
+      image_position: "right",
+    });
+  }
+  if (kind === "about" && hasRealTestimonials(spec)) {
+    const quotes = spec.content.testimonials.filter((quote) => quote.trim().length > 0);
+    add(
+      "testimonials",
+      { heading: "Wat klanten zeggen", layout: "band" },
+      Object.fromEntries(quotes.map((quote, i) => [`testimonial_${i + 1}`, { type: "testimonial", settings: { quote, author: null } }])),
+      quotes.map((_, i) => `testimonial_${i + 1}`)
+    );
+  }
+  if ((kind === "services" || kind === "about" || kind === "faq") && services.length > 0) {
+    add(
+      "services",
+      { heading: "Onze diensten", subheading: null, layout: "cards" },
+      Object.fromEntries(
+        services.map((service, i) => [`service_${i + 1}`, { type: "service", settings: { title: service.title, description: service.description } }])
+      ),
+      services.map((_, i) => `service_${i + 1}`)
+    );
+  }
+  if ((kind === "services" || kind === "generic") && spec.content.benefits.length > 0) {
+    add(
+      "benefits",
+      { heading: "Waarom klanten voor ons kiezen", layout: "list" },
+      Object.fromEntries(
+        spec.content.benefits.map((benefit, i) => [`benefit_${i + 1}`, { type: "benefit", settings: { text: benefit } }])
+      ),
+      spec.content.benefits.map((_, i) => `benefit_${i + 1}`)
+    );
+  }
+  if (kind === "faq" && spec.content.faq.length > 0) {
+    add(
+      "faq",
+      { heading: "Veelgestelde vragen", layout: "accordion" },
+      Object.fromEntries(
+        spec.content.faq.map((item, i) => [
+          `question_${i + 1}`,
+          { type: "question", settings: { question: item.question, answer: `<p>${escapeHtml(item.answer)}</p>` } },
+        ])
+      ),
+      spec.content.faq.map((_, i) => `question_${i + 1}`)
+    );
+  }
+  if (kind === "projects" && hasGalleryRequirement(spec)) {
+    const galleryCount = galleryBlockCount(spec);
+    add(
+      "gallery",
+      { heading: title, subheading: null, layout: "grid" },
+      Object.fromEntries(
+        Array.from({ length: galleryCount }, (_, i) => [
+          `image_${i + 1}`,
+          { type: "gallery_image", settings: { caption: spec.media.imageDescriptions[i] ?? null, alt: null } },
+        ])
+      ),
+      Array.from({ length: galleryCount }, (_, i) => `image_${i + 1}`)
+    );
+  }
+  if (kind === "generic" || (kind === "projects" && !hasGalleryRequirement(spec))) {
+    add("rich-text", {
+      heading: title,
+      body: spec.content.about ? `<p>${escapeHtml(spec.content.about)}</p>` : null,
+      width: "narrow",
+    });
+  }
+  if (kind === "faq" && spec.content.faq.length === 0) {
+    add("rich-text", { heading: title, body: page.purpose ? `<p>${escapeHtml(page.purpose)}</p>` : null, width: "narrow" });
+  }
+
+  // 3. Conversie: elke pagina eindigt met een CTA naar de contactpagina.
+  add("cta", {
+    heading: spec.content.ctaPrimaryText,
+    subheading: spec.content.contactIntro,
+    cta_label: spec.content.ctaPrimaryText,
+    cta_link: "/pages/contact",
+    layout: "band",
+  });
+
+  applyThemeImages(sections, images);
+
+  const summary = order
+    .map((key) => (sections[key]?.type as string) ?? key)
+    .join(", ");
+  return { data: { sections, order }, order, summary };
+}
+
+/** Korte intro voor de paginakop: alleen wat de specification al zegt. */
+function legacyIntroFor(
+  spec: WebsiteSpecification,
+  page: { purpose: string | null },
+  kind: LegacyPageKind
+): string | null {
+  if (page.purpose) return page.purpose;
+  if (kind === "about") return spec.content.valueProposition;
+  if (kind === "services") return spec.content.valueProposition;
+  return null;
+}
+
 function homePageSectionInstances(
   spec: WebsiteSpecification,
   contact: WebsiteContactContext,
@@ -4051,12 +4308,25 @@ export function applyThemeImagesToTemplates(
 
 function contactPageTemplate(spec: WebsiteSpecification, contact: WebsiteContactContext): { path: string; data: unknown } {
   const { sections } = homePageSectionInstances(spec, contact);
-  // Contactpagina: alleen de contactsectie (geen homepage-compositie).
+  // Contactpagina: paginakop (H1) + de contactsectie. De contactsectie zelf
+  // rendert een H2, dus zonder kop heeft deze pagina geen H1 — en dat is
+  // zowel voor SEO als voor de toegankelijkheidsboom onjuist.
   return {
     path: "templates/page.contact.json",
     data: {
-      sections: { contact: sections.contact },
-      order: ["contact"],
+      sections: {
+        page_header: {
+          type: "page-header",
+          settings: {
+            heading: "Contact",
+            subheading: spec.content.contactIntro,
+            background: "default",
+            motion: "none",
+          },
+        },
+        contact: sections.contact,
+      },
+      order: ["page_header", "contact"],
     },
   };
 }
@@ -4209,6 +4479,7 @@ export function buildShopifyTheme(input: BuildThemeInput): BuiltTheme {
   files.push(buildCtaSection());
   files.push(buildContactSection());
   files.push(buildRichTextSection());
+  files.push(buildPageHeaderSection());
   // Fase C: blueprint-secties uit de SECTION-REGISTRY (usp-band, stats,
   // process, projects, team, rates, newsletter, booking) — altijd aanwezig
   // als sectiebestand; instantiëring gebeurt uitsluitend via het blueprint.
@@ -4227,17 +4498,83 @@ export function buildShopifyTheme(input: BuildThemeInput): BuiltTheme {
   files.push(buildMainCartSection());
   files.push(buildMainSearchSection());
 
-  // --- Header/footer-groups (nav uit het Design Plan)
+  // --- Templates: pagina-compositie EN navigatie uit één bron.
+  //     Met een blueprint komen home én subpagina's uit blueprint.pages;
+  //     zonder blueprint worden de pagina's uit pageStructure opgebouwd met
+  //     echte secties (geen lege shells). De navigatie volgt daarna uit de
+  //     werkelijk gegenereerde pagina's, zodat geen enkele link naar een
+  //     niet-bestaande pagina kan wijzen.
   const pageKeyHome = new Set(["home", "index", "start", "homepage"]);
-  const navItems = plan.navigation.items.map((item) => ({
-    label: item.label,
-    url: pageKeyHome.has(item.pageKey.toLowerCase()) ? "/" : `/pages/${slugifyPageKey(item.pageKey)}`,
-  }));
+  const composition = plan.blueprint
+    ? composeBlueprintTemplates({
+        blueprint: plan.blueprint,
+        spec,
+        contact,
+        contentPlan: input.contentPlan ?? null,
+        plannedNavigation: plan.navigation.items,
+      })
+    : null;
+
+  let sitePages: ComposedSitePage[];
+  let siteNavigation: CompositionNavigationItem[];
+
+  if (composition) {
+    applyThemeImagesToTemplates(composition.templates, images);
+    for (const template of composition.templates) {
+      files.push(jsonFile(template.path, template.data));
+    }
+    notes.push(...composition.notes);
+    sitePages = composition.pages;
+    siteNavigation = composition.navigation;
+  } else {
+    const home = homePageSectionInstances(spec, contact, images);
+    files.push(jsonFile("templates/index.json", { sections: home.sections, order: home.order }));
+
+    // Contactpagina (altijd, met échte contactgegevens)
+    const contactPage = contactPageTemplate(spec, contact);
+    files.push(jsonFile(contactPage.path, contactPage.data));
+
+    sitePages = [
+      { key: "home", title: "Home", slug: "home", template: "index", url: "/", sectionCount: home.order.length },
+      { key: "contact", title: "Contact", slug: "contact", template: "page.contact", url: "/pages/contact", sectionCount: 1 },
+    ];
+
+    // Subpagina's uit het Design Plan: elk een echte sectiestack uit de
+    // specification. Geen lege templates meer (W1).
+    const plannedKeys = new Set<string>(["contact"]);
+    for (const page of plan.pageStructure) {
+      const key = page.key.trim();
+      if (pageKeyHome.has(key.toLowerCase())) continue;
+      const slugKey = slugifyPageKey(key);
+      if (plannedKeys.has(slugKey)) continue;
+      plannedKeys.add(slugKey);
+      const composed = legacyPageComposition(spec, contact, page, images);
+      files.push(jsonFile(`templates/page.${slugKey}.json`, composed.data));
+      sitePages.push({
+        key,
+        title: page.title ?? key,
+        slug: slugKey,
+        template: `page.${slugKey}`,
+        url: `/pages/${slugKey}`,
+        sectionCount: composed.order.length,
+      });
+      notes.push(
+        `Pagina "${page.title ?? key}" opgebouwd uit ${composed.order.length} secties (${composed.summary}); geen leeg template, niets verzonnen.`
+      );
+    }
+
+    siteNavigation = composeSiteNavigation({ pages: sitePages, plannedNavigation: plan.navigation.items });
+    notes.push(
+      `Navigatie: ${siteNavigation.length} item(s) uit de werkelijk gegenereerde pagina's (${sitePages.length} pagina('s), home inbegrepen).`
+    );
+  }
+
+  // --- Header/footer-groups (navigatie = gegenereerde pagina's)
   files.push(
     buildHeaderGroup(
       {
         businessName: spec.business.businessName,
-        navItems,
+        navItems: siteNavigation.map((item) => ({ label: item.label, url: item.url })),
         ctaLabel: spec.content.ctaPrimaryText,
       },
       tokens.artDirection
@@ -4250,53 +4587,6 @@ export function buildShopifyTheme(input: BuildThemeInput): BuiltTheme {
       contact,
     })
   );
-
-  // --- Templates: pagina-compositie.
-  //     Fase C: met een blueprint op het Design Plan worden homepage ÉN
-  //     subpagina's deterministisch uit blueprint.pages[].sectionInstances
-  //     opgebouwd (types/layouts uit de SECTION-REGISTRY, volgorde exact,
-  //     geen ongeplande secties). Zonder blueprint (v1-plan) blijft de
-  //     bestaande hardcoded homepage-compositie + contactpagina + lege
-  //     subpagina-shells byte-voor-byte gehandhaafd (backward compat).
-  if (plan.blueprint) {
-    const composition = composeBlueprintTemplates({ blueprint: plan.blueprint, spec, contact, contentPlan: input.contentPlan ?? null });
-    applyThemeImagesToTemplates(composition.templates, images);
-    for (const template of composition.templates) {
-      files.push(jsonFile(template.path, template.data));
-    }
-    notes.push(...composition.notes);
-  } else {
-    const home = homePageSectionInstances(spec, contact, images);
-    files.push(jsonFile("templates/index.json", { sections: home.sections, order: home.order }));
-
-    // --- Templates: contactpagina (altijd, met échte contactgegevens)
-    const contactPage = contactPageTemplate(spec, contact);
-    files.push(jsonFile(contactPage.path, contactPage.data));
-
-    // --- Templates: subpagina's uit het Design Plan (home-contact al gedaan)
-    const plannedKeys = new Set<string>(["contact"]);
-    for (const page of plan.pageStructure) {
-      const key = page.key.trim();
-      if (pageKeyHome.has(key.toLowerCase())) continue;
-      const slugKey = slugifyPageKey(key);
-      if (plannedKeys.has(slugKey)) continue;
-      plannedKeys.add(slugKey);
-      files.push(
-        jsonFile(`templates/page.${slugKey}.json`, {
-          sections: {
-            main: {
-              type: "main-page",
-              settings: {},
-            },
-          },
-          order: ["main"],
-        })
-      );
-      notes.push(
-        `Pagina "${page.title ?? key}" wordt als lege, bewerkbare Shopify-pagina aangeleverd (template page.${slugKey}) — content volgt in de revisierondes, er wordt niets verzonnen.`
-      );
-    }
-  }
 
   // --- Templates: standaardpagina + systeempagina's
   files.push(jsonFile("templates/page.json", { sections: { main: { type: "main-page", settings: {} } }, order: ["main"] }));

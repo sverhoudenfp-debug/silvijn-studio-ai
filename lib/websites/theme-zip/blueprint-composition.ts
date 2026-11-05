@@ -88,9 +88,32 @@ export interface ComposedTemplate {
   rhythmAdjustments: number;
 }
 
+export interface CompositionNavigationItem {
+  label: string;
+  /** URL zoals die in het thema komt: "/" of "/pages/<slug>". */
+  url: string;
+  /** Blueprint-pagina waar dit item naar verwijst (nooit een niet-bestaande). */
+  pageKey: string;
+}
+
+export interface ComposedSitePage {
+  key: string;
+  title: string;
+  slug: string;
+  /** Templatepad in het thema. */
+  template: string;
+  /** URL-pad dat de bezoeker ziet. */
+  url: string;
+  sectionCount: number;
+}
+
 export interface BlueprintCompositionResult {
   templates: ComposedTemplate[];
   notes: string[];
+  /** Alle gegenereerde pagina's (één bron van waarheid voor nav en links). */
+  pages: ComposedSitePage[];
+  /** Navigatie die uitsluitend naar gegenereerde pagina's verwijst. */
+  navigation: CompositionNavigationItem[];
 }
 
 /**
@@ -586,6 +609,24 @@ function composePage(
   const order: string[] = [];
   const typeCounters = new Map<string, number>();
 
+  // Paginakop (W1): een subpagina die niet met een hero begint krijgt een
+  // eigen kop met de H1. Zonder deze stap heeft zo'n pagina geen enkele H1
+  // (de secties eronder renderen H2) — slecht voor SEO en voor de
+  // toegankelijkheidsboom. Homepage heeft al een hero met H1.
+  const firstType = page.sectionInstances[0]?.type ?? null;
+  if (!isHome && firstType !== "hero") {
+    sections.page_header = {
+      type: "page-header",
+      settings: {
+        heading: page.title ?? page.key,
+        subheading: page.purpose ?? null,
+        background: "default",
+        motion: "none",
+      },
+    } as unknown as Record<string, unknown>;
+    order.push("page_header");
+  }
+
   // Sectieritme (Rendering-stap 1, 2026-09-19) — een RENDERING-besluit,
   // geen herplanning: wanneer twee aangrenzende secties allebei op de
   // neutrale "default"-achtergrond staan (het blueprint plant zelf geen
@@ -627,6 +668,29 @@ function composePage(
     order.push(key);
   }
 
+  // Sluitende CTA (W1): een subpagina die zelf geen conversiesectie plant,
+  // eindigt zonder actie. Determinant toegevoegd als COMPOSITIE-regel (net als
+  // de paginakop), met het echte CTA-doel uit het plan — nooit met verzonnen
+  // tekst. De homepage houdt exact wat het blueprint plant.
+  const lastType = order.length > 0 ? ((sections[order[order.length - 1]] as { type?: string }).type ?? null) : null;
+  const conversionTypes = new Set(["cta", "contact", "booking"]);
+  if (!isHome && lastType !== null && !conversionTypes.has(lastType)) {
+    const ctaKey = sections.cta ? "cta_2" : "cta";
+    sections[ctaKey] = {
+      type: "cta",
+      settings: {
+        heading: ctx.spec.content.ctaPrimaryText,
+        subheading: ctx.spec.content.contactIntro,
+        cta_label: ctx.spec.content.ctaPrimaryText,
+        cta_link: ctx.contactPageSlug ? `/pages/${ctx.contactPageSlug}` : "/",
+        layout: "band",
+        background: "surface",
+        motion: "none",
+      },
+    };
+    order.push(ctaKey);
+  }
+
   if (unitsByPath) {
     for (const path of unitsByPath.keys()) {
       if (!consumedPaths.has(path)) log.skippedPaths.push(path);
@@ -649,12 +713,67 @@ function composePage(
  * bewust leeg). Zonder ContentPlan (of zonder blueprint) is de output
  * byte-identiek aan de pre-C3d-flow: volledige backward compatibility.
  */
+
+/**
+ * W1 — navigatie uit de werkelijk gegenereerde pagina's.
+ *
+ * Regel: volgorde en labels komen uit het Design Plan, maar een item zonder
+ * gegenereerde pagina vervalt, en elke gegenereerde pagina komt in de
+ * navigatie (home vooraan, contact achteraan). Zo wijst de navigatie nooit
+ * naar een pagina die niet bestaat.
+ */
+export function composeSiteNavigation(input: {
+  pages: readonly ComposedSitePage[];
+  plannedNavigation?: readonly { label: string; pageKey: string }[] | null;
+}): CompositionNavigationItem[] {
+  const { pages } = input;
+  const byKey = new Map<string, ComposedSitePage>();
+  for (const page of pages) {
+    byKey.set(page.key.trim().toLowerCase(), page);
+    byKey.set(page.slug.trim().toLowerCase(), page);
+  }
+
+  const home = pages.find((page) => page.url === "/");
+  const contact = pages.find((page) => page.key.trim().toLowerCase() === "contact");
+  const ordered: CompositionNavigationItem[] = [];
+  const used = new Set<string>();
+
+  const push = (page: ComposedSitePage, label: string) => {
+    if (used.has(page.key)) return;
+    used.add(page.key);
+    ordered.push({ label, url: page.url, pageKey: page.key });
+  };
+
+  if (home) push(home, "Home");
+
+  for (const item of input.plannedNavigation ?? []) {
+    const page = byKey.get(item.pageKey.trim().toLowerCase());
+    if (!page || page === contact) continue;
+    push(page, item.label.trim());
+  }
+
+  for (const page of pages) {
+    if (page === home || page === contact) continue;
+    push(page, page.title);
+  }
+
+  if (contact) push(contact, "Contact");
+
+  return ordered.slice(0, 8);
+}
+
 export function composeBlueprintTemplates(input: {
   blueprint: WebsiteBlueprint;
   spec: WebsiteSpecification;
   contact: WebsiteContactContext;
   /** C3d: optioneel — het actuele, geverifieerde ContentPlan. */
   contentPlan?: ContentPlan | null;
+  /**
+   * W1: de door de AI geplande navigatie (Design Plan.navigation). Alleen de
+   * VOLGORDE en labels worden overgenomen; een item zonder gegenereerde
+   * pagina vervalt, en pagina's die het plan niet noemt worden aangevuld.
+   */
+  plannedNavigation?: readonly { label: string; pageKey: string }[] | null;
 }): BlueprintCompositionResult {
   const { blueprint, spec, contact } = input;
   const contentPlan = input.contentPlan ?? null;
@@ -706,6 +825,19 @@ export function composeBlueprintTemplates(input: {
     unrenderable: [],
     skippedPaths: [],
   };
+
+  const composedPages: ComposedSitePage[] = blueprint.pages.map((page) => {
+    const slug = pageKeyToSlug.get(page.key) ?? "";
+    const isHome = slug === "";
+    return {
+      key: page.key,
+      title: page.title ?? page.key,
+      slug: slug || "home",
+      template: isHome ? "index" : `page.${slug}`,
+      url: isHome ? "/" : `/pages/${slug}`,
+      sectionCount: page.sectionInstances.length,
+    };
+  });
 
   const templates: ComposedTemplate[] = [];
   for (const page of blueprint.pages) {
@@ -775,5 +907,15 @@ export function composeBlueprintTemplates(input: {
     }
   }
 
-  return { templates, notes };
+  const navigation = composeSiteNavigation({
+    pages: composedPages,
+    plannedNavigation: input.plannedNavigation ?? null,
+  });
+  if (composedPages.length > 1) {
+    notes.push(
+      `Navigatie: ${navigation.length} item(s), uitsluitend naar gegenereerde pagina's (${composedPages.length} pagina('s), home inbegrepen).`
+    );
+  }
+
+  return { templates, notes, pages: composedPages, navigation };
 }

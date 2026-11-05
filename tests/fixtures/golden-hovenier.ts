@@ -55,10 +55,21 @@ export const goldenSpecification = WebsiteSpecificationSchema.parse({
 export const goldenDesignPlan = designPlanSchema.parse({
   goals: { primaryGoal: "Contact", secondaryGoals: [], conversionGoal: null },
   audience: { primaryAudience: "Particuliere tuineigenaren", secondaryAudiences: [], toneOfVoice: "nuchter" },
-  navigation: { items: [{ label: "Home", pageKey: "home" }, { label: "Over ons", pageKey: "over-ons" }, { label: "Contact", pageKey: "contact" }], structure: null },
+  navigation: {
+    items: [
+      { label: "Home", pageKey: "home" },
+      { label: "Over ons", pageKey: "over-ons" },
+      { label: "Diensten", pageKey: "diensten" },
+      { label: "FAQ", pageKey: "faq" },
+      { label: "Contact", pageKey: "contact" },
+    ],
+    structure: null,
+  },
   pageStructure: [
     { key: "home", title: "Home", purpose: "Landingspagina", sections: ["hero", "services", "about", "cta"] },
     { key: "over-ons", title: "Over ons", purpose: "Vertrouwen", sections: ["about", "cta"] },
+    { key: "diensten", title: "Diensten", purpose: "Uitleg van het aanbod", sections: ["services", "benefits", "cta"] },
+    { key: "faq", title: "Veelgestelde vragen", purpose: "Twijfel wegnemen", sections: ["faq", "cta"] },
     { key: "contact", title: "Contact", purpose: "Conversie", sections: ["contact"] },
   ],
   visualHierarchy: { strategy: "editorial", aboveTheFold: ["hero"] },
@@ -89,6 +100,15 @@ export const goldenDesignPlan = designPlanSchema.parse({
       { key: "over-ons", title: "Over ons", purpose: "Vertrouwen", seo: null, sectionInstances: [
         { type: "about", layout: "split", blocks: [], media: [], cta: null, background: "default", motion: "none", contentHints: null },
       ]},
+      { key: "diensten", title: "Diensten", purpose: "Wat we doen, per dienst", seo: null, sectionInstances: [
+        { type: "services", layout: "cards", blocks: [{ kind: "service", hint: "Tuinontwerp" }, { kind: "service", hint: "Aanleg" }, { kind: "service", hint: "Onderhoud" }, { kind: "service", hint: "Beplanting" }], media: [], cta: null, background: "default", motion: "none", contentHints: null },
+        { type: "benefits", layout: "checklist", blocks: [{ kind: "benefit", hint: "Vaste ploeg" }, { kind: "benefit", hint: "Eigen materiaal" }, { kind: "benefit", hint: "Planmatig onderhoud" }], media: [], cta: null, background: "surface", motion: "none", contentHints: null },
+        { type: "cta", layout: "band", blocks: [], media: [], cta: { label: "Vraag een tuinplan aan", target: "contact", prominence: "primary" }, background: "accent_band", motion: "none", contentHints: null },
+      ]},
+      { key: "faq", title: "Veelgestelde vragen", purpose: "Antwoorden op de vragen die klanten het vaakst stellen", seo: null, sectionInstances: [
+        { type: "faq", layout: "accordion", blocks: [{ kind: "faq", hint: "Wat kost een tuinontwerp?" }, { kind: "faq", hint: "Werken jullie in heel Utrecht?" }, { kind: "faq", hint: "Hoe lang duurt een aanleg?" }], media: [], cta: null, background: "default", motion: "none", contentHints: null },
+        { type: "cta", layout: "band", blocks: [], media: [], cta: { label: "Stel je vraag", target: "contact", prominence: "primary" }, background: "surface", motion: "none", contentHints: null },
+      ]},
       { key: "contact", title: "Contact", purpose: "Conversie", seo: null, sectionInstances: [
         { type: "contact", layout: "split", blocks: [], media: [], cta: null, background: "default", motion: "none", contentHints: null },
       ]},
@@ -112,5 +132,7 @@ export const goldenContact: WebsiteContactContext = {
 export const GOLDEN_PAGES = [
   { template: "index", slug: "home" },
   { template: "page.over-ons", slug: "over-ons" },
+  { template: "page.diensten", slug: "diensten" },
+  { template: "page.faq", slug: "faq" },
   { template: "page.contact", slug: "contact" },
 ] as const;

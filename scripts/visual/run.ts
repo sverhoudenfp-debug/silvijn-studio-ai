@@ -105,6 +105,7 @@ for (const page of GOLDEN_PAGES) {
 
 type Metrics = {
   viewport: string;
+  pageSlug: string;
   h1: number;
   h1MobileSafe: boolean;
   h2: number;
@@ -195,7 +196,7 @@ for (const viewport of VIEWPORTS) {
     metrics.contrastNodes = [];
 
     // Contrast meten met de echte axe-core-regel (WCAG AA, kleine tekst).
-    if (viewport.name === "desktop" && page.slug === "home") {
+    if (viewport.name === "desktop") {
       await tab.addScriptTag({ content: axe.source });
       const axeResult = await tab.evaluate(async () => {
         const res = await (window as unknown as {
@@ -208,15 +209,13 @@ for (const viewport of VIEWPORTS) {
       metrics.contrastNodes = axeResult.slice(0, 12);
     }
 
-    results.push({ ...metrics, viewport: `${viewport.name} ${viewport.width}` });
+    results.push({ ...metrics, pageSlug: page.slug, viewport: `${viewport.name} ${viewport.width}` });
 
-    if (page.slug === "home" || page.slug === "contact") {
-      mkdirSync(SHOT_DIR, { recursive: true });
-      await tab.screenshot({
-        path: join(SHOT_DIR, `${page.slug}-${viewport.name}.png`),
-        fullPage: true,
-      });
-    }
+    mkdirSync(SHOT_DIR, { recursive: true });
+    await tab.screenshot({
+      path: join(SHOT_DIR, `${page.slug}-${viewport.name}.png`),
+      fullPage: true,
+    });
     await tab.close();
   }
 }
@@ -224,8 +223,8 @@ await browser.close();
 
 writeFileSync(join(OUT, "score.json"), JSON.stringify({ label, pages, results }, null, 2));
 
-const desktop = results.find((r) => r.viewport.startsWith("desktop"))!;
-const mobile = results.find((r) => r.viewport.startsWith("mobiel"))!;
+const desktop = results.find((r) => r.viewport.startsWith("desktop") && r.pageSlug === "home")!;
+const mobile = results.find((r) => r.viewport.startsWith("mobiel") && r.pageSlug === "home")!;
 
 const md = [
   `# Visuele score — ${label}`,
@@ -248,6 +247,17 @@ const md = [
   `| echte beelden / placeholders | ${desktop.realImages} / ${desktop.placeholders} | ${mobile.realImages} / ${mobile.placeholders} |`,
   `| tekstkleuren | ${desktop.colorCount} | ${mobile.colorCount} |`,
   `| contrastfouten (axe, home) | ${desktop.contrastViolations} | - |`,
+  "",
+  "## Per pagina (desktop)",
+  "",
+  "| pagina | secties | H1 | woorden | regellengte | beeldarea | contrastfouten |",
+  "|---|---|---|---|---|---|---|",
+  ...pages.map((page) => {
+    const row = results.find((r) => r.viewport.startsWith("desktop") && r.pageSlug === page.slug);
+    return row
+      ? `| ${page.slug} | ${row.sections} | ${row.h1}px | ${row.words} | ${row.measureChars} | ${row.imageAreaPct}% | ${row.contrastViolations} |`
+      : `| ${page.slug} | - | - | - | - | - | - |`;
+  }),
   "",
   desktop.contrastNodes.length ? "## Contrastfouten" : "## Contrastfouten\n\nGeen.",
   ...desktop.contrastNodes.map((n) => `- ${n}`),

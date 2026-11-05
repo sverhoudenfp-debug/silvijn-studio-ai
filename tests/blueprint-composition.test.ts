@@ -253,9 +253,13 @@ test("blueprint → homepage exact uit de blueprint opgebouwd", () => {
 test("blueprint → subpagina's (incl. contact) daadwerkelijk gecomponeerd", () => {
   const theme = build(planWithBlueprint(baseBlueprint()));
   const over = templateJson(theme.files, "templates/page.over-ons.json");
-  assert.deepEqual(over.order.map((k) => over.sections[k].type), ["about", "cta"]);
+  // W1: een subpagina zonder hero begint met de paginakop (H1), daarna exact
+  // de geplande secties.
+  assert.deepEqual(over.order.map((k) => over.sections[k].type), ["page-header", "about", "cta"]);
   const contact = templateJson(theme.files, "templates/page.contact.json");
-  assert.deepEqual(contact.order.map((k) => contact.sections[k].type), ["contact"]);
+  // Ook de contactpagina krijgt de paginakop als H1 (haar eigen contact-sectie
+  // rendert een H2).
+  assert.deepEqual(contact.order.map((k) => contact.sections[k].type), ["page-header", "contact"]);
   assert.equal(contact.sections.contact.settings.show_form, true);
   // Legacy lege main-page-shells bestaan niet meer zodra het blueprint er is
   assert.ok(!theme.files.some((f) => f.path === "templates/page.over-ons.json" && f.content.includes("main-page")));
@@ -271,9 +275,9 @@ test("sectievolgorde volgt het blueprint exact (ook bij herhaling van een type)"
   ] as never;
   const theme = build(planWithBlueprint(blueprint));
   const over = templateJson(theme.files, "templates/page.over-ons.json");
-  assert.deepEqual(over.order.map((k) => over.sections[k].type), ["rich-text", "about", "rich-text", "cta"]);
+  assert.deepEqual(over.order.map((k) => over.sections[k].type), ["page-header", "rich-text", "about", "rich-text", "cta"]);
   // Unieke section-keys bij herhaald type
-  assert.deepEqual(over.order, ["rich_text", "about", "rich_text_2", "cta"]);
+  assert.deepEqual(over.order, ["page_header", "rich_text", "about", "rich_text_2", "cta"]);
 });
 
 test("layoutvarianten zijn daadwerkelijk zichtbaar in Shopify (setting + klasse + CSS)", () => {
@@ -335,7 +339,10 @@ test("geen ongeplande secties: alleen blueprint-types in de templates", () => {
   for (const page of baseBlueprint().pages) {
     for (const inst of page.sectionInstances) planned.add(inst.type);
   }
-  const shopifyTypes = new Set<string>(["hero", "usp-band", "services", "about", "cta", "contact"]);
+  // page-header is een COMPOSITIE-sectie (W1): de builder zet hem vooraan op
+  // elke subpagina zonder hero, zodat er precies één H1 is. Hij staat nooit
+  // in het blueprint zelf.
+  const shopifyTypes = new Set<string>(["hero", "usp-band", "services", "about", "cta", "contact", "page-header"]);
   for (const file of theme.files) {
     // templates/page.json is de systeem-default (niet-blueprint), geen compositie
     if (file.path === "templates/page.json" || (!file.path.startsWith("templates/page.") && file.path !== "templates/index.json")) continue;
@@ -343,7 +350,14 @@ test("geen ongeplande secties: alleen blueprint-types in de templates", () => {
     for (const key of data.order) {
       const type = data.sections[key].type;
       assert.ok(shopifyTypes.has(type), `ongepland sectietype "${type}" in ${file.path}`);
-      assert.ok(planned.has(type.replace(/-/g, "_")), `sectietype "${type}" staat niet in het blueprint`);
+      const plannedType = type === "page-header" ? "page_header" : type.replace(/-/g, "_");
+      // page-header (H1) en de sluitende cta zijn COMPOSITIE-regels (W1): ze
+      // komen nooit uit het blueprint zelf.
+      const compositionType = type === "page-header" || type === "cta";
+      assert.ok(
+        planned.has(plannedType) || (compositionType && !file.path.endsWith("index.json")),
+        `sectietype "${type}" staat niet in het blueprint`
+      );
     }
   }
   // Geen legacy-waakhond-secties toegevoegd (geen gallery/testimonials/benefits/faq)
@@ -400,11 +414,15 @@ test("backward compat: v1-plan zonder blueprint levert de bestaande compositie",
   assert.ok(!("layout" in index.sections.hero.settings));
   // Contactpagina blijft altijd aanwezig
   const contact = templateJson(theme.files, "templates/page.contact.json");
-  assert.deepEqual(contact.order, ["contact"]);
-  // Subpagina's blijven lege main-page-shells
+  // W1: de contactpagina krijgt een paginakop (H1) vóór de contactsectie.
+  assert.deepEqual(contact.order, ["page_header", "contact"]);
+  // W1: zonder blueprint krijgt een geplande subpagina een echte sectiestack
+  // uit de specification (kop + inhoud + CTA) in plaats van een leeg template.
   const over = templateJson(theme.files, "templates/page.over-ons.json");
-  assert.deepEqual(over.order, ["main"]);
-  assert.equal(over.sections.main.type, "main-page");
+  assert.ok(over.order.length >= 3, "subpagina heeft minstens kop, inhoud en CTA");
+  assert.equal(over.sections[over.order[0]].type, "page-header");
+  assert.equal(over.sections[over.order[over.order.length - 1]].type, "cta");
+  assert.ok(!over.order.includes("main"), "geen leeg main-page-shell meer");
 });
 
 test("deterministisch: twee builds met hetzelfde blueprint zijn byte-identiek", () => {

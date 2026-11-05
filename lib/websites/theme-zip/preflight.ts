@@ -644,6 +644,59 @@ export function runDeterministicPreflight(
     push("nav_targets", "Navigation- en paginadoelen (page-templates, system-routes)", errors, warnings);
   }
 
+  // ---- 5b. Paginavolledigheid (W1)
+  //     Een geleverd thema mag geen lege of titelloze pagina's bevatten: elke
+  //     inhoudelijke pagina heeft minstens twee secties en precies één H1
+  //     (hero of paginakop). templates/page.json is de default voor door de
+  //     merchant aangemaakte pagina's en is hier bewust uitgezonderd.
+  {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const contentTemplates = textFiles.filter(
+      (file) =>
+        file.path === "templates/index.json" ||
+        (/^templates\/page\.[^/]+\.json$/.test(file.path) && file.path !== "templates/page.json")
+    );
+
+    for (const file of contentTemplates) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(file.content);
+      } catch {
+        continue; // JSON-syntax valt onder het net
+      }
+      const data = parsed as { sections?: Record<string, { type?: string }>; order?: string[] };
+      const order = Array.isArray(data.order) ? data.order : [];
+      const types = order.map((key) => data.sections?.[key]?.type ?? "");
+
+      if (order.length < 2) {
+        errors.push(
+          `${file.path}: pagina bestaat uit ${order.length} sectie(s) — een inhoudelijke pagina heeft minstens een kop en een inhoudssectie.`
+        );
+      }
+      const h1Sections = types.filter((type) => type === "hero" || type === "page-header");
+      if (h1Sections.length === 0) {
+        errors.push(`${file.path}: geen hero en geen paginakop — de pagina heeft geen H1.`);
+      } else if (h1Sections.length > 1) {
+        errors.push(
+          `${file.path}: ${h1Sections.length} secties met een H1 (${h1Sections.join(", ")}) — een pagina heeft er precies één.`
+        );
+      }
+      if (types.includes("main-page")) {
+        warnings.push(
+          `${file.path}: gebruikt de generieke main-page-sectie; alleen bedoeld als fallback voor merchant-pagina's zonder eigen compositie.`
+        );
+      }
+    }
+
+    push(
+      "page_completeness",
+      "Paginavolledigheid (minstens kop + inhoud, precies één H1 per pagina)",
+      errors,
+      warnings
+    );
+  }
+
   // ---- 6. Locale-sleutels
   {
     const errors: string[] = [];

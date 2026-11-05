@@ -11,6 +11,7 @@ import {
   pixabaySource,
   providerConfigFromEnv,
   resolveSlotImage,
+  resolveSlotImageWithTrail,
   scoreCandidate,
   seedToInt,
   type Fetcher,
@@ -228,4 +229,32 @@ test("openverse: alleen CC0 komt erdoor, CC BY en NC worden niet eens kandidaat"
   });
   const found = await openverseSource(config).find(request, fetcher);
   assert.deepEqual(found.map((c) => c.sourceImageId), ["a"]);
+});
+
+test("resolver: het spoor blijft zichtbaar als een bron faalt (saldo, sleutel, rate limit)", async () => {
+  const config = providerConfigFromEnv({ FAL_KEY: "test-key" });
+  const bron = { ...falSource(config), find: async () => { throw new Error("fal HTTP 403 — User is locked. Reason: TOP_UP."); } };
+  const verzoek = {
+    slot: "hero" as const,
+    industry: "hoveniersbedrijf",
+    city: "Utrecht",
+    mood: ["natural"],
+    aspect: "wide" as const,
+    alt: null,
+    seed: "test-seed",
+  };
+  const uitkomst = await resolveSlotImageWithTrail(verzoek, { sources: [bron], fetcher: async () => { throw new Error("geen netwerk in tests"); } });
+  assert.equal(uitkomst.image, null);
+  assert.match(uitkomst.trail.join(" | "), /fal HTTP 403/);
+  assert.match(uitkomst.trail.join(" | "), /TOP_UP/);
+});
+
+test("resolver: resolveSlotImage geeft nog steeds alleen het beeld terug", async () => {
+  const config = providerConfigFromEnv({ FAL_KEY: "test-key" });
+  const bron = { ...falSource(config), find: async () => { throw new Error("fal HTTP 403"); } };
+  const uitkomst = await resolveSlotImage(
+    { slot: "hero", industry: "hoveniersbedrijf", city: null, mood: [], aspect: "wide", alt: null, seed: "s" },
+    { sources: [bron], fetcher: async () => { throw new Error("geen netwerk in tests"); } },
+  );
+  assert.equal(uitkomst, null);
 });

@@ -81,6 +81,8 @@ export type Fetcher = (url: string, init?: { method?: string; headers?: Record<s
   ok: boolean;
   status: number;
   json: () => Promise<unknown>;
+  /** Optioneel: de fouttekst van de provider, zodat de reden in het spoor staat. */
+  text?: () => Promise<string>;
 }>;
 
 /* ------------------------------------------------------- scenebewaking */
@@ -100,9 +102,17 @@ const PERSON_TERMS = [
 /** Sloten waar een gezicht een toestemmingsvraag is, niet een smaakkwestie. */
 const CONSENT_SENSITIVE_SLOTS: readonly MediaSlotKey[] = ["about", "gallery", "services"];
 
+/**
+ * Ontkenningen tellen niet als persoon. Onze eigen FLUX-prompt zegt letterlijk
+ * "no people, no faces, empty of figures"; zonder deze uitzondering zou de
+ * poort ons eigen, bewust mensvrije beeld weigeren.
+ */
+const NEGATED_PEOPLE =
+  /\b(?:no|without|zonder|geen|free of|empty of|devoid of)\s+(?:[a-z-]+\s+){0,2}(?:people|persons?|humans?|figures?|faces?|mensen|personen|gezichten|figuren)\b/gi;
+
 export function mentionsPeople(text: string): boolean {
-  const haystack = ` ${text.toLowerCase()} `;
-  return PERSON_TERMS.some((term) => new RegExp(`[^a-z]${term}[^a-z]`, "i").test(haystack));
+  const cleaned = ` ${text.toLowerCase().replace(NEGATED_PEOPLE, " ")} `;
+  return PERSON_TERMS.some((term) => new RegExp(`[^a-z]${term}[^a-z]`, "i").test(cleaned));
 }
 
 /**
@@ -177,7 +187,17 @@ export interface ResolveOptions {
  * deterministisch gekozen (sorteren op sourceImageId, dan de seed-hash), niet
  * op volgorde van de API: anders verscheelt het beeld per request.
  */
-export async function resolveSlotImage(request: ImageRequest, options: ResolveOptions): Promise<ResolvedImage | null> {
+/**
+ * Zelfde keuze als resolveSlotImage, maar mét het spoor, ook als er niets
+ * gekozen is. Nodig omdat een bron die niet meewerkt (saldo op, sleutel
+ * verlopen, rate limit) anders onzichtbaar wordt: het beeld valt terug op de
+ * placeholder en niemand weet waarom. Precies dat maakte een eerdere storing
+ * onvindbaar.
+ */
+export async function resolveSlotImageWithTrail(
+  request: ImageRequest,
+  options: ResolveOptions,
+): Promise<{ image: ResolvedImage | null; trail: readonly string[] }> {
   const trail: string[] = [];
   const limit = options.maxCandidatesPerSource ?? 12;
 
@@ -208,11 +228,15 @@ export async function resolveSlotImage(request: ImageRequest, options: ResolveOp
         continue;
       }
       trail.push(`${source.id}/${candidate.sourceImageId}: gekozen`);
-      return { candidate, sourceId: source.id, trail };
+      return { image: { candidate, sourceId: source.id, trail }, trail };
     }
     trail.push(`${source.id}: alle kandidaten afgewezen`);
   }
-  return null;
+  return { image: null, trail };
+}
+
+export async function resolveSlotImage(request: ImageRequest, options: ResolveOptions): Promise<ResolvedImage | null> {
+  return (await resolveSlotImageWithTrail(request, options)).image;
 }
 
 /** Kleine, uitlegbare voorkeur: liggend, groot genoeg, zonder mensen. */
@@ -268,7 +292,20 @@ export function falSource(config: ProviderConfig): ImageSource {
           seed: seedToInt(request.seed),
         }),
       });
-      if (!response.ok) throw new Error(`fal HTTP ${response.status}`);
+      if (!response.ok) {
+        // De reden hoort in de melding: "HTTP 403" alleen kost een halve dag.
+        let detail = "";
+        if (typeof response.text === "function") {
+          try {
+            const body = await response.text();
+            const parsed = JSON.parse(body) as { detail?: unknown };
+            detail = typeof parsed.detail === "string" ? ` — ${parsed.detail.slice(0, 160)}` : "";
+          } catch {
+            detail = "";
+          }
+        }
+        throw new Error(`fal HTTP ${response.status}${detail}`);
+      }
       const payload = (await response.json()) as { images?: Array<{ url?: string; width?: number; height?: number }> };
       const image = payload.images?.[0];
       if (!image?.url) return [];

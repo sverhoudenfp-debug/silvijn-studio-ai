@@ -1,8 +1,8 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { chromium } from "playwright";
 import axe from "axe-core";
-import { buildShopifyTheme } from "../../lib/websites/theme-zip/theme-builder";
+import { buildShopifyTheme, type ThemeImage } from "../../lib/websites/theme-zip/theme-builder";
 import { renderThemePageHtml } from "../../lib/websites/theme-zip/html-preview";
 import {
   GOLDEN_PAGES,
@@ -41,17 +41,53 @@ const VIEWPORTS = [
 
 async function main() {
 /** Inhoudelijk identiek aan de nulmeting: alleen de engine verandert. */
+/**
+ * Beelden: alleen als ze écht in visual-output/images staan (CC0, opgehaald
+ * met scripts/media/fetch-cc0.ts). Zonder bestanden blijft het placeholder-pad
+ * exact zoals in de nulmeting.
+ */
+function loadImages(): ThemeImage[] {
+  const dir = join(process.cwd(), "visual-output/images");
+  const metaPath = join(dir, "meta.json");
+  if (!existsSync(metaPath)) return [];
+  const meta = JSON.parse(readFileSync(metaPath, "utf8")) as Record<string, { file: string; width: number; height: number; license?: string; title?: string | null; landing?: string | null }>;
+  const images: ThemeImage[] = [];
+  for (const slot of ["hero", "about"] as const) {
+    const entry = meta[slot];
+    if (!entry) continue;
+    const file = join(dir, entry.file);
+    if (!existsSync(file)) continue;
+    images.push({
+      slot,
+      file: entry.file,
+      bytes: readFileSync(file),
+      width: entry.width,
+      height: entry.height,
+      alt: entry.title ?? null,
+      license: {
+        provider: "Openverse (CC0)",
+        licenseName: entry.license === "cc0" ? "CC0 1.0" : String(entry.license ?? "CC0 1.0"),
+        commercialUse: true,
+        attributionText: null,
+        evidenceUrl: entry.landing ?? "https://docs.openverse.org/",
+      },
+    });
+  }
+  return images;
+}
+
 const built = buildShopifyTheme({
   specification: goldenSpecification as never,
   designPlan: goldenDesignPlan,
   contact: goldenContact,
+  images: loadImages(),
 });
 
 rmSync(OUT, { recursive: true, force: true });
 for (const file of built.files) {
   const target = join(THEME_DIR, file.path);
   mkdirSync(dirname(target), { recursive: true });
-  writeFileSync(target, file.content);
+  writeFileSync(target, file.bytes?.length ? file.bytes : file.content);
 }
 mkdirSync(HTML_DIR, { recursive: true });
 

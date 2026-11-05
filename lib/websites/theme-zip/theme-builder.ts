@@ -2478,13 +2478,13 @@ function buildHeroSection(): ThemeFile {
       </div>
       {%- if hero_layout == 'split' -%}
         <div class="hero__media">
-          {%- render 'theme-media', image: section.settings.image, image_mobile: section.settings.image_mobile, aspect: 'wide', alt: section.settings.image_alt, sizes: '(min-width: 990px) 50vw, 100vw', loading: 'eager', fetchpriority: 'high', placeholder_svg: 'placeholder-hero.svg' -%}
+          {%- render 'theme-media', image: section.settings.image, image_mobile: section.settings.image_mobile, asset: section.settings.image_asset, asset_w: section.settings.image_asset_width, asset_h: section.settings.image_asset_height, aspect: 'wide', alt: section.settings.image_alt, sizes: '(min-width: 990px) 50vw, 100vw', loading: 'eager', fetchpriority: 'high', placeholder_svg: 'placeholder-hero.svg' -%}
         </div>
       {%- endif -%}
     </div>
     {%- if hero_layout != 'split' and hero_layout != 'immersive' -%}
       <div class="hero__band">
-        {%- render 'theme-media', image: section.settings.image, image_mobile: section.settings.image_mobile, aspect: 'wide', alt: section.settings.image_alt, sizes: '100vw', loading: 'eager', fetchpriority: 'high', placeholder_svg: 'placeholder-hero.svg' -%}
+        {%- render 'theme-media', image: section.settings.image, image_mobile: section.settings.image_mobile, asset: section.settings.image_asset, asset_w: section.settings.image_asset_width, asset_h: section.settings.image_asset_height, aspect: 'wide', alt: section.settings.image_alt, sizes: '100vw', loading: 'eager', fetchpriority: 'high', placeholder_svg: 'placeholder-hero.svg' -%}
       </div>
     {%- endif -%}
   </div>
@@ -2504,6 +2504,9 @@ ${blueprintVariantSettings("hero", "default")},
     { "type": "text", "id": "cta_secondary_label", "label": "Secondaire CTA-tekst" },
     { "type": "url", "id": "cta_secondary_link", "label": "Secondaire CTA-link" },
     { "type": "image_picker", "id": "image", "label": "Hero-afbeelding (optioneel)" },
+    { "type": "text", "id": "image_asset", "label": "Automatisch aangeleverde afbeelding (bestandsnaam in assets)" },
+    { "type": "number", "id": "image_asset_width", "label": "Breedte van die afbeelding (px)" },
+    { "type": "number", "id": "image_asset_height", "label": "Hoogte van die afbeelding (px)" },
     { "type": "image_picker", "id": "image_mobile", "label": "Hero-afbeelding mobiel (optioneel)" },
     { "type": "text", "id": "image_alt", "label": "Alt-tekst afbeelding" }
   ],
@@ -2526,7 +2529,8 @@ function buildThemeMediaSnippet(): ThemeFile {
   Centrale media-renderer. Parameters:
   image, image_mobile (image_picker), aspect (wide|landscape|landscape_4_3|square|portrait|portrait_3_4|tall),
   alt, sizes, loading (eager|lazy), fetchpriority (high|auto),
-  placeholder_svg (asset-naam voor de abstracte placeholder).
+  placeholder_svg (asset-naam voor de abstracte placeholder), asset (bestandsnaam in
+  assets/ van een aangeleverde of gegenereerde afbeelding).
 {% endcomment %}
 {%- liquid
   assign media_loading = loading | default: 'lazy'
@@ -2558,6 +2562,10 @@ function buildThemeMediaSnippet(): ThemeFile {
     {%- else -%}
       {{ image | image_url: width: 1500 | image_tag: widths: '480, 750, 1100, 1500', sizes: sizes, alt: alt, class: 'theme-media__img', loading: media_loading, fetchpriority: fetchpriority }}
     {%- endif -%}
+  </div>
+{%- elsif asset != blank -%}
+  <div class="theme-media theme-media--{{ media_aspect }}">
+    <img src="{{ asset | asset_url }}" alt="{{ alt }}" width="{{ asset_w | default: placeholder_w }}" height="{{ asset_h | default: placeholder_h }}" loading="{{ media_loading }}" fetchpriority="{{ fetchpriority }}" decoding="async" class="theme-media__img">
   </div>
 {%- else -%}
   <div class="theme-media theme-media--{{ media_aspect }} theme-media--placeholder">
@@ -2664,7 +2672,7 @@ function buildAboutSection(): ThemeFile {
         {{ section.settings.body }}
       </div>
       <div class="about__media">
-        {%- render 'theme-media', image: section.settings.image, image_mobile: section.settings.image_mobile, aspect: 'landscape', alt: section.settings.image_alt, sizes: '(min-width: 990px) 480px, 100vw', loading: 'lazy', placeholder_svg: 'placeholder-about.svg' -%}
+        {%- render 'theme-media', image: section.settings.image, image_mobile: section.settings.image_mobile, asset: section.settings.image_asset, asset_w: section.settings.image_asset_width, asset_h: section.settings.image_asset_height, aspect: 'landscape', alt: section.settings.image_alt, sizes: '(min-width: 990px) 480px, 100vw', loading: 'lazy', placeholder_svg: 'placeholder-about.svg' -%}
       </div>
     </div>
   </div>
@@ -2680,6 +2688,9 @@ ${blueprintVariantSettings("about", "surface")},
     { "type": "richtext", "id": "body", "label": "Tekst" },
     { "type": "image_picker", "id": "image", "label": "Afbeelding (optioneel)" },
     { "type": "image_picker", "id": "image_mobile", "label": "Afbeelding mobiel (optioneel)" },
+    { "type": "text", "id": "image_asset", "label": "Automatisch aangeleverde afbeelding (bestandsnaam in assets)" },
+    { "type": "number", "id": "image_asset_width", "label": "Breedte van die afbeelding (px)" },
+    { "type": "number", "id": "image_asset_height", "label": "Hoogte van die afbeelding (px)" },
     { "type": "text", "id": "image_alt", "label": "Alt-tekst afbeelding" },
     {
       "type": "select",
@@ -3822,7 +3833,11 @@ function buildFooterGroup(input: {
   });
 }
 
-function homePageSectionInstances(spec: WebsiteSpecification, contact: WebsiteContactContext) {
+function homePageSectionInstances(
+  spec: WebsiteSpecification,
+  contact: WebsiteContactContext,
+  images: readonly ThemeImage[] = [],
+) {
   const sections: Record<string, Record<string, unknown>> = {};
   const order: string[] = [];
 
@@ -3955,7 +3970,56 @@ function homePageSectionInstances(spec: WebsiteSpecification, contact: WebsiteCo
   };
   order.push("contact");
 
+  applyThemeImages(sections, images);
   return { sections, order };
+}
+
+/**
+ * Beelden toepassen op de mediasloten die ze ondersteunen. Ontbreekt een slot
+ * of een bestand, dan blijft de sectie exact zoals hij was (placeholder).
+ */
+function applyThemeImages(sections: Record<string, Record<string, unknown>>, images: readonly ThemeImage[]) {
+  for (const image of images) {
+    const section = sections[image.slot] as { settings?: Record<string, unknown> } | undefined;
+    if (!section?.settings) continue;
+    if (!image.file || !image.bytes?.length) continue;
+    section.settings.image_asset = image.file;
+    section.settings.image_asset_width = image.width;
+    section.settings.image_asset_height = image.height;
+    if (image.alt) section.settings.image_alt = image.alt;
+  }
+}
+
+/**
+ * Zelfde toepassing, maar op TYPE in plaats van op sectiesleutel. De
+ * blueprint-compositie (Design Plan met blueprint) bouwt de homepage uit
+ * sectionInstances met eigen sleutels; daar is "hero" niet per definitie de
+ * sleutelnaam. Alleen de homepage krijgt beelden: subpagina's houden hun eigen
+ * (placeholder-)hero, anders herhaalt dezelfde foto zich op elke pagina.
+ */
+function applyThemeImagesToTemplates(
+  templates: ReadonlyArray<{ path: string; data: unknown }>,
+  images: readonly ThemeImage[],
+) {
+  if (!images.length) return;
+  for (const template of templates) {
+    if (template.path !== "templates/index.json") continue;
+    const data = template.data as { sections?: Record<string, { type?: string; settings?: Record<string, unknown> }> };
+    if (!data.sections) continue;
+    for (const section of Object.values(data.sections)) {
+      const slot = section.type === "hero" ? "hero" : section.type === "about" ? "about" : null;
+      if (!slot) continue;
+      const image = images.find((candidate) => candidate.slot === slot);
+      if (!image?.file || !image.bytes?.length) continue;
+      section.settings = {
+        ...(section.settings ?? {}),
+        image_asset: image.file,
+        image_asset_width: image.width,
+        image_asset_height: image.height,
+        ...(image.alt ? { image_alt: image.alt } : {}),
+      };
+    }
+  }
 }
 
 function contactPageTemplate(spec: WebsiteSpecification, contact: WebsiteContactContext): { path: string; data: unknown } {
@@ -3987,6 +4051,34 @@ export interface BuildThemeInput {
    * wordt geen plan meer geaccepteerd dat niet consumeerbaar is.
    */
   contentPlan?: ContentPlan | null;
+  /**
+   * FASE 3 — aangeleverde of gegenereerde beelden per mediaslot. Zonder
+   * images blijft het bestaande placeholder-pad exact ongewijzigd.
+   * De bestandsnaam komt in assets/ van het thema; licentie-metadata reist
+   * mee in de administratie (imageCredits), niet in de HTML.
+   */
+  images?: readonly ThemeImage[];
+}
+
+export interface ThemeImage {
+  /** Mediaslot waar dit beeld thuishoort. */
+  slot: "hero" | "about";
+  /** Bestandsnaam in assets/ (webp/png/jpg). */
+  file: string;
+  /** Rauwe bytes; de builder schrijft ze naar assets/<file>. */
+  bytes: Uint8Array;
+  width: number;
+  height: number;
+  /** Alt-tekst uit de AI-planning; leeg = decoratief. */
+  alt?: string | null;
+  /** Herkomst en licentie, voor de administratie en de QC. */
+  license?: {
+    provider: string;
+    licenseName: string;
+    commercialUse: boolean;
+    attributionText?: string | null;
+    evidenceUrl?: string;
+  };
 }
 
 export interface BuiltTheme {
@@ -4002,9 +4094,16 @@ export interface BuiltTheme {
  */
 export function buildShopifyTheme(input: BuildThemeInput): BuiltTheme {
   const { specification: spec, designPlan: plan, contact } = input;
+  const images = input.images ?? [];
   const tokens = buildThemeDesignTokens(plan);
   const files: ThemeFile[] = [];
   const notes: string[] = [];
+
+  // --- FASE 3: aangeleverde beelden als themabron (binary, geen image_picker)
+  for (const image of images) {
+    if (!image.file || !image.bytes?.length) continue;
+    files.push({ path: `assets/${image.file}`, content: "", bytes: image.bytes });
+  }
 
   // --- Config + layout + assets + locales
   files.push(
@@ -4131,12 +4230,13 @@ export function buildShopifyTheme(input: BuildThemeInput): BuiltTheme {
   //     subpagina-shells byte-voor-byte gehandhaafd (backward compat).
   if (plan.blueprint) {
     const composition = composeBlueprintTemplates({ blueprint: plan.blueprint, spec, contact, contentPlan: input.contentPlan ?? null });
+    applyThemeImagesToTemplates(composition.templates, images);
     for (const template of composition.templates) {
       files.push(jsonFile(template.path, template.data));
     }
     notes.push(...composition.notes);
   } else {
-    const home = homePageSectionInstances(spec, contact);
+    const home = homePageSectionInstances(spec, contact, images);
     files.push(jsonFile("templates/index.json", { sections: home.sections, order: home.order }));
 
     // --- Templates: contactpagina (altijd, met échte contactgegevens)

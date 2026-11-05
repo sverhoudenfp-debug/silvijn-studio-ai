@@ -294,6 +294,8 @@ export async function renderThemePageHtml(
     if (!file) { missingAssets.add(name); return "about:blank"; }
     if (name.endsWith(".svg")) return svgDataUri(file.content);
     if (name.endsWith(".woff2")) return `data:font/woff2;base64,${file.bytes ? bytesToBase64(file.bytes) : ""}`;
+    if (name.endsWith(".webp")) return `data:image/webp;base64,${file.bytes ? bytesToBase64(file.bytes) : ""}`;
+    if (name.endsWith(".avif")) return `data:image/avif;base64,${file.bytes ? bytesToBase64(file.bytes) : ""}`;
     if (name.endsWith(".png")) return `data:image/png;base64,${file.bytes ? bytesToBase64(file.bytes) : ""}`;
     if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return `data:image/jpeg;base64,${file.bytes ? bytesToBase64(file.bytes) : ""}`;
     return `data:text/plain;charset=utf-8,${encodeURIComponent(file.content)}`;

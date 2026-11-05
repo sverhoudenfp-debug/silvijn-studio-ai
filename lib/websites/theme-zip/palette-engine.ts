@@ -1,4 +1,5 @@
 import type { PaletteMood } from "../visual-contract";
+import { ensureContrast, hexToOklch, mixOklch, readableOn, surfaceFrom } from "./color-oklch";
 
 /**
  * PALETTE ENGINE (Design Token Engine D1, 2026-09-21) — HSL-gebaseerde
@@ -203,6 +204,18 @@ export interface PaletteEngineResult {
   readonly text: string;
   readonly mutedText: string;
   readonly border: string;
+  /**
+   * Fase 1 — LEESBAARHEID OP VLAKKEN. Tot nu toe werd alleen tekst op
+   * `background` gecontroleerd; secties met een `surface`- of
+   * `accent_band`-achtergrond erfden de donkere tekstkleur en faalden
+   * daarmee WCAG AA (8 fouten op de nulmeting). Deze tokens geven elk
+   * vlak zijn eigen, gegarandeerd leesbare tekst-, muted- en accentkleur.
+   */
+  readonly onSurface: string;
+  readonly onSurfaceMuted: string;
+  readonly onSurfaceAccent: string;
+  readonly onPrimary: string;
+  readonly onPrimaryMuted: string;
   /** Deterministische correcties (voor logs/QC-rapportage; nooit stilzwijgend). */
   readonly corrections: readonly string[];
 }
@@ -237,7 +250,7 @@ export function derivePalette(input: PaletteEngineInput): PaletteEngineResult {
   let background = tinted(input.background, mood.saturation, 0);
   // premium_dark/bold_contrast dalen de achtergrond exact naar de mood-waarde.
   background = hslToHex({ ...hexToHsl(background), l: mood.backgroundLightness });
-  const surface = tinted(input.surface, mood.saturation, mood.surfaceLightnessDelta);
+  let surface = tinted(input.surface, mood.saturation, mood.surfaceLightnessDelta);
   const border = tinted(input.border, mood.saturation, 0);
   let text = input.text;
   let mutedText = tinted(input.mutedText, mood.saturation, 0);
@@ -284,5 +297,53 @@ export function derivePalette(input: PaletteEngineInput): PaletteEngineResult {
     }
   }
 
-  return { primary, secondary, accent, background, surface, text, mutedText, border, corrections };
+  // 3. FASE 1 — SURFACE ALS LEESVLAK. Een surface die bijna net zo donker
+  //    is als de tekst levert onleesbare secties op. Twee gevallen:
+  //    - bedoeld donker (premium_dark): behouden, maar tekst flipt naar licht;
+  //    - per ongeluk donker (afgeleid uit een donkere primary): vervangen
+  //      door een lichte tint van dezelfde hue.
+  const surfaceLightness = hexToOklch(surface).l;
+  if (surfaceLightness < 0.5 && input.mood !== "premium_dark") {
+    const corrected = surfaceFrom(primary, 0.965, 0.14);
+    corrections.push(
+      `Sectievlak was te donker voor donkere tekst (${surface}); vervangen door een lichte tint van de primaire kleur (${corrected}).`
+    );
+    surface = corrected;
+  }
+
+  const surfaceIsDark = hexToOklch(surface).l < 0.6;
+  const onSurface = surfaceIsDark
+    ? ensureContrast(readableOn(surface), surface, 4.5)
+    : ensureContrast(text, surface, 4.5);
+  const onSurfaceMutedRaw = surfaceIsDark
+    ? mixOklch(onSurface, surface, 0.25)
+    : ensureContrast(mutedText, surface, 4.5);
+  const onSurfaceMuted = ensureContrast(onSurfaceMutedRaw, surface, 4.5);
+  const onSurfaceAccent = ensureContrast(surfaceIsDark ? accent : primary, surface, 4.5);
+
+  // 4. Accentband: het vlak is primary, dus de tekst moet daarop leesbaar zijn.
+  const onPrimary = readableOn(primary);
+  // De gedempte variant mag NOOIT zwakker zijn dan AA: haalt de afgeleide tint
+  // het niet (bijvoorbeeld op een verzadigd blauw), dan valt hij terug op de
+  // volledige tekstkleur in plaats van een bijna-leesbare kleur.
+  const subtleOnPrimary = ensureContrast(mixOklch(onPrimary, primary, 0.22), primary, 4.5);
+  const onPrimaryMuted =
+    contrastRatio(subtleOnPrimary, primary) >= 4.5 ? subtleOnPrimary : onPrimary;
+
+  return {
+    primary,
+    secondary,
+    accent,
+    background,
+    surface,
+    text,
+    mutedText,
+    border,
+    onSurface,
+    onSurfaceMuted,
+    onSurfaceAccent,
+    onPrimary,
+    onPrimaryMuted,
+    corrections,
+  };
 }

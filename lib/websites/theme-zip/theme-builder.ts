@@ -1,6 +1,14 @@
 import { applyD3CompositionRendering } from "./composition-renderer";
 import type { DesignPlan } from "../design-plan";
 import {
+  DESIGN_DIRECTIONS,
+  resolveDesignDirection,
+  typeScaleFor,
+  type DesignDirection,
+  type DesignTypeScale,
+} from "../design-direction";
+import { ensureContrast, readableOn } from "./color-oklch";
+import {
   findSlot,
   mediaSlotsFor,
   galleryBlockCount,
@@ -10,6 +18,7 @@ import {
   slotAlt,
 } from "./media-slots";
 import { buildGenericPlaceholderSvg, buildMediaPlaceholderSvgs } from "./placeholders";
+import { THEME_NAME_MAX_LENGTH } from "./theme-structure";
 import { composeBlueprintTemplates, slugifyPageKey } from "./blueprint-composition";
 import type { ContentPlan } from "../content/content-plan";
 import { BLUEPRINT_SECTION_REGISTRY, type BlueprintSectionType } from "../blueprint/section-registry";
@@ -98,6 +107,23 @@ export interface ThemeDesignTokens {
   /** D1: deterministische WCAG-correcties uit de palette engine (voor notes). */
   paletteCorrections: readonly string[];
   /**
+   * FASE 1 — DESIGN INTELLIGENCE. De gekozen ontwerprichting met vaste
+   * verhoudingen (display/body, regellengte, regelhoogte, sectieritme) en
+   * de daaruit berekende fluid typografische trap. De richting is een
+   * token, geen CSS: de theme-builder rendert ermee.
+   */
+  direction: DesignDirection;
+  typeScale: DesignTypeScale;
+  /** Leesbare tekst op het surface-vlak (secties, footer). */
+  onSurface: string;
+  onSurfaceMuted: string;
+  onSurfaceAccent: string;
+  /** Leesbare tekst op het accentband-vlak (primary). */
+  onPrimary: string;
+  onPrimaryMuted: string;
+  /** Leesbare tekst op de accentkleur (knop-hover, accentvlakken). */
+  onAccent: string;
+  /**
    * D2 — ART DIRECTION: de niche-specifieke visuele kunstketen uit het
    * Design Plan. null (alle plannen vóór D2) betekent exact het D0/D1-
    * gedrag: geen composition-setting, geen art-direction.css, geen
@@ -108,7 +134,22 @@ export interface ThemeDesignTokens {
 
 const FALLBACK_TOKENS: Omit<
   ThemeDesignTokens,
-  "primary" | "secondary" | "accent" | "headingScale" | "headingWeight" | "bodyWeight" | "heroLayout" | "styleProfile"
+  | "primary"
+  | "secondary"
+  | "accent"
+  | "headingScale"
+  | "headingWeight"
+  | "bodyWeight"
+  | "heroLayout"
+  | "styleProfile"
+  | "direction"
+  | "typeScale"
+  | "onSurface"
+  | "onSurfaceMuted"
+  | "onSurfaceAccent"
+  | "onPrimary"
+  | "onPrimaryMuted"
+  | "onAccent"
 > = {
   background: "#ffffff",
   surface: "#f7f7f8",
@@ -284,6 +325,12 @@ export function buildThemeDesignTokens(plan: DesignPlan): ThemeDesignTokens {
   const fonts = FONT_STACKS[fontKey];
   const weights = weightsFor(plan.typography.weights);
   const contract = plan.visualContract ?? null;
+  // FASE 1 — DESIGN DIRECTION: één richting met vaste verhoudingen voor het
+  // hele thema. Expliciet uit het plan, anders deterministisch afgeleid uit
+  // artDirection/visualContract/branche (zie design-direction.ts).
+  const directionKey = resolveDesignDirection(plan);
+  const direction = DESIGN_DIRECTIONS[directionKey];
+  const typeScale = typeScaleFor(direction, TYPOGRAPHIC_CURVE_SCALE[contract?.typographicCurve ?? "balanced"]);
 
   const artDirection = plan.artDirection ?? null;
   const resolvedHeroLayout = artDirection?.heroTreatment ?? heroLayoutFor(plan);
@@ -328,6 +375,14 @@ export function buildThemeDesignTokens(plan: DesignPlan): ThemeDesignTokens {
       fontPairing: contract.fontPairing,
       paletteMood: contract.paletteMood,
       paletteCorrections: palette.corrections,
+      direction,
+      typeScale,
+      onSurface: palette.onSurface,
+      onSurfaceMuted: palette.onSurfaceMuted,
+      onSurfaceAccent: palette.onSurfaceAccent,
+      onPrimary: palette.onPrimary,
+      onPrimaryMuted: palette.onPrimaryMuted,
+      onAccent: readableOn(palette.accent),
       artDirection,
     };
   }
@@ -346,6 +401,18 @@ export function buildThemeDesignTokens(plan: DesignPlan): ThemeDesignTokens {
     styleProfile: styleProfileFor(plan.branding.styleDirection, plan.branding.mood),
     // D0-gedrag: het layout-font werd altijd via settings.font_heading
     // (sans/serif) geresolved; mono-plannen renderten feitelijk sans.
+    direction,
+    typeScale,
+    // Zonder visualContract blijft de kleurafleiding exact D0; de
+    // leesbaarheidstokens worden hier wel berekend, want de 8 contrast-
+    // fouten zaten in de STRUCTUUR (donker surface + donkere tekst), niet
+    // in de paletkeuze.
+    onSurface: ensureContrast(base.text, base.surface, 4.5),
+    onSurfaceMuted: ensureContrast(base.mutedText, base.surface, 4.5),
+    onSurfaceAccent: ensureContrast(base.primary, base.surface, 4.5),
+    onPrimary: readableOn(base.primary),
+    onPrimaryMuted: ensureContrast(readableOn(base.primary), base.primary, 4.5),
+    onAccent: readableOn(base.accent),
     fontPairing: fontKey === "serif" ? "system_serif" : "system_sans",
     paletteMood: "neutral_default",
     paletteCorrections: [],
@@ -435,6 +502,24 @@ function blueprintVariantSettings(type: BlueprintSectionType, backgroundDefault:
 // Config
 // ---------------------------------------------------------------------------
 
+/**
+ * Shopify staat maximaal 25 tekens toe voor theme_info.theme_name. Bij een
+ * langere waarde verwijdert Shopify het complete config/settings_schema.json
+ * (bewezen bij een echte theme push op 2026-11-05), waardoor de hele
+ * instellingen-UI leeg is. Daarom kappen we deterministisch af en laten we
+ * nooit een lege of alleen-uit-scheidingstekens bestaande naam achter.
+ */
+export function toThemeName(businessName: string): string {
+  const normalized = businessName.replace(/\s+/g, " ").trim();
+  if (normalized.length === 0) return "Silvijn Studio";
+  if (normalized.length <= THEME_NAME_MAX_LENGTH) return normalized;
+  const cut = normalized
+    .slice(0, THEME_NAME_MAX_LENGTH - 1)
+    .replace(/[\s\u2014\u2013\-,.;:]+$/u, "")
+    .trim();
+  return cut.length > 0 ? `${cut}\u2026` : normalized.slice(0, THEME_NAME_MAX_LENGTH);
+}
+
 function buildSettingsSchema(
   businessName: string,
   contact: WebsiteContactContext,
@@ -444,7 +529,7 @@ function buildSettingsSchema(
   const schema = [
     {
       name: "theme_info",
-      theme_name: `${businessName} — Shopify-thema`,
+      theme_name: toThemeName(businessName),
       theme_version: "1.0.0",
       theme_author: "Silvijn Studio",
       theme_documentation_url: "https://silvijnstudio.com",
@@ -561,6 +646,17 @@ function buildSettingsSchema(
             { value: "normal", label: "Normaal" },
             { value: "spacious", label: "Ruim" },
           ],
+        },
+        {
+          type: "range",
+          id: "section_rhythm",
+          label: "Sectieritme",
+          min: 80,
+          max: 140,
+          step: 5,
+          unit: "%",
+          default: Math.round(tokens.direction.sectionRhythm * 100),
+          info: "Vermenigvuldiger op de sectieafstand: het verticale ritme van de ontwerprichting.",
         },
         {
           type: "range",
@@ -682,6 +778,7 @@ function buildSettingsData(
       body_weight: String(tokens.bodyWeight),
       page_width: Number.parseInt(tokens.containerWidth, 10),
       section_spacing: tokens.sectionSpacing,
+      section_rhythm: Math.round(tokens.direction.sectionRhythm * 100),
       corner_radius: Number.parseInt(tokens.radius, 10),
       hero_layout: tokens.heroLayout,
       ...(tokens.artDirection ? { composition: tokens.artDirection.composition } : {}),
@@ -750,7 +847,31 @@ function buildThemeLayout(spec: WebsiteSpecification, tokens: ThemeDesignTokens)
         --heading-scale: {{ settings.heading_scale | divided_by: 100.0 }};
         --page-width: {{ settings.page_width }}px;
         --radius: {{ settings.corner_radius }}px;
-        --section-spacing: {% case settings.section_spacing %}{% when 'compact' %}48px{% when 'spacious' %}112px{% else %}72px{% endcase %};
+        --section-spacing: calc({% case settings.section_spacing %}{% when 'compact' %}48px{% when 'spacious' %}112px{% else %}72px{% endcase %} * {{ settings.section_rhythm | divided_by: 100.0 }});
+        /* FASE 1 — designrichting "${tokens.direction.key}" (${tokens.direction.label}):
+           vaste verhoudingen als variabelen. De H1 is één fluid clamp met een
+           harde mobiele ondergrens, dus geen vaste desktopmaat op een telefoon. */
+        --h1-size: ${tokens.typeScale.h1};
+        --h2-size: ${tokens.typeScale.h2};
+        --h3-size: ${tokens.typeScale.h3};
+        --h4-size: ${tokens.typeScale.h4};
+        --body-size: ${tokens.typeScale.body};
+        --leading: ${tokens.typeScale.leading};
+        --measure: ${tokens.typeScale.measure};
+        --heading-tracking: ${tokens.direction.headingTracking}em;
+        --heading-align: ${tokens.direction.headingAlign};
+        /* Leesbare tekst per vlak (Fase 1): surface, accentband en accent. */
+        --color-on-surface: ${tokens.onSurface};
+        --color-on-surface-muted: ${tokens.onSurfaceMuted};
+        --color-on-surface-accent: ${tokens.onSurfaceAccent};
+        --color-on-primary: ${tokens.onPrimary};
+        --color-on-primary-muted: ${tokens.onPrimaryMuted};
+        --color-on-accent: ${tokens.onAccent};
+        /* Vlakachtergronden staan LOS van de kleurrollen: een sectie die
+           --color-primary voor zijn kinderen omzet, mag daarmee niet zijn
+           eigen achtergrond veranderen. */
+        --band-bg: ${tokens.primary};
+        --surface-bg: ${tokens.surface};
       }
     {% endstyle %}
     {{ 'theme.css' | asset_url | stylesheet_tag }}
@@ -836,7 +957,7 @@ function buildButtonSnippet(): ThemeFile {
   return { path: "snippets/button.liquid", content: liquid };
 }
 
-function buildThemeCss(): ThemeFile {
+function buildThemeCss(tokens: ThemeDesignTokens): ThemeFile {
   // --section-spacing komt uit de theme-settings (layout/theme.liquid
   // {% style %}-blok): de merchant kan de dichtheid aanpassen en het
   // Design Plan bepaalde de default (settings_data.json).
@@ -847,16 +968,22 @@ html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
   font-family: var(--font-body);
-  font-size: 1rem;
-  line-height: 1.65;
+  font-size: var(--body-size);
+  line-height: var(--leading);
   font-weight: var(--font-weight-body);
   color: var(--color-text);
   background: var(--color-background);
 }
-h1, h2, h3, h4 { font-family: var(--font-heading); font-weight: var(--font-weight-heading); line-height: 1.2; margin: 0 0 .6em; font-size: calc(1em * var(--heading-scale)); }
-h1 { font-size: calc(2.4rem * var(--heading-scale)); }
-h2 { font-size: calc(1.8rem * var(--heading-scale)); }
-h3 { font-size: calc(1.25rem * var(--heading-scale)); }
+/* Koppen: fluid trap uit de designrichting (Fase 1). De clamp regelt de
+   mobiele maat zelf, dus geen aparte mobiele overrides meer nodig. */
+h1, h2, h3, h4 { font-family: var(--font-heading); font-weight: var(--font-weight-heading); line-height: 1.15; margin: 0 0 .6em; letter-spacing: var(--heading-tracking); text-wrap: balance; }
+h1 { font-size: var(--h1-size); line-height: 1.04; }
+h2 { font-size: var(--h2-size); line-height: 1.1; }
+h3 { font-size: var(--h3-size); line-height: 1.25; letter-spacing: calc(var(--heading-tracking) * .5); }
+h4 { font-size: var(--h4-size); line-height: 1.3; letter-spacing: 0; }
+p { max-width: var(--measure); }
+.section__header { text-align: var(--heading-align); }
+${tokens.direction.headingAlign === "center" ? ".section__header p, .hero__inner p, .cta__copy p { margin-inline: auto; }" : ""}
 p { margin: 0 0 1em; }
 a { color: var(--color-primary); text-decoration-thickness: 1px; text-underline-offset: 3px; }
 img { max-width: 100%; height: auto; display: block; }
@@ -979,7 +1106,16 @@ img { max-width: 100%; height: auto; display: block; }
 .form__status--error { color: #b3261e; }
 
 /* Footer */
-.site-footer { background: var(--color-surface); border-top: 1px solid var(--color-border); padding-block: 40px; margin-top: var(--section-spacing); }
+.site-footer {
+  background: var(--surface-bg);
+  border-top: 1px solid var(--color-border);
+  padding-block: 40px;
+  margin-top: var(--section-spacing);
+  color: var(--color-on-surface);
+  --color-text: var(--color-on-surface);
+  --color-muted: var(--color-on-surface-muted);
+  --color-primary: var(--color-on-surface-accent);
+}
 .site-footer__inner { display: grid; gap: 20px; }
 .site-footer p { color: var(--color-muted); margin: 0; font-size: .95rem; }
 
@@ -1007,7 +1143,6 @@ img { max-width: 100%; height: auto; display: block; }
   .site-nav[data-open="true"] { display: flex; }
   .hero--split .hero__inner { grid-template-columns: 1fr; gap: 24px; }
   .hero--split .hero__media { order: -1; }
-  .hero h1 { font-size: calc(1.8rem * var(--heading-scale)); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1056,12 +1191,32 @@ img { max-width: 100%; height: auto; display: block; }
   css += `
 /* --- Fase C: blueprint-compositie --- */
 /* Achtergrondvarianten (bg-default is de natuurlijke achtergrond) */
-.section--bg-accent_band { background: var(--color-surface); border-block: 3px solid var(--color-accent); }
+/* FASE 1 — LEESVLAKKEN. Een band of surface zet niet alleen een achtergrond,
+   maar ook de tekst-, muted- en accentkleur voor alles erbinnen. Zonder deze
+   scope erft donkere tekst een donker vlak en faalt WCAG AA (8 fouten in de
+   nulmeting). */
+.section--bg-accent_band {
+  background: var(--band-bg);
+  color: var(--color-on-primary);
+  border-block: 3px solid var(--color-accent);
+  --color-text: var(--color-on-primary);
+  --color-muted: var(--color-on-primary-muted);
+  --color-primary: var(--color-on-primary);
+}
+.section--bg-accent_band .btn--primary { background: var(--color-accent); color: var(--color-on-accent); }
+.section--bg-accent_band .btn--primary:hover, .section--bg-accent_band .btn--primary:focus { background: var(--color-on-primary); color: var(--band-bg); }
 /* Contrastvlak krijgt subtiel compactere sectieruimte (sectieritme). */
-.section--bg-surface { padding-block: calc(var(--section-spacing) * .92); }
+.section--bg-surface {
+  padding-block: calc(var(--section-spacing) * .92);
+  background: var(--surface-bg);
+  color: var(--color-on-surface);
+  --color-text: var(--color-on-surface);
+  --color-muted: var(--color-on-surface-muted);
+  --color-primary: var(--color-on-surface-accent);
+}
 /* Beeld-achtergrond: ÉCHTE media-laag (afbeelding of abstracte placeholder)
    via de section-background-snippet + contrast-overlay — nooit een gradient-fallback. */
-.section--bg-image { position: relative; background: var(--color-surface); }
+.section--bg-image { position: relative; background: var(--surface-bg); }
 .section--bg-image > .container { position: relative; z-index: 1; }
 .section__background { position: absolute; inset: 0; overflow: hidden; }
 .section__background .theme-media { height: 100%; aspect-ratio: auto; border-radius: 0; }
@@ -1082,6 +1237,13 @@ img { max-width: 100%; height: auto; display: block; }
 .motion--stagger :where(.card-grid, .process-list, .stats-row, .usp-row, .team-grid, .testimonial-grid, .faq-list, .gallery-grid, .projects-grid, .contact-grid, .about__grid) > *:nth-child(7) { animation-delay: .42s; }
 .motion--stagger :where(.card-grid, .process-list, .stats-row, .usp-row, .team-grid, .testimonial-grid, .faq-list, .gallery-grid, .projects-grid, .contact-grid, .about__grid) > *:nth-child(8) { animation-delay: .49s; }
 @keyframes bp-fade-up { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@media (max-width: 600px) {
+  /* FASE 1 — RESPONSIVITEIT: een vaste tweekoloms kaartgrid gaf op 390px
+     regels van ±18 tekens. Onder 600px stapelt alles. */
+  .services--cards .card-grid, .card-grid, .about__grid, .cta--split .cta__inner { grid-template-columns: 1fr; }
+  .hero--immersive { min-height: 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .motion--fade_up, .motion--fade_up *, .motion--stagger, .motion--stagger * { animation: none !important; }
 }
@@ -1094,12 +1256,12 @@ img { max-width: 100%; height: auto; display: block; }
 .hero--band .hero__band { display: none; }
 .hero--band .hero__inner { max-width: 860px; margin-inline: auto; text-align: center; }
 .hero--band .hero__actions { justify-content: center; }
-.hero--band h1 { font-size: calc(1.9rem * var(--heading-scale)); }
+.hero--band h1 { font-size: calc(var(--h1-size) * .72); }
 .hero--minimal { padding-block: calc(var(--section-spacing) * .8); }
 .hero--minimal .hero__band { display: none; }
 .hero--minimal .hero__eyebrow { display: none; }
 .hero--minimal .hero__inner { max-width: 560px; }
-.hero--minimal h1 { font-size: calc(1.7rem * var(--heading-scale)); }
+.hero--minimal h1 { font-size: calc(var(--h1-size) * .82); }
 /* Services-varianten */
 .services--grid .card-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
 .services--cards .card-grid { grid-template-columns: repeat(2, 1fr); }
@@ -1141,7 +1303,7 @@ img { max-width: 100%; height: auto; display: block; }
 .cta__action { margin-top: 20px; }
 /* band: brede gecentreerde uitnodiging met grote knop */
 .cta--band .cta__inner { max-width: 760px; margin-inline: auto; text-align: center; }
-.cta--band .cta__copy h2 { font-size: calc(2rem * var(--heading-scale)); }
+.cta--band .cta__copy h2 { font-size: calc(var(--h2-size) * 1.08); }
 .cta--band .cta__copy p { margin-inline: auto; }
 .cta--band .cta__action { margin-top: 24px; }
 .cta--band .cta__button { padding: 16px 32px; font-size: 1.05rem; }
@@ -1252,6 +1414,15 @@ img { max-width: 100%; height: auto; display: block; }
 .account__status { display: inline-block; padding: 2px 8px; border-radius: 999px; background: var(--color-surface); font-size: .85rem; }
 .visually-hidden { position: absolute !important; overflow: hidden; width: 1px; height: 1px; clip-path: inset(50%); white-space: nowrap; }
 @media (min-width: 900px) { .account__grid { grid-template-columns: 1fr 1fr; } }
+`;
+  // FASE 1 — RESPONSIVITEIT (laatste regel in de bron, dus wint van de
+  // eerdere vaste kolomdefinities): onder 600px stapelt elke tweedekoloms
+  // grid, zodat regels niet naar ±18 tekens worden geperst.
+  css += `
+@media (max-width: 600px) {
+  .services--cards .card-grid, .card-grid, .about__grid, .cta--split .cta__inner, .hero--split .hero__inner { grid-template-columns: 1fr; }
+  .hero--immersive { min-height: 0; }
+}
 `;
   return { path: "assets/theme.css", content: css };
 }
@@ -3799,7 +3970,7 @@ export function buildShopifyTheme(input: BuildThemeInput): BuiltTheme {
   files.push(buildThemeLayout(spec, tokens));
   files.push(buildMetaTagsSnippet());
   files.push(buildButtonSnippet());
-  files.push(buildThemeCss());
+  files.push(buildThemeCss(tokens));
   files.push(buildThemeJs());
   // D2: de art-direction-laag bestaat uitsluitend bij een contract —
   // plannen zonder artDirection krijgen exact de D0/D1-bestandsset.

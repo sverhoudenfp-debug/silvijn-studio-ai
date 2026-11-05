@@ -179,9 +179,22 @@ test("rendering: hero-varianten zijn structureel onderscheidend (niet alleen een
   assert.ok(css.includes(".hero--focused { padding-block: calc(var(--section-spacing) * 1.3); }"));
   // band: lage, gecentreerde band met kleinere kop
   assert.ok(css.includes(".hero--band .hero__inner { max-width: 860px; margin-inline: auto; text-align: center; }"));
-  assert.ok(css.includes(".hero--band h1 { font-size: calc(1.9rem * var(--heading-scale)); }"));
+  // Fase 1: de varianten schalen RELATIEF op de typografische trap van de
+  // ontwerprichting (var(--h1-size)) in plaats van op een eigen rem-waarde,
+  // zodat een andere richting de hele hiërarchie meeneemt.
+  assert.ok(css.includes(".hero--band h1 { font-size: calc(var(--h1-size) * .72); }"));
   // minimal: sobere kernzin met kleinere kop
-  assert.ok(css.includes(".hero--minimal h1 { font-size: calc(1.7rem * var(--heading-scale)); }"));
+  assert.ok(css.includes(".hero--minimal h1 { font-size: calc(var(--h1-size) * .82); }"));
+  // En de varianten blijven onderling onderscheidend.
+  const multipliers = ["focused", "band", "minimal"].map((variant) => {
+    const match = new RegExp(`\\.hero--${variant} h1 \\{ font-size: calc\\(var\\(--h1-size\\) \\* ([.0-9]+)\\); \\}`).exec(css);
+    return match ? Number(match[1]) : null;
+  });
+  assert.ok(multipliers.every((value) => value === null || value < 1), "varianten mogen de trap alleen verkleinen");
+  assert.ok(
+    new Set(multipliers.filter((value) => value !== null)).size >= 2,
+    "minimaal twee varianten moeten een eigen maat hebben",
+  );
 });
 
 test("rendering: cta-varianten hebben een eigen compositie (band gecentreerd, split tweekoloms, closing compact)", () => {

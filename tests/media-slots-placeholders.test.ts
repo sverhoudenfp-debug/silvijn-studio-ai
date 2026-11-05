@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { DESIGN_DIRECTIONS, typeScaleFor } from "../lib/websites/design-direction";
 
 // Memory-mode: nooit productie raken (zelfde patroon als theme-zip-tests).
 delete process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -225,7 +226,15 @@ const TOKENS: ThemeDesignTokens = {
   fontPairing: "system_sans",
   paletteMood: "neutral_default",
   paletteCorrections: [],
-    artDirection: null,
+  artDirection: null,
+  direction: DESIGN_DIRECTIONS.editorial,
+  typeScale: typeScaleFor(DESIGN_DIRECTIONS.editorial),
+  onSurface: "#1c2320",
+  onSurfaceMuted: "#4a524e",
+  onSurfaceAccent: "#1f3a2e",
+  onPrimary: "#ffffff",
+  onPrimaryMuted: "#e6ece8",
+  onAccent: "#1c2320",
 };
 
 test("buildMediaPlaceholderSvgs: vaste set van 4 slot-placeholders in assets/", () => {

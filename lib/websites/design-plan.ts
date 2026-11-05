@@ -4,6 +4,7 @@ import { scanTextForFabricationPatterns } from "./safety-check";
 import { validateBlueprintConsistency, websiteBlueprintSchema } from "./blueprint/blueprint";
 import { visualContractSchema, type VisualContract } from "./visual-contract";
 import { artDirectionSchema, type ArtDirection } from "./art-direction";
+import { DESIGN_DIRECTION_KEYS } from "./design-direction";
 
 /**
  * Design Plan (Fase I.1) — het INTERNE ontwerpplan per project.
@@ -83,6 +84,14 @@ export const designPlanSchema = z.object({
    * art-direction.css (D0/D1-gedrag).
    */
   artDirection: artDirectionSchema.nullable().optional(),
+  /**
+   * FASE 1 — DESIGN INTELLIGENCE: de ontwerprichting met vaste verhoudingen
+   * (display/body, regellengte, regelhoogte, sectieritme). Optioneel en
+   * additief: zonder dit veld leidt de engine de richting af uit
+   * artDirection/visualContract/branche (zie design-direction.ts), zodat
+   * bestaande plannen exact geldig blijven.
+   */
+  designDirection: z.enum(DESIGN_DIRECTION_KEYS).nullable().optional(),
   typography: z.object({
     pairing: z.string().min(3).max(300).nullable(),
     scale: z.string().min(3).max(200).nullable(),

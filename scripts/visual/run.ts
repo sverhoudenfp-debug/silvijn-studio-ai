@@ -1,0 +1,226 @@
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { chromium } from "playwright";
+import axe from "axe-core";
+import { buildShopifyTheme } from "../../lib/websites/theme-zip/theme-builder";
+import { renderThemePageHtml } from "../../lib/websites/theme-zip/html-preview";
+import {
+  GOLDEN_PAGES,
+  goldenContact,
+  goldenDesignPlan,
+  goldenSpecification,
+} from "../../tests/fixtures/golden-hovenier";
+
+/**
+ * VISUELE MEETLAT (fase 0, 2026-11-05) — één commando, één cijfer.
+ *
+ * Bouwt de bevroren hovenierscase met de ECHTE engine, schiet screenshots op
+ * desktop en mobiel, meet tien ontwerpcriteria in de browser en telt de
+ * WCAG-contrastfouten met axe-core. Dezelfde input moet altijd dezelfde
+ * output geven; alleen de engine mag het verschil maken.
+ *
+ * Gebruik: npm run visual -- --label fase1
+ * Output: visual-output/<label>/{theme,html,shots,score.json,score.md}
+ */
+
+const label = (() => {
+  const i = process.argv.indexOf("--label");
+  return i >= 0 ? (process.argv[i + 1] ?? "run") : "run";
+})();
+
+const OUT = join(process.cwd(), "visual-output", label);
+const HTML_DIR = join(OUT, "html");
+const THEME_DIR = join(OUT, "theme");
+const SHOT_DIR = join(OUT, "shots");
+
+const VIEWPORTS = [
+  { name: "desktop", width: 1440, height: 900 },
+  { name: "tablet", width: 768, height: 1024 },
+  { name: "mobiel", width: 390, height: 844 },
+] as const;
+
+async function main() {
+/** Inhoudelijk identiek aan de nulmeting: alleen de engine verandert. */
+const built = buildShopifyTheme({
+  specification: goldenSpecification as never,
+  designPlan: goldenDesignPlan,
+  contact: goldenContact,
+});
+
+rmSync(OUT, { recursive: true, force: true });
+for (const file of built.files) {
+  const target = join(THEME_DIR, file.path);
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, file.content);
+}
+mkdirSync(HTML_DIR, { recursive: true });
+
+const pages: Array<{ slug: string; file: string; bytes: number }> = [];
+for (const page of GOLDEN_PAGES) {
+  const rendered = await renderThemePageHtml(built.files, {
+    template: page.template as never,
+  });
+  const file = join(HTML_DIR, `${page.slug}.html`);
+  writeFileSync(file, rendered.html);
+  pages.push({ slug: page.slug, file, bytes: rendered.html.length });
+}
+
+type Metrics = {
+  viewport: string;
+  h1: number;
+  h1MobileSafe: boolean;
+  h2: number;
+  typeRange: number;
+  words: number;
+  sections: number;
+  distinctLayouts: number;
+  sectionHeightVariation: number;
+  pageScreens: number;
+  measureChars: number;
+  measureOutOfRange: number;
+  measureSamples: number;
+  imageAreaPct: number;
+  realImages: number;
+  placeholders: number;
+  colorCount: number;
+  contrastViolations: number;
+  contrastNodes: string[];
+};
+
+/**
+ * De meting draait IN de browser. Als string doorgegeven: esbuild voorziet
+ * functies van een __name-helper die in de browsercontext niet bestaat, en
+ * een string wordt niet getransformeerd.
+ */
+const MEASURE_SCRIPT = `(() => {
+  const px = (v) => Number.parseFloat(v) || 0;
+  const cs = (el) => getComputedStyle(el);
+  const pageHeight = document.documentElement.scrollHeight;
+  const vw = window.innerWidth;
+  const h1 = document.querySelector("h1");
+  const h2s = [...document.querySelectorAll("h2")];
+  const paras = [...document.querySelectorAll("p")].filter((p) => p.innerText.trim().length >= 60);
+  // Regellengte in tekens: kolombreedte / (fontgrootte x 0,5), de
+  // standaardbenadering van de ch-maat. Onafhankelijk van de tekstlengte,
+  // dus ook bruikbaar bij korte alinea's (waar 'tekens per regel' uit
+  // tekstlengte/regels onbetrouwbaar is).
+  const measureChars = paras.map((p) => {
+    const width = p.getBoundingClientRect().width;
+    const size = px(cs(p).fontSize) || 16;
+    return Math.round(width / (size * 0.5));
+  });
+  const sections = [...document.querySelectorAll("section")];
+  const heights = sections.map((s) => Math.round(s.getBoundingClientRect().height));
+  const mean = heights.reduce((a, c) => a + c, 0) / (heights.length || 1);
+  const sd = Math.sqrt(heights.reduce((a, c) => a + (c - mean) ** 2, 0) / (heights.length || 1));
+  const images = [...document.images];
+  const real = images.filter((i) => i.naturalWidth > 0 && !i.src.startsWith("data:image/svg"));
+  const placeholders = images.filter((i) => i.src.startsWith("data:image/svg") || /placeholder/.test(i.src));
+  const imageArea = real.reduce((a, i) => a + i.getBoundingClientRect().width * i.getBoundingClientRect().height, 0);
+  const textEls = [...document.querySelectorAll("h1,h2,h3,p,li,a,span")].filter((e) => e.innerText.trim());
+  const sizes = textEls.map((e) => px(cs(e).fontSize));
+  const layouts = sections.map((s) => [...s.classList].filter((c) => !/^(section|motion)/.test(c)).join("."));
+  const h1Px = h1 ? Math.round(px(cs(h1).fontSize) * 10) / 10 : 0;
+  return {
+    viewport: vw + "px",
+    h1: h1Px,
+    h1MobileSafe: vw > 500 ? true : h1Px <= 46,
+    h2: h2s.length ? Math.round(Math.max(...h2s.map((h) => px(cs(h).fontSize))) * 10) / 10 : 0,
+    typeRange: sizes.length ? Math.round((Math.max(...sizes) / Math.min(...sizes)) * 10) / 10 : 0,
+    words: document.body.innerText.trim().split(/\\s+/).filter(Boolean).length,
+    sections: sections.length,
+    distinctLayouts: new Set(layouts).size,
+    sectionHeightVariation: Math.round(sd),
+    pageScreens: Math.round((pageHeight / 900) * 10) / 10,
+    measureChars: measureChars.length ? Math.round(measureChars.reduce((a, c) => a + c, 0) / measureChars.length) : 0,
+    measureOutOfRange: measureChars.filter((m) => m < (vw < 600 ? 25 : 40) || m > (vw < 600 ? 50 : 90)).length,
+    measureSamples: measureChars.length,
+    imageAreaPct: Math.round((imageArea / (vw * pageHeight)) * 100),
+    realImages: real.length,
+    placeholders: placeholders.length,
+    colorCount: new Set(textEls.map((e) => cs(e).color)).size,
+    contrastViolations: 0,
+    contrastNodes: [],
+  };
+})()`;
+
+const browser = await chromium.launch();
+const results: Metrics[] = [];
+
+for (const viewport of VIEWPORTS) {
+  for (const page of pages) {
+    const tab = await browser.newPage({ viewport });
+    await tab.goto("file://" + page.file);
+    await tab.waitForTimeout(300);
+
+    const metrics = (await tab.evaluate(MEASURE_SCRIPT)) as Metrics;
+    metrics.contrastNodes = [];
+
+    // Contrast meten met de echte axe-core-regel (WCAG AA, kleine tekst).
+    if (viewport.name === "desktop" && page.slug === "home") {
+      await tab.addScriptTag({ content: axe.source });
+      const axeResult = await tab.evaluate(async () => {
+        const res = await (window as unknown as {
+          axe: { run: (o: unknown) => Promise<{ violations: Array<{ id: string; nodes: Array<{ target: string[]; html: string; failureSummary?: string }> }> }> };
+        }).axe.run({ runOnly: { type: "tag", values: ["wcag2aa"] } });
+        const color = res.violations.find((v) => v.id === "color-contrast");
+        return color ? color.nodes.map((n) => `${n.target.join(" ")} :: ${n.failureSummary ?? ""}`) : [];
+      });
+      metrics.contrastViolations = axeResult.length;
+      metrics.contrastNodes = axeResult.slice(0, 12);
+    }
+
+    results.push({ ...metrics, viewport: `${viewport.name} ${viewport.width}` });
+
+    if (page.slug === "home" || page.slug === "contact") {
+      mkdirSync(SHOT_DIR, { recursive: true });
+      await tab.screenshot({
+        path: join(SHOT_DIR, `${page.slug}-${viewport.name}.png`),
+        fullPage: true,
+      });
+    }
+    await tab.close();
+  }
+}
+await browser.close();
+
+writeFileSync(join(OUT, "score.json"), JSON.stringify({ label, pages, results }, null, 2));
+
+const desktop = results.find((r) => r.viewport.startsWith("desktop"))!;
+const mobile = results.find((r) => r.viewport.startsWith("mobiel"))!;
+
+const md = [
+  `# Visuele score — ${label}`,
+  "",
+  `Bestanden: ${built.files.length} · HTML: ${pages.map((p) => `${p.slug} ${p.bytes}B`).join(", ")}`,
+  "",
+  "| criterium | desktop | mobiel |",
+  "|---|---|---|",
+  `| H1 | ${desktop.h1}px | ${mobile.h1}px |`,
+  `| H1 mobiel veilig (≤46px) | ${desktop.h1MobileSafe} | ${mobile.h1MobileSafe} |`,
+  `| grootste H2 | ${desktop.h2}px | ${mobile.h2}px |`,
+  `| typebereik | ${desktop.typeRange}× | ${mobile.typeRange}× |`,
+  `| woorden | ${desktop.words} | ${mobile.words} |`,
+  `| secties / layouts | ${desktop.sections} / ${desktop.distinctLayouts} | ${mobile.sections} / ${mobile.distinctLayouts} |`,
+  `| sectiehoogte-variatie | ${desktop.sectionHeightVariation} | ${mobile.sectionHeightVariation} |`,
+  `| paginahoogte (schermen) | ${desktop.pageScreens} | ${mobile.pageScreens} |`,
+  `| regellengte (tekens, ${desktop.measureSamples} paragrafen) | ${desktop.measureChars} | ${mobile.measureChars} |`,
+  `| regellengte buiten bandbreedte | ${desktop.measureOutOfRange} | ${mobile.measureOutOfRange} |`,
+  `| beeldarea | ${desktop.imageAreaPct}% | ${mobile.imageAreaPct}% |`,
+  `| echte beelden / placeholders | ${desktop.realImages} / ${desktop.placeholders} | ${mobile.realImages} / ${mobile.placeholders} |`,
+  `| tekstkleuren | ${desktop.colorCount} | ${mobile.colorCount} |`,
+  `| contrastfouten (axe, home) | ${desktop.contrastViolations} | - |`,
+  "",
+  desktop.contrastNodes.length ? "## Contrastfouten" : "## Contrastfouten\n\nGeen.",
+  ...desktop.contrastNodes.map((n) => `- ${n}`),
+  "",
+].join("\n");
+
+writeFileSync(join(OUT, "score.md"), md);
+console.log(md);
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

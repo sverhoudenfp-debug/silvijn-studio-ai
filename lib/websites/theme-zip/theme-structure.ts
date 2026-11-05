@@ -117,6 +117,28 @@ export const THEME_REQUIRED_FILES: readonly string[] = [
  * meta-description) en de title-fallbackketen worden gelezen. Defaults komen
  * uitsluitend uit geverifieerde lead-/specificatiedata.
  */
+/**
+ * Shopify weigert config/settings_schema.json volledig wanneer theme_info.theme_name
+ * langer is dan 25 tekens (bevestigd bij een echte theme push, 2026-11-05:
+ * "Section 1: theme_name is too long (max 25 characters)"). Het hele bestand
+ * wordt dan vervangen door een lege array en de instellingen-UI verdwijnt.
+ */
+export const THEME_NAME_MAX_LENGTH = 25;
+
+/** Kleur- en layoutsleutels die layout/theme.liquid rechtstreeks als CSS-variabele uitleest. */
+export const THEME_REQUIRED_VISUAL_SETTING_IDS: readonly string[] = [
+  "color_primary",
+  "color_secondary",
+  "color_accent",
+  "color_background",
+  "color_text",
+  "color_surface",
+  "color_border",
+  "color_muted",
+  "font_pairing",
+  "corner_radius",
+];
+
 export const THEME_REQUIRED_SETTING_IDS: readonly string[] = [
   // D1 — Design Token Engine: font-pairing en paletstemming zijn
   // verplichte theme-settings (net als kleuren); defaults zijn zonder

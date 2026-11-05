@@ -6,6 +6,8 @@ import {
   THEME_LIQUID_BLOCK_TAGS,
   THEME_REQUIRED_FILES,
   THEME_REQUIRED_SETTING_IDS,
+  THEME_REQUIRED_VISUAL_SETTING_IDS,
+  THEME_NAME_MAX_LENGTH,
   THEME_TEXT_EXTENSIONS,
   THEME_ZIP_MAX_FILE_BYTES,
   THEME_ZIP_MAX_FILES,
@@ -115,6 +117,11 @@ function assertSettingsConfig(parsed: Map<string, unknown>, errors: string[]): v
     } else {
       if (typeof first.theme_name !== "string" || first.theme_name.trim().length === 0) {
         errors.push("theme_info.theme_name ontbreekt.");
+      } else if (first.theme_name.length > THEME_NAME_MAX_LENGTH) {
+        // Shopify-upload faalt hierop en verwijdert het hele bestand.
+        errors.push(
+          `theme_info.theme_name is te lang (${first.theme_name.length} tekens, max ${THEME_NAME_MAX_LENGTH}).`
+        );
       }
       if (typeof first.theme_version !== "string" || first.theme_version.trim().length === 0) {
         errors.push("theme_info.theme_version ontbreekt.");
@@ -785,6 +792,18 @@ export function validateThemeFiles(files: ThemeFile[], options?: { trustedClaims
       if (!definedIds.has(requiredId)) {
         errors.push(`Setting "${requiredId}" ontbreekt in config/settings_schema.json (vereist voor meta-tags/SEO).`);
       }
+    }
+    for (const requiredId of THEME_REQUIRED_VISUAL_SETTING_IDS) {
+      if (!definedIds.has(requiredId)) {
+        errors.push(`Setting "${requiredId}" ontbreekt in config/settings_schema.json (vereist voor de weergave).`);
+      }
+    }
+    // Een schema met alleen theme_info levert een lege instellingen-UI op.
+    const groupCount = schemaForSettings.filter(
+      (group) => (group as Record<string, unknown>)?.name !== "theme_info"
+    ).length;
+    if (groupCount === 0) {
+      errors.push("config/settings_schema.json bevat geen instellingensecties (alleen theme_info).");
     }
   }
   const metaTags = files.find((f) => f.path === "snippets/meta-tags.liquid");

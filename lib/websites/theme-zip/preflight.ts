@@ -7,6 +7,11 @@ import {
   type ThemeFile,
 } from "./theme-structure";
 import { validateThemeFiles } from "./theme-validation";
+import {
+  findIdentityLeaks,
+  identityConflictsWithRetired,
+  type BusinessIdentity,
+} from "../identity-isolation";
 
 /**
  * PRODUCTION THEME PREFLIGHT / THEME CERTIFICATION (2026-09-21).
@@ -375,7 +380,7 @@ function localeKeyExists(locale: unknown, key: string): boolean {
  */
 export function runDeterministicPreflight(
   files: ThemeFile[],
-  options?: { trustedClaims?: readonly string[] }
+  options?: { trustedClaims?: readonly string[]; identity?: BusinessIdentity }
 ): ThemePreflightResult {
   const checks: ThemePreflightCheck[] = [];
 
@@ -395,6 +400,40 @@ export function runDeterministicPreflight(
       note,
     });
   };
+
+  // ---- 0. Identiteitsisolatie (W4, 2026-11-05)
+  //     Een website hoort precies één bedrijf: het bedrijf van dít project.
+  //     Gegevens van een ander bedrijf (eerdere testcase, demo, fixture) zijn
+  //     een harde fout, nooit een waarschuwing.
+  if (options?.identity) {
+    const identity = options.identity;
+    const errors: string[] = [];
+    for (const conflict of identityConflictsWithRetired(identity)) {
+      errors.push(
+        `De eigen identiteit bevat een gegeven van een gepensioneerd bedrijf (${conflict.kind}: ${conflict.value}); dit project mag die identiteit niet dragen.`
+      );
+    }
+    for (const file of files) {
+      if (!THEME_TEXT_EXTENSIONS.has(extensionOf(file.path))) continue;
+      if (file.path.startsWith("assets/")) continue;
+      const content = file.content ?? file.bytes?.toString() ?? "";
+      if (!content) continue;
+      for (const leak of findIdentityLeaks(content, identity, file.path)) {
+        errors.push(
+          `Vreemde bedrijfsidentiteit in ${leak.location}: ${leak.kind} "${leak.value}" hoort niet bij ${identity.businessName}.`
+        );
+      }
+    }
+    push(
+      "identity_isolation",
+      "Identiteitsisolatie (geen gegevens van andere bedrijven)",
+      errors,
+      [],
+      errors.length === 0
+        ? `Alle contactgegevens in het thema horen bij ${identity.businessName}; ontbrekende gegevens blijven ontbreken.`
+        : undefined
+    );
+  }
 
   // ---- 1. Bestaand fabricage-net (structureel + anti-fabricatie)
   const net = validateThemeFiles(files, { trustedClaims: options?.trustedClaims });
@@ -1037,7 +1076,7 @@ export async function runExternalThemeCheck(files: ThemeFile[]): Promise<Externa
  */
 export async function runFullPreflight(
   files: ThemeFile[],
-  options?: { trustedClaims?: readonly string[] }
+  options?: { trustedClaims?: readonly string[]; identity?: BusinessIdentity }
 ): Promise<ThemePreflightResult> {
   const result = runDeterministicPreflight(files, options);
   const external = await runExternalThemeCheck(files);
@@ -1071,7 +1110,7 @@ const MAX_REPAIR_ROUNDS = 2;
  */
 export async function certifyThemeFiles(
   files: ThemeFile[],
-  options?: { trustedClaims?: readonly string[] }
+  options?: { trustedClaims?: readonly string[]; identity?: BusinessIdentity }
 ): Promise<{ files: ThemeFile[]; result: ThemePreflightResult; repairs: ThemeRepair[] }> {
   let current = files;
   const repairs: ThemeRepair[] = [];

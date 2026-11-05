@@ -203,7 +203,17 @@ export class ThemeZipService {
     // preflight (deterministische contractchecks + extern Shopify Theme
     // Check + veilige zelfreparatie) is doorstaan. De ZIP-bytes komen uit
     // de gecertificeerde bestanden: wat bewezen is, is wat geleverd wordt.
-    const certification = await certifyThemeFiles(built.files, { trustedClaims });
+    // W4 (2026-11-05): identiteitsisolatie. De ZIP hoort precies één bedrijf
+    // te bevatten: dit lead + deze specification. Gegevens van een ander
+    // bedrijf (eerdere testcase, demo, fixture) blokkeren de levering.
+    const identity = {
+      businessName: website.specification.business.businessName,
+      email: lead.email,
+      phone: lead.phone,
+      website: lead.website ?? null,
+      city: lead.city,
+    };
+    const certification = await certifyThemeFiles(built.files, { trustedClaims, identity });
     const zipBytes = await createThemeZip(certification.files);
 
     const preflightReport: ThemeZipArtifactPreflight = {

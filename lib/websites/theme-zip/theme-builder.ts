@@ -881,6 +881,7 @@ function buildThemeLayout(spec: WebsiteSpecification, tokens: ThemeDesignTokens)
       }
     {% endstyle %}
     {{ 'theme.css' | asset_url | stylesheet_tag }}
+    {{ 'design-system.css' | asset_url | stylesheet_tag }}
     ${tokens.artDirection ? `    {{ 'art-direction.css' | asset_url | stylesheet_tag }}
 ` : ""}    <script src="{{ 'theme.js' | asset_url }}" defer></script>
   </head>
@@ -1641,6 +1642,175 @@ function buildThemeJs(): ThemeFile {
  * Motion overschrijft uitsluitend animation-name van de bestaande
  * bp-fade-up-keyframes; prefers-reduced-motion geldt onverkort.
  */
+/**
+ * W4: design-system-laag. Bestaat altijd (ook zonder art direction), want dit
+ * is de typografische en compositorische basiskwaliteit — geen smaaklaag.
+ */
+function buildDesignSystemCss(): ThemeFile {
+  return { path: "assets/design-system.css", content: `
+/**
+ * DESIGN SYSTEM LAAG (W4, 5 november 2026).
+ *
+ * Doel: de gegenereerde site moet als maatwerk voelen, niet als een sjabloon.
+ * Deze laag vervangt geen tokens of art direction; hij zet de typografische
+ * maat, de hero-verhoudingen, het sectieritme en de paginacomposities neer
+ * waarbinnen de art direction (kleur, kaartstijl, decoratie) vrij blijft.
+ *
+ * Uitgangspunten (bewezen ontwerppraktijk, geen smaak):
+ * 1. Een kop is nooit smaller dan 18-28 tekens per regel; geen forced breaks.
+ * 2. Een tekstkolom is 46-68 tekens breed, nooit smaller.
+ * 3. Beeld en tekst hebben een bewuste verhouding per hero-variant (geen 50/50
+ *    toevalligheid): redactioneel 58/42, asymmetrisch 62/38, klassiek 100/0
+ *    met band, beeldgericht 100 procent beeld met overlay.
+ * 4. Mobiel erft dezelfde hiërarchie met kleinere maten; nooit horizontaal
+ *    scrollen, nooit een merknaam die over twee regels breekt.
+ * 5. Secties wisselen van ritme (vol, ingesprongen, smal, breed) in plaats van
+ *    vijf keer dezelfde kaartenrij.
+ */
+
+/* ---------- 1. Header: compact, één regel merknaam, rustige actie ---------- */
+.site-header__inner { display: flex; align-items: center; gap: clamp(8px, 1.4vw, 20px); justify-content: space-between; padding-block: 12px; min-height: 66px; flex-wrap: nowrap; }
+.site-header__brand { font-family: var(--font-heading); font-weight: var(--font-weight-heading); font-size: clamp(1.02rem, 1.15vw, 1.18rem); letter-spacing: -0.012em; line-height: 1.1; color: var(--color-text); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46%; flex: 0 1 auto; }
+.site-header__actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.site-header__cta { padding: 9px 16px; font-size: 0.92rem; line-height: 1; white-space: nowrap; }
+.header-nav-toggle { width: 40px; height: 40px; justify-content: center; padding: 0; }
+.site-nav a { text-underline-offset: 0.35em; }
+
+@media (max-width: 989px) {
+  .site-nav { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.6rem; background: var(--color-background); opacity: 0; pointer-events: none; transition: opacity 0.18s ease; }
+  .site-nav[data-open="true"] { opacity: 1; pointer-events: auto; }
+  .site-nav a { font-size: clamp(1.25rem, 5vw, 1.6rem); }
+}
+@media (max-width: 640px) {
+  .site-header__inner { min-height: 56px; padding-block: 10px; }
+  .site-header__brand { font-size: 1.04rem; max-width: 50%; letter-spacing: -0.015em; }
+  .site-header__cta { padding: 9px 12px; font-size: 0.82rem; }
+  .site-header__actions { gap: 6px; }
+}
+
+/* ---------- 2. Hero: vier bewuste composities ---------- */
+.hero { padding-block: clamp(44px, 6vw, 104px); }
+.hero__inner { display: grid; grid-template-columns: minmax(0, 1fr); gap: clamp(24px, 3.6vw, 56px); max-width: none; align-items: end; }
+.hero__content { max-width: 58ch; }
+.hero h1 { max-width: 24ch; overflow-wrap: break-word; hyphens: none; text-wrap: balance; }
+.hero__content > p:not(.hero__eyebrow) { max-width: 48ch; font-size: clamp(1.04rem, 0.98rem + 0.32vw, 1.19rem); line-height: 1.65; }
+.hero__eyebrow { font-size: 0.78rem; letter-spacing: 0.16em; margin-bottom: 14px; }
+.hero__actions { gap: 10px; margin-top: 6px; }
+
+/* Redactioneel (focused): tekst links met brede maat, staand beeld rechts */
+.hero--focused .hero__inner { grid-template-columns: minmax(0, 1.18fr) minmax(0, 0.82fr); align-items: end; }
+.hero--focused h1 { font-size: clamp(2.25rem, 1.15rem + 3.5vw, 4rem); }
+.hero--focused .hero__media { aspect-ratio: 3 / 4; align-self: stretch; }
+.hero--focused.hero--no-media .hero__inner { grid-template-columns: minmax(0, 1fr); }
+
+/* Asymmetrisch (split): tekst 60 procent, beeld 40 procent, beeld iets hoger */
+.hero--split .hero__inner { grid-template-columns: minmax(0, 1.32fr) minmax(0, 0.68fr); align-items: center; }
+.hero--split h1 { font-size: clamp(2.05rem, 1.1rem + 2.9vw, 3.45rem); max-width: 22ch; }
+.hero--split .hero__media { aspect-ratio: 4 / 5; }
+.hero--split.hero--no-media .hero__inner { grid-template-columns: minmax(0, 1fr); }
+.hero--split.hero--no-media h1 { max-width: 26ch; }
+
+/* Klassiek (centered): symmetrisch, royale maat, beeldband onder de tekst */
+.hero--centered .hero__inner { max-width: 62rem; margin-inline: auto; text-align: center; }
+.hero--centered h1 { font-size: clamp(2.35rem, 1.15rem + 3.7vw, 4.2rem); max-width: 24ch; margin-inline: auto; }
+.hero--centered .hero__content { margin-inline: auto; }
+.hero--centered .hero__actions { justify-content: center; }
+.hero--centered .hero__content > p:not(.hero__eyebrow) { margin-inline: auto; }
+
+/* Beeldgericht (immersive): breed beeld met de kop als overlappend redactioneel
+   vlak. Het tekstvlak houdt zijn eigen achtergrond, dus de leesbaarheid blijft
+   gelijk, ongeacht de foto (geen witte tekst op een willekeurige foto). */
+.hero--immersive { padding-block: clamp(20px, 3vw, 40px) clamp(44px, 6vw, 96px); }
+.hero--immersive .hero__band { margin: 0; aspect-ratio: 16 / 8; border-radius: var(--radius); }
+.hero--immersive .hero__inner { position: relative; z-index: 1; max-width: 44rem; margin-top: calc(-1 * clamp(48px, 7vw, 112px)); margin-inline-start: clamp(0px, 4vw, 72px); background: var(--color-background); border: 1px solid var(--color-border); border-radius: var(--radius); padding: clamp(22px, 3.2vw, 44px); }
+.hero--immersive.hero--no-media .hero__inner { margin-top: 0; border: none; padding: 0; background: transparent; }
+.hero--immersive h1 { font-size: clamp(2.2rem, 1.1rem + 3.6vw, 4rem); max-width: 22ch; }
+
+/* Media in de hero: vaste verhoudingen, geen uitgerekte beelden */
+.hero__media, .hero__band { margin: 0; overflow: hidden; border-radius: var(--radius); }
+.hero__media img, .hero__band img, .hero__media .theme-media, .hero__band .theme-media { width: 100%; height: 100%; display: block; object-fit: cover; }
+.hero__band { margin-top: clamp(28px, 4vw, 56px); aspect-ratio: 16 / 9; }
+
+/* ---------- 3. Paginakop: één duidelijke H1, geen gedrongen kolom ---------- */
+.page-header { padding-block: clamp(48px, 6vw, 96px) clamp(24px, 3vw, 48px); }
+.page-header__title { max-width: 24ch; text-wrap: balance; hyphens: none; }
+.page-header__intro { max-width: 56ch; }
+.page-header__eyebrow { letter-spacing: 0.16em; }
+
+/* ---------- 4. Sectieritme en tekstmaat ---------- */
+.section { padding-block: clamp(52px, 6.4vw, 108px); }
+.section--tight { padding-block: clamp(34px, 4vw, 64px); }
+.section__header { max-width: 62ch; margin-bottom: clamp(28px, 3.4vw, 52px); }
+.section__header h2 { max-width: 30ch; font-size: clamp(1.6rem, 1.15rem + 1.7vw, 2.55rem); line-height: 1.12; text-wrap: balance; }
+.section__header p { max-width: 58ch; line-height: 1.65; }
+.rte, .d3-prose { max-width: 66ch; }
+.rte p, .d3-prose p { line-height: 1.7; }
+h1, h2, h3 { overflow-wrap: break-word; hyphens: none; }
+.d3-section { overflow-wrap: break-word; }
+
+/* Secties wisselen van breedte: geen vijf identieke blokken onder elkaar */
+.section:nth-of-type(odd) .section__header { margin-inline-start: 0; }
+.section:nth-of-type(even) .section__header { margin-inline-start: clamp(0px, 4vw, 72px); }
+@media (max-width: 749px) { .section:nth-of-type(even) .section__header { margin-inline-start: 0; } }
+
+/* ---------- 5. Diensten en lijsten: redactionele rijen in plaats van kaartjes ---------- */
+.d3-editorial_list .d3-items { gap: 0; }
+.d3-editorial_list .d3-unit, .d3-numbered_list .d3-unit { border-top: 1px solid var(--color-border); padding-block: clamp(18px, 2.4vw, 30px); }
+.d3-editorial_list .d3-unit:last-child, .d3-numbered_list .d3-unit:last-child { border-bottom: 1px solid var(--color-border); }
+.d3-editorial_list .d3-item { grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr); gap: clamp(16px, 3vw, 48px); align-items: baseline; }
+.d3-editorial_list .d3-item:not(:has(.d3-item-media)) { grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr); }
+.d3-editorial_list .d3-item h3 { margin: 0; font-size: clamp(1.15rem, 1rem + 0.7vw, 1.55rem); }
+.d3-numbered_list .d3-number { font-size: clamp(1.05rem, 0.9rem + 0.5vw, 1.3rem); opacity: 0.55; }
+.d3-featured_service .d3-feature-main h3 { font-size: clamp(1.4rem, 1.1rem + 1.1vw, 2rem); }
+.d3-bento .d3-unit { padding: clamp(18px, 2.4vw, 32px); }
+.d3-horizontal .d3-items { gap: clamp(20px, 3vw, 44px); }
+
+/* ---------- 6. Over ons: leesbare verhaallijn met rustpunten ---------- */
+.d3-statement h2, .d3-contact-large h2 { max-width: 26ch; }
+.d3-story { max-width: 64ch; }
+.d3-story > li { padding-block: clamp(12px, 1.6vw, 20px); }
+.d3-quote p { font-size: clamp(1.25rem, 1rem + 1vw, 1.9rem); line-height: 1.42; }
+
+/* ---------- 7. FAQ: rustige tweekoloms opbouw met plakkende kop ---------- */
+@media (min-width: 990px) {
+  .d3-floating_card .d3-heading, .d3-floating_card .d3-layout > header { position: sticky; top: 96px; }
+  .d3-floating_card .d3-layout { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: clamp(24px, 4vw, 64px); align-items: start; }
+  .d3-floating_card .d3-items { gap: 0; }
+  .d3-floating_card .d3-unit { border-top: 1px solid var(--color-border); padding-block: clamp(14px, 1.8vw, 22px); }
+  .d3-floating_card .d3-unit:last-child { border-bottom: 1px solid var(--color-border); }
+}
+
+/* ---------- 8. Contact: informatie en formulier als één geheel ---------- */
+.d3-contact-split, .d3-contact-image { align-items: start; gap: clamp(24px, 4vw, 64px); }
+.d3-contact-split .d3-details { display: grid; gap: 10px; }
+.d3-form input, .d3-form textarea { min-height: 46px; padding: 12px 14px; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-background); color: var(--color-text); font: inherit; }
+.d3-form label { font-size: 0.9rem; letter-spacing: 0.01em; }
+.d3-form .btn { min-height: 48px; }
+
+/* ---------- 9. Mobiel: dezelfde hiërarchie, compacte maten ---------- */
+@media (max-width: 749px) {
+  .hero { padding-block: clamp(32px, 7vw, 52px); }
+  .hero__inner { gap: 24px; }
+  .hero h1, .hero--focused h1, .hero--split h1, .hero--centered h1, .hero--immersive h1 { font-size: clamp(1.85rem, 1.2rem + 3.4vw, 2.5rem); line-height: 1.1; max-width: none; }
+  .hero--focused .hero__inner, .hero--split .hero__inner { grid-template-columns: minmax(0, 1fr); }
+  .hero--focused .hero__media, .hero--split .hero__media, .hero__band { aspect-ratio: 4 / 3; margin-top: 8px; }
+  .hero__content > p:not(.hero__eyebrow) { font-size: 1.02rem; max-width: none; }
+  .page-header { padding-block: 40px 24px; }
+  .page-header__title { max-width: none; }
+  .section { padding-block: clamp(40px, 9vw, 60px); }
+  .section__header { margin-bottom: 24px; }
+  .section__header h2 { font-size: clamp(1.5rem, 1.1rem + 2vw, 1.95rem); }
+  .d3-editorial_list .d3-item, .d3-editorial_list .d3-item:not(:has(.d3-item-media)) { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .btn { min-height: 46px; }
+}
+
+/* ---------- 10. Toegankelijkheid en detailafwerking ---------- */
+:where(a, button, input, textarea, select):focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.site-header__brand:hover { color: var(--color-primary); }
+img { max-width: 100%; }
+` };
+}
+
 function buildArtDirectionCss(tokens: ThemeDesignTokens): ThemeFile | null {
   const art = tokens.artDirection;
   if (art == null) return null;
@@ -2568,7 +2738,7 @@ function buildHeroSection(): ThemeFile {
     assign hero_has_media = true
   endif
 -%}
-<section class="hero hero--{{ hero_layout }}{% if hero_layout == 'split' and hero_has_media == false %} hero--no-media{% endif %} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
+<section class="hero hero--{{ hero_layout }}{% if hero_has_media == false %} hero--no-media{% endif %}{% if hero_has_media %} hero--has-media{% endif %} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
   {%- if section.settings.background == 'image' -%}
     {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.image_alt, placeholder_svg: 'placeholder.svg' -%}
   {%- endif -%}
@@ -2589,14 +2759,16 @@ function buildHeroSection(): ThemeFile {
           {%- endif -%}
         </div>
       </div>
-      {%- if hero_layout == 'split' -%}
+      {%- if hero_layout == 'split' or hero_layout == 'focused' -%}
         <div class="hero__media">
-          {%- render 'theme-media', image: section.settings.image, image_mobile: section.settings.image_mobile, asset: section.settings.image_asset, asset_w: section.settings.image_asset_width, asset_h: section.settings.image_asset_height, aspect: 'wide', alt: section.settings.image_alt, sizes: '(min-width: 990px) 50vw, 100vw', loading: 'eager', fetchpriority: 'high', placeholder_svg: 'placeholder-hero.svg' -%}
+          {%- render 'theme-media', image: section.settings.image, image_mobile: section.settings.image_mobile, asset: section.settings.image_asset, asset_w: section.settings.image_asset_width, asset_h: section.settings.image_asset_height, aspect: 'portrait', alt: section.settings.image_alt, sizes: '(min-width: 990px) 40vw, 100vw', loading: 'eager', fetchpriority: 'high', placeholder_svg: 'placeholder-hero.svg' -%}
         </div>
       {%- endif -%}
     </div>
-    {%- comment -%} W3: geen lege mediaband onder de hero als er nog geen beeld is. {%- endcomment -%}
-    {%- if hero_has_media and hero_layout != 'split' and hero_layout != 'immersive' -%}
+    {%- comment -%} W4: beeldgerichte hero's krijgen een brede band (het tekstvlak
+       schuift er in de CSS overheen); klassiek krijgt de band onder de tekst.
+       Geen lege mediaband als er nog geen beeld is. {%- endcomment -%}
+    {%- if hero_has_media and hero_layout != 'split' and hero_layout != 'focused' -%}
       <div class="hero__band">
         {%- render 'theme-media', image: section.settings.image, image_mobile: section.settings.image_mobile, asset: section.settings.image_asset, asset_w: section.settings.image_asset_width, asset_h: section.settings.image_asset_height, aspect: 'wide', alt: section.settings.image_alt, sizes: '100vw', loading: 'eager', fetchpriority: 'high', placeholder_svg: 'placeholder-hero.svg' -%}
       </div>
@@ -2683,7 +2855,10 @@ function buildThemeMediaSnippet(): ThemeFile {
   </div>
 {%- else -%}
   <div class="theme-media theme-media--{{ media_aspect }} theme-media--placeholder">
-    <img src="{{ fallback_svg | asset_url }}" alt="" role="presentation" width="{{ placeholder_w }}" height="{{ placeholder_h }}" loading="{{ media_loading }}" decoding="async">
+    {%- comment -%} W4: een placeholder is geen decoratie maar de tijdelijke
+       inhoud van dit beeldvlak. Zonder alt-tekst is de afbeelding voor
+       hulptechnologie een gat; we geven de bedoelde alt-tekst mee. {%- endcomment -%}
+    <img src="{{ fallback_svg | asset_url }}" alt="{{ alt | default: 'Sfeerbeeld' | escape }}" width="{{ placeholder_w }}" height="{{ placeholder_h }}" loading="{{ media_loading }}" decoding="async">
   </div>
 {%- endif -%}
 `;
@@ -4248,7 +4423,8 @@ function homePageSectionInstances(
       cta_link: "/pages/contact",
       cta_secondary_label: spec.content.ctaSecondaryText,
       cta_secondary_link: "#main-content",
-      image_alt: slotAlt(heroSlot, null),
+      // W4: een afbeelding zonder alt-tekst is een toegankelijkheidsfout.
+      image_alt: slotAlt(heroSlot, null) ?? `Sfeerbeeld bij ${spec.business.businessName}`,
     },
   };
   order.push("hero");
@@ -4275,7 +4451,7 @@ function homePageSectionInstances(
       settings: {
         heading: `Over ${spec.business.businessName}`,
         body: `<p>${escapeHtml(spec.content.about)}</p>`,
-        image_alt: slotAlt(aboutSlot, null),
+        image_alt: slotAlt(aboutSlot, null) ?? `Sfeerbeeld bij ${spec.business.businessName}`,
       },
     };
     order.push("about");
@@ -4546,6 +4722,7 @@ export function buildShopifyTheme(input: BuildThemeInput): BuiltTheme {
   files.push(buildMetaTagsSnippet());
   files.push(buildButtonSnippet());
   files.push(buildThemeCss(tokens));
+  files.push(buildDesignSystemCss());
   files.push(buildThemeJs());
   // D2: de art-direction-laag bestaat uitsluitend bij een contract —
   // plannen zonder artDirection krijgen exact de D0/D1-bestandsset.

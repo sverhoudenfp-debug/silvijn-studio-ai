@@ -248,7 +248,7 @@ function instanceToSectionEntry(
           cta_label: resolveSlotText(units, "cta_label", instance.cta?.label ?? spec.content.ctaPrimaryText),
           cta_link: ctaLink ?? "/pages/contact",
           cta_secondary_label: resolveSlotText(units, "cta_secondary_label", spec.content.ctaSecondaryText),
-          image_alt: firstMedia?.alt ?? null,
+          image_alt: firstMedia?.alt ?? (firstMedia ? `Sfeerbeeld bij ${spec.business.businessName}` : null),
         },
       };
     }
@@ -335,7 +335,12 @@ function instanceToSectionEntry(
           heading: resolveSlotText(units, "heading", `Over ${spec.business.businessName}`),
           body: paragraphHtml(bodyRaw),
           image_position: "right",
-          image_alt: resolveSlotText(units, "alt_text", firstMedia?.alt ?? null),
+          // W4: alt-tekst is verplicht zodra er een afbeelding staat; zonder
+          // tekst in het plan valt hij terug op een neutrale, feitelijke
+          // omschrijving (geen verzonnen beeldinhoud).
+          image_alt:
+            resolveSlotText(units, "alt_text", firstMedia?.alt ?? null) ??
+            (firstMedia ? `Sfeerbeeld bij ${spec.business.businessName}` : null),
         },
       };
     }

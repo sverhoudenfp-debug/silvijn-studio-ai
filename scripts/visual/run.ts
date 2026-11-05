@@ -4,6 +4,8 @@ import { chromium } from "playwright";
 import axe from "axe-core";
 import { buildShopifyTheme, type ThemeImage } from "../../lib/websites/theme-zip/theme-builder";
 import { goldenContentPlan } from "../../tests/fixtures/golden-content";
+import { veldEnVormBrief } from "./veld-en-vorm-brief";
+import { findIdentityLeaks } from "../../lib/websites/identity-isolation";
 import { renderThemePageHtml } from "../../lib/websites/theme-zip/html-preview";
 import {
   GOLDEN_PAGES,
@@ -109,15 +111,48 @@ function loadImages(): ThemeImage[] {
 }
 
 const veld = source === "veld" ? loadVeldPlans() : null;
+// W4-DATALEK (2026-11-05): hier stond `contact: goldenContact` voor ELKE bron.
+// Daardoor droeg de Veld & Vorm-site het e-mailadres van de oude testcase
+// Van Dijk Hoveniers. Contact hoort per case te komen, nooit uit een andere.
+const contact = veld
+  ? {
+      phone: veldEnVormBrief.phone,
+      email: veldEnVormBrief.email,
+      address: null,
+      city: veldEnVormBrief.city,
+      province: veldEnVormBrief.province,
+    }
+  : goldenContact;
 const built = buildShopifyTheme({
   specification: (veld ? veld.specification : goldenSpecification) as never,
   designPlan: veld ? veld.designPlan : goldenDesignPlan,
-  contact: goldenContact,
+  contact,
   images: loadImages(),
   // W2: de contentpass levert de teksten; zonder plan valt de compositie
   // terug op de (dunne) specificatie.
   contentPlan: veld ? veld.contentPlan : goldenContentPlan,
 });
+
+// W4: dezelfde identiteitspoort als productie, nu op het harnas zelf. Zo kan
+// een meetcase nooit stilletjes andermans contactgegevens meedragen.
+const identity = {
+  businessName: (veld ? veld.specification.business.businessName : goldenSpecification.business.businessName) as string,
+  email: contact.email,
+  phone: contact.phone,
+  website: null,
+  city: contact.city,
+};
+const leaks = built.files.flatMap((file) => {
+  const content = file.content ?? file.bytes?.toString() ?? "";
+  if (!content || file.path.startsWith("assets/")) return [];
+  return findIdentityLeaks(content, identity, file.path);
+});
+if (leaks.length > 0) {
+  for (const leak of leaks.slice(0, 10)) {
+    console.error(`   ✗ identiteitslek in ${leak.location}: ${leak.kind} "${leak.value}"`);
+  }
+  throw new Error(`Identiteitsisolatie faalde: ${leaks.length} vreemde gegevens in de output`);
+}
 
 // W3-LES (2026-11-05): nooit de hele outputmap wissen. De gegenereerde
 // plannen (visual-output/<case>/plans) staan naast de meting en zijn betaald

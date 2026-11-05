@@ -328,17 +328,41 @@ export function LeadDetail({
           </Card>
 
           <Card>
-            <CardHeader title="Contact Information" />
+            <CardHeader
+              title="Contact Information"
+              subtitle="Ontbrekende gegevens blijven ontbreken: ze worden nooit aangevuld met gegevens van een ander bedrijf."
+            />
             <dl className="space-y-3">
               <div className="flex items-start justify-between gap-4 text-sm">
                 <dt className="shrink-0 text-zinc-500">Phone</dt>
-                <dd className="text-right text-zinc-200">{current.phone ?? "Niet beschikbaar"}</dd>
+                <dd className="text-right">
+                  {current.phone ? (
+                    <span className="text-zinc-200">{current.phone}</span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-300">
+                      Ontbreekt
+                    </span>
+                  )}
+                </dd>
               </div>
               <div className="flex items-start justify-between gap-4 text-sm">
                 <dt className="shrink-0 text-zinc-500">Email</dt>
-                <dd className="text-right text-zinc-200">{current.email ?? "Niet beschikbaar"}</dd>
+                <dd className="text-right">
+                  {current.email ? (
+                    <span className="text-zinc-200">{current.email}</span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-300">
+                      Ontbreekt
+                    </span>
+                  )}
+                </dd>
               </div>
             </dl>
+            {(!current.phone || !current.email) && (
+              <p className="mt-3 border-t border-zinc-800 pt-3 text-xs text-zinc-500">
+                Zonder {!current.phone && !current.email ? "telefoonnummer en e-mailadres" : !current.phone ? "telefoonnummer" : "e-mailadres"} toont de website alleen het contactformulier; er wordt niets verzonnen of overgenomen.
+              </p>
+            )}
           </Card>
 
           <Card>

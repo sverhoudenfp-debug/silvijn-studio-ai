@@ -421,7 +421,7 @@ test("D2: alle vier de header-composities renderen zonder overlay zijn exact de 
 // 4. Hero immersive + guards
 // ---------------------------------------------------------------------------
 
-test("D2: heroTreatment 'immersive' levert de immersive-variant (schema, CSS, géén mediaband)", () => {
+test("D2: heroTreatment 'immersive' levert de immersive-variant (schema, CSS, brede mediaband)", () => {
   const tokens = buildThemeDesignTokens(D2_IMMERSIVE);
   assert.equal(tokens.heroLayout, "immersive");
 
@@ -433,9 +433,17 @@ test("D2: heroTreatment 'immersive' levert de immersive-variant (schema, CSS, g�
   assert.equal(JSON.parse(heroOptions![1]).length, 4, "vier hero-layoutopties");
 
   const heroLiquid = files.find((f) => f.path === "sections/hero.liquid")!.content;
-  assert.ok(heroLiquid.includes("hero_layout != 'split' and hero_layout != 'immersive'"), "immersive slaat de mediaband over");
-  const css = files.find((f) => f.path === "assets/theme.css")!.content;
-  assert.ok(css.includes(".hero--immersive"), "immersive-hero-CSS in de kern");
+  // W4 (5 november 2026): de beeldgerichte hero rendert bewust WEL een brede
+  // mediaband; het tekstvlak schuift er in de design-system-laag overheen.
+  // Een beeldgerichte hero zonder beeld is geen beeldgerichte hero.
+  assert.ok(
+    heroLiquid.includes("hero_layout != 'split' and hero_layout != 'focused'"),
+    "immersive en centered krijgen de brede mediaband, split en focused het zijbeeld"
+  );
+  assert.ok(
+    files.find((f) => f.path === "assets/design-system.css")!.content.includes(".hero--immersive"),
+    "immersive-hero-CSS in de design-system-laag"
+  );
 });
 
 test("D2: consistency-guard weigert hero-inkohérentie tussen artDirection en blueprint", () => {

@@ -1244,6 +1244,52 @@ img { max-width: 100%; height: auto; display: block; }
   .hero--immersive { min-height: 0; }
 }
 
+/* FASE 2 — LAYOUTRITME. Elke sectie krijgt via section.index een positie in
+   een deterministisch ritme. Zonder dit staat elke sectie op dezelfde maat:
+   gelijke padding, vaste 50/50-splitsing en vier gelijke kaarten. Het ritme
+   verandert de COMPOSITIE, niet de inhoud: geen tekst, volgorde van blokken
+   of feiten wordt aangepast. */
+.section, .hero { --split-a: 1.05fr; --split-b: .95fr; --rhythm-pad: 1; --rhythm-shift: 0px; }
+/* Het ritme hangt aan de POSITIE in de pagina (nth-of-type), niet aan een
+   instelling per sectie: zo werkt het identiek in de Shopify-editor, in de
+   offline render en bij een merchant die secties herordent. */
+main#main-content > section:nth-of-type(3n+2) {
+  --split-a: .60fr; --split-b: 1.40fr; --rhythm-pad: 1.16; --rhythm-shift: 26px;
+}
+main#main-content > section:nth-of-type(3n+3) {
+  --split-a: 1.34fr; --split-b: .66fr; --rhythm-pad: .84; --rhythm-shift: -16px;
+}
+main#main-content > section:nth-of-type(3n+2),
+main#main-content > section:nth-of-type(3n+3) {
+  padding-block: calc(var(--section-spacing) * var(--rhythm-pad));
+}
+main#main-content > section.section--bg-surface:nth-of-type(3n+2),
+main#main-content > section.section--bg-surface:nth-of-type(3n+3) {
+  padding-block: calc(var(--section-spacing) * var(--rhythm-pad) * .92);
+}
+@media (min-width: 601px) {
+  /* Splitsingen volgen het ritme in plaats van één vaste verhouding. */
+  .hero--split .hero__inner,
+  .about--split .about__grid,
+  .cta--split .cta__inner { grid-template-columns: minmax(0, var(--split-a)) minmax(0, var(--split-b)); }
+  /* In het smalle ritme begint de sectie aan de andere kant. */
+  main#main-content > section:nth-of-type(3n+2) .hero--split .hero__inner > :first-child,
+  main#main-content > section:nth-of-type(3n+2) .about--split .about__grid > :first-child { order: 2; }
+  /* Eerste kaart draagt het ritme: uitgelicht breed, niet vier gelijke vlakken. */
+  main#main-content > section:nth-of-type(3n+2) :where(.services--cards, .benefits--grid) .card-grid { grid-template-columns: repeat(2, 1fr); }
+  main#main-content > section:nth-of-type(3n+2) :where(.services--cards, .benefits--grid) .card-grid > :first-child { grid-column: 1 / -1; }
+  main#main-content > section:nth-of-type(3n+2) :where(.services--cards, .benefits--grid) .card-grid > :first-child .card__title {
+    font-size: calc(var(--h3-size) * 1.12);
+  }
+  main#main-content > section:nth-of-type(3n+2) :where(.card-grid) { gap: 24px 20px; }
+}
+@media (min-width: 900px) {
+  /* Verticale verspringing in het derde ritme: compositie, geen beweging. */
+  main#main-content > section:nth-of-type(3n+3) :where(.card-grid, .testimonial-grid, .gallery-grid) > :nth-child(even) {
+    transform: translateY(var(--rhythm-shift));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .motion--fade_up, .motion--fade_up *, .motion--stagger, .motion--stagger * { animation: none !important; }
 }
@@ -1572,7 +1618,7 @@ body.ad-playful .section__header h2::after { content: ""; display: inline-block;
   const transitionBlocks: Record<ArtTransition, string> = {
     hard_cut: `/* Sectie-overgang: harde snede (standaard) — geen extra regels nodig. */`,
     surface_alternate: `/* Sectie-overgang: afwisselende contrastvlakken */
-.main-content > section.section--bg-default:nth-of-type(even) { background: var(--color-surface); }`,
+main#main-content > section.section--bg-default:nth-of-type(even) { background: var(--color-surface); }`,
     gradient_blend: `/* Sectie-overgang: vloeiende gradient-overgang */
 .section--bg-surface { background: linear-gradient(180deg, var(--color-surface), var(--color-background)); }`,
   };

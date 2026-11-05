@@ -134,13 +134,34 @@ export function scanTextForFabricationPatterns(
 ): WebsiteSafetyIssue[] {
   const issues: WebsiteSafetyIssue[] = [];
   for (const { rule, pattern, reason } of PATTERNS) {
-    const match = pattern.exec(text);
-    if (!match) continue;
-    // Fase C: een match binnen een BEWEZEN echte claim (blueprint trustElements,
-    // bron-verplicht en upstream Zod-gevalideerd) is geen fabricatie: de
-    // onderdrukking geldt uitsluitend voor de exacte, aangeleverde tekst.
-    if (trustedClaims?.some((claim) => claim.includes(match[0]))) continue;
-    issues.push({ rule, reason });
+    // Alle voorkomens beoordelen, niet alleen de eerste: één onschuldige
+    // ontkenning vooraan mag een echte claim verderop niet maskeren.
+    const flags = pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`;
+    const scan = new RegExp(pattern.source, flags);
+    let match: RegExpExecArray | null;
+    let blocked = false;
+    while ((match = scan.exec(text)) !== null) {
+      if (match[0] === "") { scan.lastIndex += 1; continue; }
+      // Fase C: een match binnen een BEWEZEN echte claim (blueprint
+      // trustElements, bron-verplicht en upstream Zod-gevalideerd) is geen
+      // fabricatie: de onderdrukking geldt uitsluitend voor de exacte,
+      // aangeleverde tekst.
+      if (trustedClaims?.some((claim) => claim.includes(match![0]))) continue;
+      // W3-LES (Veld & Vorm, 2026-11-05): een ONTKENNING is geen claim. Het
+      // designplan schrijft terecht "Geen garanties op de site" als restrictie;
+      // dat is een verbod voor de generatie, niet een bewering op de website.
+      // Woorden als geen/niet/nooit/zonder/vermijd/onbekend vlak vóór de match
+      // maken de uitspraak veilig; dezelfde regel geldt voor de sitecontent.
+      const before = text.slice(Math.max(0, match.index - 48), match.index).toLowerCase();
+      if (/(?:^|[^a-z])(?:geen|niet|nooit|zonder|vermijd\w*|voorkom\w*|onbekend|ontbrek\w*)[^.\n]{0,26}$/.test(before)) continue;
+      // Ook een expliciet ONBEKENDE ("Garantievoorwaarden: onbekend") is een
+      // open punt, geen toezegging — mits het onmiddellijk om de match heen staat.
+      const after = text.slice(match.index + match[0].length, match.index + match[0].length + 44).toLowerCase();
+      if (/^[^.\n]{0,28}(onbekend|niet bekend|ontbrek\w*|nog niet aangeleverd)/.test(after)) continue;
+      blocked = true;
+      break;
+    }
+    if (blocked) issues.push({ rule, reason });
   }
   return issues;
 }

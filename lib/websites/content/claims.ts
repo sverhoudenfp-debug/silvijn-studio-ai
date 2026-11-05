@@ -36,7 +36,10 @@ export const CLAIM_LABELS: Record<ClaimCategory, string> = {
 export const G_FORBIDDEN_PATTERNS: readonly { id: string; pattern: RegExp; reason: string }[] = [
   { id: "cijfer", pattern: /\d/, reason: "een cijfer (aantallen, jaren, prijzen, percentages) is een bedrijfsfeit" },
   { id: "garantie", pattern: /\bgarantie\w*|\bgegarandeerd\b/i, reason: "garanties zijn bedrijfsfeiten" },
-  { id: "superlatief", pattern: /\b(beste|goedkoopste|snelste|numm?er\s?1|nummer\s?één|marktleider|toonaangevend)\b/i, reason: "superlatieven zijn onbewijsbare claims" },
+  // W3-LES (Veld & Vorm, 2026-11-05): "het beste starten" is een bijwoord,
+  // geen claim. De regel vangt nu alleen superlatief-als-claim (de/ons/onze
+  // beste) plus de onbetwist commerciële varianten.
+  { id: "superlatief", pattern: /\b(de|ons|onze)\s+(beste|mooiste|grootste|hoogste)\b|\b(goedkoopste|snelste|numm?er\s?1|nummer\s?één|marktleider|toonaangevend)\b/i, reason: "superlatieven zijn onbewijsbare claims" },
   { id: "erkenning", pattern: /\b(bekroond|prijswinnaar|award|onderscheiden|genomineerd)\b/i, reason: "erkenningen en prijzen zijn bedrijfsfeiten" },
   { id: "certificering", pattern: /\b(gecertificeerd|certificering|certificaat|keurmerk|iso\s?\d+)\b/i, reason: "certificeringen en keurmerken zijn bedrijfsfeiten" },
   { id: "beoordeling", pattern: /\b(beoordeling|review|reviews|sterren|klantscore|waardering)\b/i, reason: "beoordelingen zijn bedrijfsfeiten" },

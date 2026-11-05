@@ -160,6 +160,9 @@ interface CompositionContext {
   trust: WebsiteBlueprint["trustElements"];
   pageKeyToSlug: Map<string, string>;
   contactPageSlug: string | null;
+  /** Pagina die nu gecomponeerd wordt (bepaalt de hero-fallback). */
+  currentPageKey?: string;
+  currentPageTitle?: string | null;
 }
 
 function isHomeKey(key: string): boolean {
@@ -229,7 +232,18 @@ function instanceToSectionEntry(
         settings: {
           ...variantSettings(instance, "default"),
           eyebrow: spec.seo.localArea ?? `${spec.business.industry} in ${spec.business.city}`,
-          heading: resolveSlotText(units, "headline", spec.content.headline),
+          // W3-LES (Veld & Vorm, 2026-11-05): viel de paginakop weg (bijv. omdat
+          // de G-poort hem nog tegenhoudt), dan viel de subpagina terug op de
+          // HOMEPAGE-kop. Daardoor hadden diensten/faq/contact exact dezelfde
+          // H1 als home. De fallback is nu de paginatitel zelf; alleen de
+          // homepage gebruikt de specificatiekop.
+          heading: resolveSlotText(
+            units,
+            "headline",
+            ctx.currentPageKey && !isHomeKey(ctx.currentPageKey)
+              ? ctx.currentPageTitle ?? spec.content.headline
+              : spec.content.headline
+          ),
           subheading: resolveSlotText(units, "subheadline", spec.content.subheadline ?? spec.content.valueProposition),
           cta_label: resolveSlotText(units, "cta_label", instance.cta?.label ?? spec.content.ctaPrimaryText),
           cta_link: ctaLink ?? "/pages/contact",
@@ -605,6 +619,8 @@ function composePage(
   log: ContentApplicationLog
 ): ComposedTemplate {
   const isHome = isHomeKey(page.key);
+  // De hero-fallback moet weten op welke pagina hij staat (zie de hero-case).
+  const pageCtx: CompositionContext = { ...ctx, currentPageKey: page.key, currentPageTitle: page.title ?? null };
   // Slug komt uit de context-map: die is al deterministisch gedupliceerd
   // (één bron van waarheid; CTA-resolutie en template-pad delen dezelfde slug).
   const slug = ctx.pageKeyToSlug.get(page.key) ?? "";
@@ -653,7 +669,7 @@ function composePage(
       consumedPaths.add(path);
       logPathApplication(path, instance.type, units, log);
     }
-    const entry = instanceToSectionEntry(instance, ctx, units);
+    const entry = instanceToSectionEntry(instance, pageCtx, units);
     const background = typeof entry.settings.background === "string" ? entry.settings.background : "default";
     if (background === "default" && previousBackground === "default") {
       entry.settings.background = "surface";

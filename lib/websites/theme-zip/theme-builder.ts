@@ -982,7 +982,7 @@ body {
 }
 /* Koppen: fluid trap uit de designrichting (Fase 1). De clamp regelt de
    mobiele maat zelf, dus geen aparte mobiele overrides meer nodig. */
-h1, h2, h3, h4 { font-family: var(--font-heading); font-weight: var(--font-weight-heading); line-height: 1.15; margin: 0 0 .6em; letter-spacing: var(--heading-tracking); text-wrap: balance; }
+h1, h2, h3, h4 { font-family: var(--font-heading); font-weight: var(--font-weight-heading); line-height: 1.15; margin: 0 0 .6em; letter-spacing: var(--heading-tracking); text-wrap: balance; hyphens: manual; -webkit-hyphens: manual; word-break: normal; overflow-wrap: normal; }
 h1 { font-size: var(--h1-size); line-height: 1.04; }
 h2 { font-size: var(--h2-size); line-height: 1.1; }
 h3 { font-size: var(--h3-size); line-height: 1.25; letter-spacing: calc(var(--heading-tracking) * .5); }
@@ -1050,16 +1050,25 @@ img { max-width: 100%; height: auto; display: block; }
 }
 
 /* Hero — basis + gecontroleerde varianten (focused/centered/split) uit het Design Plan */
-.hero { padding-block: var(--section-spacing); background: linear-gradient(180deg, var(--color-surface), var(--color-background)); }
-.hero__inner { display: grid; gap: 24px; max-width: 720px; }
-.hero__eyebrow { text-transform: uppercase; letter-spacing: .12em; font-size: .8rem; color: var(--color-primary); font-weight: 600; margin-bottom: 8px; }
-.hero p { font-size: 1.15rem; color: var(--color-muted); }
+.hero { padding-block: clamp(56px, 8vw, 120px); background: linear-gradient(180deg, var(--color-surface), var(--color-background)); }
+.hero__inner { display: grid; gap: 24px; max-width: 780px; }
+.hero__eyebrow { text-transform: uppercase; letter-spacing: .14em; font-size: .78rem; color: var(--color-primary); font-weight: 600; margin-bottom: 10px; }
+/* W3: leesbare maat en rustige regellengte in de hero */
+.hero__content > p:not(.hero__eyebrow) { font-size: clamp(1.04rem, .95rem + .4vw, 1.22rem); line-height: 1.6; color: var(--color-muted); max-width: 48ch; }
+.hero h1 { max-width: 18ch; }
 .hero__actions { display: flex; gap: 12px; flex-wrap: wrap; }
-.hero--centered .hero__inner { max-width: 820px; margin-inline: auto; text-align: center; }
+.hero--centered .hero__inner { max-width: 860px; margin-inline: auto; text-align: center; }
 .hero--centered .hero__actions { justify-content: center; }
-.hero--split .hero__inner { max-width: none; grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); gap: 40px; align-items: center; }
+.hero--centered h1 { max-width: 22ch; margin-inline: auto; }
+.hero--centered .hero__content > p:not(.hero__eyebrow) { margin-inline: auto; }
+.hero--split .hero__inner { max-width: none; grid-template-columns: minmax(0, 1.12fr) minmax(0, 0.88fr); gap: clamp(32px, 5vw, 72px); align-items: end; }
+.hero--split h1 { max-width: 16ch; }
 .hero--split .hero__media img { width: 100%; height: auto; display: block; border-radius: var(--radius); background: var(--color-surface); }
 .hero--split .hero__actions { margin-top: 8px; }
+/* W3: zonder beeld geen lege halve kolom — de kop krijgt de volle breedte */
+.hero--split.hero--no-media .hero__inner { grid-template-columns: minmax(0, 1fr); max-width: 900px; }
+.hero--split.hero--no-media h1 { max-width: 22ch; }
+.hero--split.hero--no-media .hero__content > p:not(.hero__eyebrow) { max-width: 54ch; }
 .hero--immersive { min-height: 68vh; display: flex; align-items: center; }
 .hero--immersive .container { position: relative; z-index: 1; }
 .hero--immersive .hero__inner { max-width: 860px; margin-inline: auto; text-align: center; }
@@ -1079,9 +1088,11 @@ img { max-width: 100%; height: auto; display: block; }
 .btn--secondary:hover, .btn--secondary:focus { background: var(--color-surface); }
 
 /* Sections */
-.section { padding-block: var(--section-spacing); }
+.section { padding-block: clamp(52px, 6.5vw, 96px); }
+.section--tight { padding-block: clamp(36px, 4vw, 60px); }
 .section--surface { background: var(--color-surface); }
-.section__header { max-width: 720px; margin-bottom: 32px; }
+.section__header { max-width: 660px; margin-bottom: clamp(24px, 3vw, 44px); }
+.section__header h2 { max-width: 26ch; }
 .section__header p { color: var(--color-muted); }
 
 /* Paginakop (W1): één H1 per pagina, zelfde ritme als de hero-kop */
@@ -1113,6 +1124,47 @@ img { max-width: 100%; height: auto; display: block; }
 /* Cards */
 .card-grid { display: grid; gap: 20px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
 .card { background: var(--color-background); border: 1px solid var(--color-border); border-radius: var(--radius); padding: 22px; }
+.card__index { display: block; font-family: var(--font-heading); font-size: .82rem; letter-spacing: .14em; color: var(--color-primary); font-weight: 600; margin-bottom: 10px; font-variant-numeric: tabular-nums; }
+
+/* W3 — Diensten met echte layoutvarianten in plaats van één kaartgrid */
+.services__list { display: grid; gap: clamp(18px, 2.4vw, 32px); }
+.services__list--grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: clamp(20px, 3vw, 44px); }
+.services__list--cards { grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); }
+.services__list--grid .card--plain,
+.services__list--cards .card--plain { border: 0; background: transparent; padding: 0; }
+.services__list--grid .card--plain h3 { font-size: clamp(1.18rem, 1rem + .5vw, 1.45rem); margin-bottom: .35em; }
+.services__list--grid .card--plain p { color: var(--color-muted); }
+.services__list--cards .card { padding: 0; overflow: hidden; background: var(--color-surface); }
+.services__list--cards .card__body { padding: 22px 24px 26px; }
+.services__list--cards .card__media img { border-radius: 0; }
+/* Compacte lijst: haarlijnen en nummers, geen kaders */
+.services__list--list { gap: 0; }
+.service-line { display: grid; grid-template-columns: 56px minmax(0, 1fr) 132px; gap: clamp(16px, 2.5vw, 32px); align-items: center; padding: clamp(18px, 2.2vw, 26px) 0; border-top: 1px solid var(--color-border); }
+.service-line:last-child { border-bottom: 1px solid var(--color-border); }
+.service-line--text { grid-template-columns: 56px minmax(0, 1fr); }
+.service-line h3 { margin: 0 0 .3em; font-size: clamp(1.18rem, 1rem + .5vw, 1.5rem); }
+.service-line p { margin: 0; color: var(--color-muted); max-width: 64ch; }
+.service-line__media img { border-radius: var(--radius); }
+/* Afwisselend: brede rijen met media links/rechts */
+.services__list--alternating { gap: 0; }
+.service-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(24px, 4vw, 64px); align-items: center; padding-block: clamp(22px, 3.4vw, 44px); }
+.service-row + .service-row { border-top: 1px solid var(--color-border); }
+.service-row--reverse .service-row__media { order: 2; }
+.service-row--text { grid-template-columns: minmax(0, 1fr); }
+.service-row__body { max-width: 56ch; }
+.service-row__body h3 { font-size: clamp(1.35rem, 1.05rem + 1vw, 2rem); margin-bottom: .4em; }
+.service-row__body p { color: var(--color-muted); margin: 0; }
+.service-row__media img { border-radius: var(--radius); width: 100%; }
+
+/* W3 — Over ons: tekstkolom op leesbreedte, beeld als rustpunt */
+.about__grid { gap: clamp(24px, 4vw, 60px); align-items: start; }
+.about__body { max-width: 60ch; }
+.about__body h3 { margin-top: 1.6em; }
+.about__body h3:first-child { margin-top: 0; }
+.about__media img { border-radius: var(--radius); }
+.about--story .about__grid { grid-template-columns: minmax(0, 1fr); }
+.about--story .about__body { max-width: 68ch; }
+.about--quote .about__body { font-family: var(--font-heading); font-size: clamp(1.4rem, 1.1rem + 1.4vw, 2.2rem); line-height: 1.35; }
 .card h3 { margin-bottom: .4em; }
 .card p { color: var(--color-muted); margin: 0; }
 
@@ -1215,6 +1267,19 @@ img { max-width: 100%; height: auto; display: block; }
 .testimonial__author { margin: 0; font-size: .9rem; color: var(--color-muted); }
 @media (max-width: 760px) {
   .about__grid { grid-template-columns: 1fr; gap: 24px; }
+  /* W3 — mobiel bewust: minder lucht, geen dode witruimte, leesbare maten */
+  .section { padding-block: 44px; }
+  .section__header { margin-bottom: 20px; }
+  .hero { padding-block: 44px 40px; }
+  .hero--split .hero__inner { grid-template-columns: minmax(0, 1fr); align-items: start; gap: 24px; }
+  .hero__content > p:not(.hero__eyebrow), .hero--split.hero--no-media .hero__content > p:not(.hero__eyebrow) { max-width: none; }
+  .hero h1, .hero--split h1, .hero--split.hero--no-media h1 { max-width: none; }
+  .card-grid, .services__list--grid, .services__list--cards { grid-template-columns: 1fr; }
+  .service-line { grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+  .service-line__media { display: none; }
+  .service-row { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .service-row--reverse .service-row__media { order: 0; }
+  .form { max-width: none; }
   .about__grid--media-left .about__media { order: 0; }
 }
 `;
@@ -2497,7 +2562,13 @@ function buildHeroSection(): ThemeFile {
   const liquid = `{%- liquid
   assign hero_layout = section.settings.layout | default: settings.hero_layout | default: 'focused'
 -%}
-<section class="hero hero--{{ hero_layout }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
+{%- liquid
+  assign hero_has_media = false
+  if section.settings.image != blank or section.settings.image_mobile != blank or section.settings.image_asset != blank
+    assign hero_has_media = true
+  endif
+-%}
+<section class="hero hero--{{ hero_layout }}{% if hero_layout == 'split' and hero_has_media == false %} hero--no-media{% endif %} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}">
   {%- if section.settings.background == 'image' -%}
     {%- render 'section-background', image: section.settings.background_image, overlay: section.settings.background_overlay, alt: section.settings.image_alt, placeholder_svg: 'placeholder.svg' -%}
   {%- endif -%}
@@ -2524,7 +2595,8 @@ function buildHeroSection(): ThemeFile {
         </div>
       {%- endif -%}
     </div>
-    {%- if hero_layout != 'split' and hero_layout != 'immersive' -%}
+    {%- comment -%} W3: geen lege mediaband onder de hero als er nog geen beeld is. {%- endcomment -%}
+    {%- if hero_has_media and hero_layout != 'split' and hero_layout != 'immersive' -%}
       <div class="hero__band">
         {%- render 'theme-media', image: section.settings.image, image_mobile: section.settings.image_mobile, asset: section.settings.image_asset, asset_w: section.settings.image_asset_width, asset_h: section.settings.image_asset_height, aspect: 'wide', alt: section.settings.image_alt, sizes: '100vw', loading: 'eager', fetchpriority: 'high', placeholder_svg: 'placeholder-hero.svg' -%}
       </div>
@@ -2653,26 +2725,60 @@ function buildServicesSection(): ThemeFile {
         <p>{{ section.settings.subheading }}</p>
       {%- endif -%}
     </div>
-    <div class="card-grid">
+    {%- liquid
+      assign services_layout = section.settings.layout | default: 'grid'
+      assign services_total = section.blocks | size
+    -%}
+    <div class="services__list services__list--{{ services_layout }}{% if services_total > 4 %} services__list--many{% endif %}">
       {%- for block in section.blocks -%}
-        {%- if block.settings.image != blank or block.settings.image_asset != blank -%}
-          <article class="card card--media" {{ block.shopify_attributes }}>
-            <div class="card__media">
-              {%- render 'theme-media', image: block.settings.image, asset: block.settings.image_asset, asset_w: block.settings.image_asset_width, asset_h: block.settings.image_asset_height, alt: block.settings.image_alt, aspect: 'landscape_4_3', sizes: '(min-width: 990px) 360px, 100vw', loading: 'lazy', placeholder_svg: 'placeholder-service.svg' -%}
-            </div>
-            <div class="card__body">
+        {%- liquid
+          assign has_media = false
+          if block.settings.image != blank or block.settings.image_asset != blank
+            assign has_media = true
+          endif
+          assign index_text = forloop.index | prepend: '0' | slice: -2, 2
+        -%}
+        {%- if services_layout == 'alternating' -%}
+          {%- comment -%} Afwisselend: brede rij met beeld links of rechts. Zonder
+          beeld wordt de rij een genummerd tekstblok, nooit een leeg vlak. {%- endcomment -%}
+          <article class="service-row{% cycle ' service-row--reverse', '' %}{% unless has_media %} service-row--text{% endunless %}" {{ block.shopify_attributes }}>
+            {%- if has_media -%}
+              <div class="service-row__media">
+                {%- render 'theme-media', image: block.settings.image, asset: block.settings.image_asset, asset_w: block.settings.image_asset_width, asset_h: block.settings.image_asset_height, alt: block.settings.image_alt, aspect: 'landscape_4_3', sizes: '(min-width: 990px) 50vw, 100vw', loading: 'lazy', placeholder_svg: 'placeholder-service.svg' -%}
+              </div>
+            {%- endif -%}
+            <div class="service-row__body">
+              <span class="card__index">{{ index_text }}</span>
               <h3>{{ block.settings.title }}</h3>
               {%- if block.settings.description != blank -%}
                 <p>{{ block.settings.description }}</p>
               {%- endif -%}
             </div>
           </article>
+        {%- elsif services_layout == 'list' -%}
+          <article class="service-line{% unless has_media %} service-line--text{% endunless %}" {{ block.shopify_attributes }}>
+            <span class="card__index">{{ index_text }}</span>
+            <div class="service-line__body">
+              <h3>{{ block.settings.title }}</h3>
+              {%- if block.settings.description != blank -%}
+                <p>{{ block.settings.description }}</p>
+              {%- endif -%}
+            </div>
+            {%- if has_media -%}
+              <div class="service-line__media">
+                {%- render 'theme-media', image: block.settings.image, asset: block.settings.image_asset, asset_w: block.settings.image_asset_width, asset_h: block.settings.image_asset_height, alt: block.settings.image_alt, aspect: 'square', sizes: '(min-width: 990px) 140px, 30vw', loading: 'lazy', placeholder_svg: 'placeholder-service.svg' -%}
+              </div>
+            {%- endif -%}
+          </article>
         {%- else -%}
-          {%- comment -%} Geen beeld: geen grijs placeholder-vlak. Een tekstkaart met
-          nummer houdt de compositie rustig en leesbaar. {%- endcomment -%}
-          <article class="card card--plain" {{ block.shopify_attributes }}>
+          <article class="card{% if has_media %} card--media{% else %} card--plain{% endif %}" {{ block.shopify_attributes }}>
+            {%- if has_media -%}
+              <div class="card__media">
+                {%- render 'theme-media', image: block.settings.image, asset: block.settings.image_asset, asset_w: block.settings.image_asset_width, asset_h: block.settings.image_asset_height, alt: block.settings.image_alt, aspect: 'landscape_4_3', sizes: '(min-width: 990px) 380px, 100vw', loading: 'lazy', placeholder_svg: 'placeholder-service.svg' -%}
+              </div>
+            {%- endif -%}
             <div class="card__body">
-              <span class="card__index">{{ forloop.index }}</span>
+              <span class="card__index">{{ index_text }}</span>
               <h3>{{ block.settings.title }}</h3>
               {%- if block.settings.description != blank -%}
                 <p>{{ block.settings.description }}</p>

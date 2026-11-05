@@ -11,6 +11,35 @@ import {
   goldenDesignPlan,
   goldenSpecification,
 } from "../../tests/fixtures/golden-hovenier";
+import type { DesignPlan } from "../../lib/websites/design-plan";
+import type { ContentPlan } from "../../lib/websites/content/content-plan";
+
+/**
+ * Bron van de meting:
+ *  - golden (standaard): de bevroren hovenierscase uit fase 0.
+ *  - veld: de ECHTE AI-uitkomst van scripts/visual/veld-gen.ts
+ *    (specificatie + design plan + contentplan van Veld & Vorm).
+ */
+const sourceIndex = process.argv.indexOf("--source");
+const source = sourceIndex >= 0 ? (process.argv[sourceIndex + 1] ?? "golden") : "golden";
+const VELD_DIR = join(process.cwd(), "visual-output", "veld-en-vorm", "plans");
+
+function loadVeldPlans() {
+  const read = (name: string) => JSON.parse(readFileSync(join(VELD_DIR, name), "utf8"));
+  const designPlan = read("design-plan.json") as DesignPlan;
+  const blueprint = designPlan.blueprint;
+  if (!blueprint) throw new Error("Design plan zonder blueprint");
+  const pages = blueprint.pages.map((page) => ({
+    template: page.key === "home" ? "index" : `page.${page.key}`,
+    slug: page.key,
+  }));
+  return {
+    specification: read("specification.json"),
+    designPlan,
+    contentPlan: read("content-plan.json") as ContentPlan,
+    pages,
+  };
+}
 
 /**
  * VISUELE MEETLAT (fase 0, 2026-11-05) — één commando, één cijfer.
@@ -79,17 +108,22 @@ function loadImages(): ThemeImage[] {
   return images;
 }
 
+const veld = source === "veld" ? loadVeldPlans() : null;
 const built = buildShopifyTheme({
-  specification: goldenSpecification as never,
-  designPlan: goldenDesignPlan,
+  specification: (veld ? veld.specification : goldenSpecification) as never,
+  designPlan: veld ? veld.designPlan : goldenDesignPlan,
   contact: goldenContact,
   images: loadImages(),
   // W2: de contentpass levert de teksten; zonder plan valt de compositie
   // terug op de (dunne) specificatie.
-  contentPlan: goldenContentPlan,
+  contentPlan: veld ? veld.contentPlan : goldenContentPlan,
 });
 
-rmSync(OUT, { recursive: true, force: true });
+// W3-LES (2026-11-05): nooit de hele outputmap wissen. De gegenereerde
+// plannen (visual-output/<case>/plans) staan naast de meting en zijn betaald
+// AI-werk; een rmSync op OUT gooide ze weg. Alleen de meetartefacten zelf
+// worden opgeruimd.
+for (const dir of [THEME_DIR, HTML_DIR, SHOT_DIR]) rmSync(dir, { recursive: true, force: true });
 for (const file of built.files) {
   const target = join(THEME_DIR, file.path);
   mkdirSync(dirname(target), { recursive: true });
@@ -98,7 +132,7 @@ for (const file of built.files) {
 mkdirSync(HTML_DIR, { recursive: true });
 
 const pages: Array<{ slug: string; file: string; bytes: number }> = [];
-for (const page of GOLDEN_PAGES) {
+for (const page of veld ? veld.pages : GOLDEN_PAGES) {
   const rendered = await renderThemePageHtml(built.files, {
     template: page.template as never,
   });
@@ -265,8 +299,15 @@ const md = [
       : `| ${page.slug} | - | - | - | - | - | - |`;
   }),
   "",
-  desktop.contrastNodes.length ? "## Contrastfouten" : "## Contrastfouten\n\nGeen.",
-  ...desktop.contrastNodes.map((n) => `- ${n}`),
+  // W3-LES (2026-11-05): de samenvatting keek alleen naar de home-desktopmeting
+  // en meldde "Geen" terwijl de per-paginatabel wél contrastfouten toonde.
+  // Nu over alle pagina's en viewports, met herkomst erbij.
+  ...(() => {
+    const offenders = results.flatMap((r) =>
+      r.contrastNodes.map((node) => `- ${r.pageSlug} (${r.viewport}): ${node.split("\n")[0] ?? node}`)
+    );
+    return ["## Contrastfouten", offenders.length ? `Totaal ${offenders.length}.` : "Geen.", ...offenders];
+  })(),
   "",
 ].join("\n");
 

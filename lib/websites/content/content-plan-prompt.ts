@@ -35,7 +35,28 @@ export interface ContentPlanPromptInput {
   industry?: string | null;
   description?: string | null;
   serviceTitles?: readonly string[];
+  /**
+   * REPARATIEPASS (W2 eis: generate → fix → re-QC met luslimiet).
+   * Alleen gevuld bij een herstelronde: de opdracht beperkt zich tot de
+   * pagina's in de blueprint-subset en moet de genoemde keuringsfouten
+   * oplossen zonder nieuwe feiten te verzinnen.
+   */
+  repair?: {
+    readonly issues: readonly string[];
+  };
 }
+
+/**
+ * Minimumaantal blokken per herhaalde sectie. Bepaalt hoeveel units van
+ * hetzelfde kind de AI op één sectiepad levert (de consumptie mapt ze in
+ * planvolgorde op de blokindex).
+ */
+const REPEATED_BLOCK_MINIMUM: Partial<Record<string, number>> = {
+  faq: 3,
+  services: 3,
+  process: 3,
+  team: 3,
+};
 
 export const CONTENT_GENERATION_SYSTEM = `Je bent de contentagent van een Nederlandse webagency. Je vult het INTERNE ContentPlan voor een klantwebsite in (uitkomst: uitsluitend JSON). Het plan is intern werkdocument voor de studio en wordt nooit aan de klant getoond.
 
@@ -108,6 +129,16 @@ export function buildContentPlanPrompt(input: ContentPlanPromptInput): string {
   });
   lines.push("", ...buildIndustryProfileLines(profile), "");
   lines.push(...buildPageBriefLines(blueprint), "");
+  if (input.repair && input.repair.issues.length > 0) {
+    lines.push(
+      "",
+      "REPARATIE-OPDRACHT (tweede ronde): de vorige versie werd afgekeurd door de contentkeuring.",
+      "Lever ALLEEN de pagina's hierboven opnieuw, volledig, en los deze punten op:",
+      ...input.repair.issues.map((issue) => `- ${issue}`),
+      "Schrijf waar nodig meer inhoud: langere, concretere alinea's per sectie. Verzin niets bij: geen prijzen, garanties, aantallen, beoordelingen, certificeringen, teamleden of projecten zonder bron."
+    );
+  }
+
   lines.push("PAGINA'S EN SECTIES (vaststaande architectuur — niets toevoegen, niets weglaten):");
   for (const page of blueprint.pages) {
     lines.push(`PAGINA ${page.key} (${page.title ?? page.key}) — doel: ${page.purpose ?? "onbekend"}`);
@@ -118,9 +149,15 @@ export function buildContentPlanPrompt(input: ContentPlanPromptInput): string {
       const required = slots.filter((s) => s.required).map((s) => s.kind);
       const optional = slots.filter((s) => !s.required).map((s) => s.kind);
       const factLocked = slots.filter((s) => s.factLocked).map((s) => s.kind);
+      // W3-LES (Veld & Vorm, 2026-11-05): zonder expliciet aantal leverde de
+      // AI twee FAQ-paren en twee diensten, waarmee de FAQ-pagina structureel
+      // onder de diepgangsgrens bleef. Het aantal blokken is een eigenschap
+      // van de sectie, dus die staat nu in de opdracht.
+      const repeat = REPEATED_BLOCK_MINIMUM[instance.type];
       lines.push(
         `SECTIE ${path} ${instance.type} — verplicht: ${required.join(", ") || "(geen)"}; ` +
           `optioneel: ${optional.join(", ") || "(geen)"}; fact-locked: ${factLocked.join(", ") || "(geen)"}` +
+          (repeat ? `; blokken: minimaal ${repeat} (één unit per blok, opeenvolgend)` : "") +
           (instance.contentHints ? `; contentrichting: ${instance.contentHints}` : "")
       );
     }

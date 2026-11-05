@@ -13,6 +13,7 @@ import type { ContentSourceBundle, ContentSourceItem } from "./content-source";
 import { CONTENT_SOURCE_ORIGINS } from "./content-source";
 import type { ContentSourceOrigin } from "./content-source";
 import { contentPlanSchema, type ContentPlan, type ContentUnit } from "./content-plan";
+import { scanTextForFabricationPatterns } from "../safety-check";
 
 /**
  * CONTENT PLAN FINALIZER (C3b, 2026-09-20) — de deterministische machine
@@ -82,7 +83,7 @@ const rawUnitSchema = z.object({
   // evidence: null i.p.v. [] (semantisch identiek, maar het raw-schema
   // verwierp het plan hard). Nullish -> [] is een veilige normalisatie:
   // de finalizer dwingt de echte evidence-regels daarna alsnog af.
-  evidence: z.array(z.string()).nullish().transform((v) => v ?? []),
+  evidence: z.array(z.string().max(4000)).nullish().transform((v) => v ?? []),
   sourceOrigin: z.enum(CONTENT_SOURCE_ORIGINS).nullable().default(null),
   instruction: z.string().nullable().default(null),
 });
@@ -260,9 +261,15 @@ export function finalizeRawContentPlan(input: {
         continue;
       }
 
-      const dedupeKey = `${rawUnit.path}\u0000${rawUnit.kind}`;
+      // W3-LES (Veld & Vorm, 2026-11-05): een sectie met herhaalde blokken
+      // (diensten, FAQ, stappen) levert per blok een unit van hetzelfde kind
+      // op hetzelfde pad. De oude dedupe op pad+kind gooide daar alle
+      // behalve de eerste weg, waardoor drie diensten en drie FAQ-paren tot
+      // één inkrompen. De consumptielaag mapt units bewust in planvolgorde
+      // op blokindex, dus alleen écht identieke herhalingen zijn fout.
+      const dedupeKey = `${rawUnit.path}\u0000${rawUnit.kind}\u0000${(rawUnit.text ?? "").trim()}`;
       if (seenPathKind.has(dedupeKey)) {
-        corrections.push(`Dubbele unit (pad "${rawUnit.path}", kind "${rawUnit.kind}") verwijderd — de eerste telt.`);
+        corrections.push(`Dubbele unit (pad "${rawUnit.path}", kind "${rawUnit.kind}", zelfde tekst) verwijderd.`);
         continue;
       }
       seenPathKind.add(dedupeKey);
@@ -381,6 +388,11 @@ export function finalizeRawContentPlan(input: {
 
   const missingInformation = [...raw.missingInformation, ...addedMissing]
     .filter((text, i, arr) => arr.indexOf(text) === i)
+    // W3-LES (Veld & Vorm, 2026-11-05): de AI schreef één ontbrekend punt van
+    // 240 tekens uit, waardoor het hele plan op het 200-tekens-contract stuk
+    // liep. Een lijst met ontbrekende informatie is een lijst, geen alinea:
+    // hard afkappen op de contractgrens in plaats van het plan verwerpen.
+    .map((text) => (text.length > 200 ? `${text.slice(0, 197).trimEnd()}...` : text))
     .slice(0, 20);
 
   const plan = contentPlanSchema.parse({
@@ -571,6 +583,26 @@ function finalizeUnit(
     return pushCustomerSlot(`copywriting=false: commerciële copy ${where}`);
   }
   if (evidence.length === 0) {
+    // W3-LES (Veld & Vorm, 2026-11-05): creatieve copy ("Tuinen met karakter",
+    // "Vraag een kennismakingsgesprek aan") is geen bedrijfsfeit en heeft dus
+    // geen bron nodig. De oude regel maakte elk verplicht slot leeg, waardoor
+    // een echte 5-pagina-site op 396 woorden uitkwam. Veilig accepteren mag
+    // alleen als de tekst de fabricagescan doorstaat; dan is het categorie G
+    // (algemene/creatieve tekst zonder bedrijfsfeiten) en geldt de bestaande
+    // goedkeuringspoort van de studio.
+    if (text && scanTextForFabricationPatterns(text).length === 0) {
+      ctx.corrections.push(`creatieve copy zonder bedrijfsfeit ${where} → G (geen bewijs nodig, wel goedkeuring).`);
+      return {
+        path,
+        kind: slot.kind,
+        status: "generated",
+        text,
+        evidence: [],
+        sourceOrigin: null,
+        instruction: null,
+        claim: "G",
+      };
+    }
     ctx.addedMissing.push(`Generated unit ${where} had geen evidence — wordt door de klant aangeleverd.`);
     return pushCustomerSlot(`generated unit zonder evidence ${where}`);
   }

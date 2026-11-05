@@ -72,7 +72,12 @@ export const contentUnitSchema = z
     claim: z.enum(CONTENT_CLAIM_CATEGORIES).nullable().optional(),
     text: z.string().nullable(),
     /** Alleen relevant bij status=generated: verbatim bewijsfragmenten. */
-    evidence: z.array(z.string().min(2).max(300)).max(6),
+    // W3-LES (Veld & Vorm, 2026-11-05): een bewijsregel is een bronfragment
+    // dat byte-gelijk moet zijn aan de brondata. Sommige echte bronregels
+    // (een alinea uit het intakeprofiel) zijn langer dan 300 tekens; de oude
+    // grens verwierp daardoor een betaalde, inhoudelijk juiste contentpass.
+    // 2000 tekens is ruim boven elke bronset en houdt het auditveld leesbaar.
+    evidence: z.array(z.string().min(2).max(2000)).max(6),
     sourceOrigin: z.enum(CONTENT_SOURCE_ORIGINS).nullable(),
     /** Alleen bij customer_slot: wat de klant moet aanleveren en waar het komt. */
     instruction: z.string().min(10).max(400).nullable(),

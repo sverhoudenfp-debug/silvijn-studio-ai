@@ -532,8 +532,12 @@ export class AIService {
           leadId: leadId ?? null,
           system: WEBSITE_PLANNING_SYSTEM,
           prompt: buildWebsitePlanningPrompt(input),
-          maxTokens: 4000,
-          temperature: 0.4,
+          // LIVE-LES 2026-11-05 (Veld & Vorm, eerste echte W3-run): met 4000
+          // tokens en zonder effort-cap besteedt sonnet-5 het hele budget aan
+          // adaptive thinking en breekt af vóór enige JSON. Zelfde klasse als
+          // de design- en contentplan-calls: cap de inspanning en geef ruimte.
+          maxTokens: 8000,
+          thinkingEffort: "low",
         },
         WebsiteSpecificationSchema
       );

@@ -314,3 +314,35 @@ test("design plan: aangepast/opgeblazen klantbewijs blijft fabricatie (anti-infl
   assert.equal(result.passed, false);
   assert.ok(result.errors.some((e) => e.includes("review-claim")), "afwijkende getallen moeten blokkeren");
 });
+
+test("design plan: een expliciete onbekende is geen fabricage, een claim in klanttekst wel", async () => {
+  const plan = await buildValidPlan(3);
+  // missingInformation mag 'garantie' noemen: dat is een open punt, geen claim.
+  const withUnknown = {
+    ...plan,
+    missingInformation: [...plan.missingInformation, "Garantievoorwaarden en levertijden zijn nog niet aangeleverd."],
+  };
+  const allowed = validateDesignPlanConsistency(withUnknown, { ...COMPLETE_REQUIREMENTS, numberOfPages: 3 });
+  assert.equal(allowed.passed, true, JSON.stringify(allowed.errors));
+
+  // Dezelfde claim in een veld dat klanttekst wordt, blijft geblokkeerd.
+  const fabricated = {
+    ...plan,
+    navigation: { ...plan.navigation, items: plan.navigation.items.map((item, index) => (index === 0 ? { ...item, label: "5 jaar garantie" } : item)) },
+  };
+  const blocked = validateDesignPlanConsistency(fabricated, { ...COMPLETE_REQUIREMENTS, numberOfPages: 3 });
+  assert.equal(blocked.passed, false);
+  assert.ok(blocked.errors.some((error) => error.includes('Fabricatie-patroon "garantie"')));
+});
+
+test("fabricagescan: een ontkenning of verbod is geen claim, een bewering wel", async () => {
+  const { scanTextForFabricationPatterns } = await import("../lib/websites/safety-check");
+  assert.equal(scanTextForFabricationPatterns("Restrictie: geen garanties op de site").length, 0);
+  assert.equal(scanTextForFabricationPatterns("Wij geven nooit garantie op maatwerk").length, 0);
+  assert.equal(scanTextForFabricationPatterns("Garantievoorwaarden: onbekend").length, 0);
+  const claim = scanTextForFabricationPatterns("Wij geven 10 jaar garantie op elke tuin");
+  assert.ok(claim.some((issue) => issue.rule === "garantie"));
+  // Een ontkenning vooraan mag een echte claim verderop niet maskeren.
+  const mixed = scanTextForFabricationPatterns("Geen kleine klus. Wij geven 10 jaar garantie.");
+  assert.ok(mixed.some((issue) => issue.rule === "garantie"));
+});

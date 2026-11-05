@@ -244,7 +244,16 @@ export function validateDesignPlanConsistency(
   // een match die VERBATIM in die antwoorden staat is geen fabricatie. De AI
   // mag klantbewijs dus alleen exact echoën — afwijkende getallen, opgeblazen
   // varianten of eigen formuleringen blijven geblokkeerd.
-  const fabricationIssues = scanTextForFabricationPatterns(JSON.stringify(plan), trustedClaims);
+  // W3-LES (Veld & Vorm, 2026-11-05): missingInformation is per definitie de
+  // lijst met dingen die we NIET weten ("garantievoorwaarden onbekend"). Zo'n
+  // expliciete onbekende is het tegenovergestelde van een fabricage en mag de
+  // planning niet blokkeren; alleen velden die echt klanttekst kunnen worden,
+  // worden gescand.
+  const { missingInformation: _unknowns, ...fabricationScanTarget } = plan as DesignPlan & Record<string, unknown>;
+  const fabricationIssues = scanTextForFabricationPatterns(
+    JSON.stringify(fabricationScanTarget),
+    trustedClaims
+  );
   if (fabricationIssues.length > 0) {
     errors.push(
       ...fabricationIssues.map((issue) => `Fabricatie-patroon "${issue.rule}" gevonden: ${issue.reason}`)

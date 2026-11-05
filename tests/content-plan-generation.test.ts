@@ -319,9 +319,13 @@ test("C3b: copywriting=false — bekende feiten blijven fixed staan", () => {
 // 3. evidence ontbreekt
 // ---------------------------------------------------------------------------
 
-test("C3b: generated unit zonder evidence wordt eerlijk customer_slot", () => {
+test("C3b: creatieve copy zonder evidence wordt G, een claim zonder bron blijft klantinvoer", () => {
   const bundle = makeBundle();
-  const pages = [
+
+  // W3 (Veld & Vorm, 2026-11-05): een kop als "Tuinen met karakter" is geen
+  // bedrijfsfeit. Zonder bewijs accepteren mag, mits de tekst de
+  // fabricagescan doorstaat; dan is het categorie G (goedkeuringspoort).
+  const creativePages = [
     {
       key: "home",
       seo: null,
@@ -331,12 +335,30 @@ test("C3b: generated unit zonder evidence wordt eerlijk customer_slot", () => {
       ],
     },
   ];
-  const result = finalize(rawPlan(pages), bundle);
-  const headline = result.plan.pages[0].units.find((u) => u.kind === "headline")!;
-  assert.equal(headline.status, "customer_slot");
-  assert.ok(headline.instruction);
-  assert.ok(result.plan.missingInformation.some((m) => m.includes("geen evidence")), result.plan.missingInformation.join(" | "));
-  checkC3aConsistency(result, bundle);
+  const creative = finalize(rawPlan(creativePages), bundle);
+  const headline = creative.plan.pages[0].units.find((u) => u.kind === "headline")!;
+  assert.equal(headline.status, "generated");
+  assert.equal(headline.claim, "G");
+  assert.equal(headline.evidence.length, 0);
+  checkC3aConsistency(creative, bundle);
+
+  // Een bewering (prijs/garantie) zonder bron blijft harde klantinvoer.
+  const claimPages = [
+    {
+      key: "home",
+      seo: null,
+      units: [
+        rawUnit("home/0", "headline", "generated", { text: "Tien jaar garantie op elke tuin" }),
+        ...validRaw(bundle)[0].units.filter((u) => u.kind !== "headline"),
+      ],
+    },
+  ];
+  const claim = finalize(rawPlan(claimPages), bundle);
+  const blocked = claim.plan.pages[0].units.find((u) => u.kind === "headline")!;
+  assert.equal(blocked.status, "customer_slot");
+  assert.ok(blocked.instruction);
+  assert.ok(claim.plan.missingInformation.some((m) => m.includes("geen evidence")), claim.plan.missingInformation.join(" | "));
+  checkC3aConsistency(claim, bundle);
 });
 
 // ---------------------------------------------------------------------------
@@ -863,12 +885,14 @@ test("C3b: generated units zonder evidence vallen daarna nog steeds door de fina
       u.status === "generated" ? { ...u, evidence: null as unknown as string[] } : u
     ),
   }));
-  // Null-normalisatie mag géén fabricatiedeur openen: zonder echte evidence
-  // faalt de finalizer (of repareert eerlijk) — nooit een evidence-loze
-  // generated unit in het eindplan.
+  // Null-normalisatie mag géén fabricatiedeur openen: een generated unit zonder
+  // evidence moet óf klantinvoer zijn, óf expliciet G (creatieve tekst zonder
+  // bedrijfsfeit, met goedkeuringspoort). Nooit stilzwijgend een F-claim.
   const result = finalize(rawPlan(pages), bundle);
-  const bare = result.plan.pages.flatMap((p) => p.units).find((u) => u.status === "generated" && u.evidence.length === 0);
-  assert.equal(bare, undefined, "geen generated unit zonder evidence in het eindplan");
+  const bare = result.plan.pages
+    .flatMap((p) => p.units)
+    .filter((u) => u.status === "generated" && u.evidence.length === 0 && u.claim !== "G");
+  assert.deepEqual(bare, [], "evidence-loze generated units zijn altijd G");
 });
 
 
@@ -887,4 +911,47 @@ test("C3b: gehallucineerd slot-kind buiten het registry wordt eerlijk verwijderd
     "de verwijdering staat als correctie gelogd"
   );
   checkC3aConsistency(result, bundle, blueprint);
+});
+
+// ---------------------------------------------------------------------------
+// W3 (Veld & Vorm): herhaalde blokken mogen niet worden weggededupliceerd
+// ---------------------------------------------------------------------------
+
+test("W3: drie diensten en drie FAQ-paren in één sectie blijven alle drie staan", () => {
+  const bundle = makeBundle();
+  const pages = validRaw(bundle);
+  const services = pages.find((p) => p.key === "home")!;
+  // Drie losse diensten op hetzelfde pad (blokgedreven sectie).
+  const base = services.units.find((u) => u.kind === "item_title")!;
+  services.units = services.units.filter((u) => u.kind !== "item_title" && u.kind !== "item_body");
+  // item_title is fact-locked: gebruik drie échte bronteksten uit de bundel.
+  const initialTitles = bundle.items.slice(0, 3).map((item) => item.text);
+  assert.equal(initialTitles.length, 3, "testfixture heeft minstens drie bronitems");
+  for (const title of initialTitles) {
+    services.units.push({ ...base, kind: "item_title", text: title, evidence: [title] } as typeof base);
+    services.units.push({
+      ...base,
+      kind: "item_body",
+      text: `Wat dit onderdeel bij dit bedrijf inhoudt, in gewone taal uitgelegd.`,
+      evidence: [],
+    } as typeof base);
+  }
+
+  const result = finalize(rawPlan(pages), bundle);
+  const titles = result.plan.pages
+    .find((p) => p.key === "home")!
+    .units.filter((u) => u.kind === "item_title")
+    .map((u) => u.text);
+  assert.deepEqual(titles, initialTitles, "alle drie de diensten blijven behouden");
+
+  // Echt identieke herhaling wordt nog steeds opgeruimd.
+  const dupPages = validRaw(bundle);
+  const dupServices = dupPages.find((p) => p.key === "home")!;
+  const dupBase = dupServices.units.find((u) => u.kind === "item_body")!;
+  dupServices.units.push({ ...dupBase } as typeof dupBase);
+  const dupResult = finalize(rawPlan(dupPages), bundle);
+  assert.ok(
+    dupResult.corrections.some((c) => c.includes("zelfde tekst")),
+    "identieke herhaling staat als correctie gelogd"
+  );
 });

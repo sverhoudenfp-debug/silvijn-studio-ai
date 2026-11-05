@@ -311,6 +311,22 @@ export function derivePalette(input: PaletteEngineInput): PaletteEngineResult {
     surface = corrected;
   }
 
+  // W3-LES (Veld & Vorm, 2026-11-05): --color-muted wordt zowel op de
+  // pagina-achtergrond als op het sectievlak gebruikt. De garantie rekende
+  // alleen op de pagina-achtergrond, waardoor gedempte tekst op het
+  // sectievlak op 4,42-4,48 uitkwam en axe 9 contrastfouten vond op de
+  // contact- en over-ons-pagina. Nu tegen beide vlakken, met marge voor
+  // hex-afronding (4.7 in plaats van precies 4.5).
+  if (hexToOklch(surface).l >= 0.6) {
+    const mutedSafe = ensureContrast(ensureContrast(mutedText, background, 4.7), surface, 4.7);
+    if (mutedSafe !== mutedText) {
+      corrections.push(
+        `Gedempte tekstkleur aangepast voor WCAG AA-contrast op pagina- én sectievlak (was ${mutedText}, nu ${mutedSafe}).`
+      );
+      mutedText = mutedSafe;
+    }
+  }
+
   const surfaceIsDark = hexToOklch(surface).l < 0.6;
   const onSurface = surfaceIsDark
     ? ensureContrast(readableOn(surface), surface, 4.5)

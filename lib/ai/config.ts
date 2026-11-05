@@ -66,10 +66,13 @@ export function getAIConfig(): AIConfig {
   const maxRequests = Number.parseInt(process.env.AI_MAX_REQUESTS_PER_RUN ?? "", 10);
   // Request-timeout per AI-aanroep. Live designplanning is gemeten op 84,4s
   // (claude-sonnet-5, 12000 maxTokens, Velora Interieur v3, 2026-09-19); de
-  // oude 60s-default sneed dergelijke volledige planningcalls af. Zware
-  // planningcalls met rijke input (thinking + groot JSON) horen ruim binnen
-  // de default te passen zonder env-configuratie. Configureerbaar via
-  // AI_REQUEST_TIMEOUT_MS (1s-300s).
+  // oude 60s-default sneed dergelijke volledige planningcalls af.
+  // W3-METING (Veld & Vorm, 2026-11-05): de contentpass over 5 pagina's
+  // (20000 maxTokens, thinking low) haalde de 120s-default niet en viel na
+  // twee retries om — een échte klantsite heeft nu eenmaal meer tekst dan een
+  // fixture. Default daarom 240s: ruim boven de zwaarste gemeten call, onder
+  // de 300s-hardgrens van de cap. Configureerbaar via AI_REQUEST_TIMEOUT_MS
+  // (1s-300s).
   const timeoutEnv = Number.parseInt(process.env.AI_REQUEST_TIMEOUT_MS ?? "", 10);
 
   return {
@@ -84,7 +87,7 @@ export function getAIConfig(): AIConfig {
     requestTimeoutMs:
       Number.isFinite(timeoutEnv) && timeoutEnv >= 1_000 && timeoutEnv <= 300_000
         ? timeoutEnv
-        : 120_000,
+        : 240_000,
     maxRetries: 2,
   };
 }

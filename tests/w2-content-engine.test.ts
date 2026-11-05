@@ -170,10 +170,14 @@ test("W2: dienstenkaarten tonen geen grijs plaatshoudervlak zonder beeld", () =>
   }).files;
   const liquid = files.find((file) => file.path === "sections/services.liquid")?.content ?? "";
   assert.ok(liquid.includes("card--plain"), "tekstkaart-variant bestaat");
+  // W3: de mediapoort is één expliciete assign geworden (has_media) die alle
+  // layoutvarianten delen; zonder beeld wordt er geen placeholder gerenderd.
   assert.ok(
-    liquid.includes("{%- if block.settings.image != blank or block.settings.image_asset != blank -%}"),
+    liquid.includes("if block.settings.image != blank or block.settings.image_asset != blank"),
     "media wordt alleen gerenderd als er een beeld is"
   );
+  assert.ok(liquid.includes("assign has_media = false"), "mediapoort start gesloten");
+  assert.ok(liquid.includes("service-line--text"), "lijstvariant heeft een tekstvariant zonder media");
   const index = files.find((file) => file.path === "templates/page.diensten.json")?.content ?? "";
   assert.ok(!index.includes("image_asset"), "geen beeld-asset op de dienstenkaarten");
 });

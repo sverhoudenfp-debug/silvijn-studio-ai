@@ -53,6 +53,7 @@ export type ApproveGContentResult = { ok: true; record: ContentPlanRecord } | { 
  * dashboard. Zonder deze stap blijft G-tekst buiten het thema.
  */
 export async function approveGContentAction(planId: string): Promise<ApproveGContentResult> {
+  await requireStudioOwner();
   const { user } = await requireStudioOwner();
   try {
     const record = await new ContentPlanService().approveGContent(planId, user.email ?? "studio-owner");

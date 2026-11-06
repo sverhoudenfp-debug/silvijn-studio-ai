@@ -1,4 +1,5 @@
 import type { WebsiteBlueprint, BlueprintPage, BlueprintSectionInstance } from "../blueprint/blueprint";
+import { pickVisitorCopy } from "../content/internal-copy";
 import type { BlueprintSectionType } from "../blueprint/section-registry";
 import type { WebsiteSpecification } from "../types";
 import type { WebsiteContactContext } from "../generator";
@@ -646,7 +647,10 @@ function composePage(
       type: "page-header",
       settings: {
         heading: page.title ?? page.key,
-        subheading: page.purpose ?? null,
+        // W6: page.purpose is een INTERNE planningsregel ("Verhaal en
+        // werkwijze tonen"), geen bezoekerscopy. Alleen echte copy komt hier,
+        // anders blijft de intro leeg — nooit een planningsregel.
+        subheading: null,
         background: "default",
         motion: "none",
       },
@@ -682,7 +686,13 @@ function composePage(
     // intro, geen tweede knoppaar. De homepage houdt de volledige hero.
     if (!isHome && index === 0 && instance.type === "hero") {
       const headline = resolveSlotText(units, "headline", page.title ?? page.key);
-      const intro = resolveSlotText(units, "subheading", page.purpose ?? null);
+      // W6: uitsluitend bezoekersgerichte copy. Geen planningsregel als
+      // terugval; liever een kop zonder intro dan interne taal op de site.
+      const intro = pickVisitorCopy([
+        resolveSlotText(units, "subheading", null),
+        resolveSlotText(units, "headline", null) === null ? null : null,
+        ctx.spec.content.contactIntro,
+      ]);
       const eyebrow = ctx.spec.seo.localArea ?? null;
       sections.page_header = {
         type: "page-header",

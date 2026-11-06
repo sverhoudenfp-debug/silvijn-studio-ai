@@ -1737,6 +1737,14 @@ function buildDesignSystemCss(): ThemeFile {
 .hero__media .theme-media, .hero__band .theme-media { position: absolute; inset: 0; }
 .hero__band { margin-top: clamp(28px, 4vw, 56px); aspect-ratio: 16 / 9; }
 
+/* W6: hoogtes volgen de inhoud. Een vaste hoogte op een griditem of kolom
+   laat langere titels uit het item lopen en veroorzaakt overlappende tekst
+   (gezien bij "Zo werken wij" op Over ons). */
+.d3-items, .d3-layout, .d3-unit, .d3-item, .d3-item-copy, .d3-feature, .d3-story { height: auto; max-height: none; }
+.d3-items { align-items: start; }
+.d3-horizontal_steps .d3-items, .d3-numbered_list .d3-items, .d3-editorial_list .d3-items { grid-auto-rows: auto; }
+.d3-item h3, .d3-item p { overflow-wrap: break-word; }
+
 /* Balans: contentmax en kolomverhoudingen — geen halflege rasterkolommen */
 .d3-layout { max-width: 78rem; }
 .d3-section > .container { max-width: 78rem; }

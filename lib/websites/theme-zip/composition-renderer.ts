@@ -135,6 +135,29 @@ export function compositionCss():string {
 .d3-immersive{position:relative;display:grid}.d3-immersive>.d3-media,.d3-immersive-copy{grid-area:1/1}.d3-immersive-copy{align-self:center;z-index:1;background:var(--color-background);padding:var(--d3-gap);max-width:50ch;margin:var(--d3-gap);border-radius:var(--radius)}.d3-immersive:not(:has(.d3-media)) .d3-immersive-copy{margin:0;padding:0;max-width:none}
 .d3-details{font-style:normal}.d3-details a{color:inherit;text-underline-offset:.2em}.d3-contact-large .d3-details{font-size:clamp(1.15rem,3vw,2rem)}.d3-contact-large>.d3-support{max-width:46rem;margin-top:var(--d3-gap)}.d3-contact-split:not(:has(.d3-form)),.d3-contact-image:not(:has(.d3-form)){grid-template-columns:1fr}
 .d3-form form{margin:0}.d3-form input,.d3-form textarea{width:100%;min-width:0;max-width:100%}.d3-slot-note{font-size:.875rem;color:var(--color-muted);padding:1rem;border:1px dashed var(--color-border)}
+/* W6 (6 november 2026): hoogtes volgen de inhoud. Deze laag laadt als laatste,
+   dus de regels hier winnen van de vaste maten in theme.css en art-direction.
+   Aanleiding: op Over ons liep de titel van een step uit zijn griditem en
+   overlapte de volgende stap (gemeten: 531px inhoud in 284px item). */
+.d3-items{grid-auto-rows:auto;align-items:start}
+.d3-unit,.d3-item,.d3-item-copy,.d3-item-media,.d3-feature,.d3-feature-main,.d3-feature-secondary{height:auto!important;max-height:none!important;min-height:0}
+.d3-horizontal_steps .d3-unit,.d3-numbered_list .d3-unit,.d3-editorial_list .d3-unit{height:auto!important;max-height:none!important}
+.d3-item h3,.d3-item p,.d3-unit h3{overflow-wrap:break-word;hyphens:none}
+/* W6: gridkinderen mogen niet breder worden dan hun kolom. Zonder min-width:0
+   houdt een gridkind zijn automatische minimumbreedte vast en loopt de tekst
+   de volgende kolom in (gemeten op Over ons: 531px tekst in een 284px kolom). */
+.d3-items > .d3-unit,.d3-items > .d3-unit > *,.d3-item-copy,.d3-item-copy > *{min-width:0;max-width:100%}
+.d3-items > .d3-unit,.d3-item{overflow-wrap:break-word;word-break:normal}
+.d3-horizontal_steps .d3-item h3{max-width:100%}
+.d3-floating{grid-template-columns:minmax(0,1fr) minmax(15rem,auto)}
+/* W6: één typografische trap voor secties. Een itemtitel (h3) is nooit groter
+   dan de sectiekop (h2) erboven, en alle sectiekoppen delen dezelfde maat. */
+.d3-section .d3-heading h2,.d3-section .d3-layout > header h2{font-size:clamp(1.5rem,1.08rem + 1.5vw,2.3rem);line-height:1.14}
+.d3-section h3,.d3-feature-main h3,.d3-editorial_list .d3-item h3,.d3-asymmetric_grid .d3-unit:first-child h3,.d3-numbered_list .d3-item h3{font-size:clamp(1.05rem,0.95rem + 0.55vw,1.5rem)!important;line-height:1.25}
+/* Kophiërarchie: een CTA- of statementkop mag nooit boven de paginakop uitkomen. */
+.d3-cta-copy h2,.d3-statement h2,.d3-contact-large h2{font-size:clamp(1.5rem,1.02rem + 1.55vw,2.35rem);line-height:1.16;max-width:30ch}
+.d3-featured_service .d3-feature-main h3{font-size:clamp(1.35rem,1rem + 0.9vw,1.85rem)}
+.d3-editorial_list .d3-item h3,.d3-numbered_list .d3-item h3{font-size:clamp(1.1rem,0.98rem + 0.5vw,1.45rem)}
 body.ad-asymmetric .d3-section{--d3-gap:clamp(1rem,4vw,calc(var(--section-spacing,72px)*.6))}body.ad-editorial .d3-heading{max-width:48ch}body.ad-minimal .d3-bento .d3-unit{background:transparent;border-top:1px solid var(--color-border)}
 @media(max-width:989px){.d3-section{--d3-gap:clamp(1rem,4vw,2rem);--d3-pad:calc(var(--section-spacing,72px)*.7)}.d3-bento .d3-items{grid-template-columns:repeat(2,minmax(0,1fr))}.d3-asymmetric_grid .d3-items,.d3-asymmetric_gallery .d3-items{grid-template-columns:repeat(2,minmax(0,1fr))}.d3-asymmetric_grid .d3-unit,.d3-asymmetric_gallery .d3-unit{grid-column:auto;grid-row:auto}.d3-asymmetric_grid .d3-unit:first-child,.d3-asymmetric_gallery .d3-unit:first-child{grid-column:span 2}}
 @media(max-width:749px){.d3-section{--d3-pad:clamp(1.5rem,6vw,calc(var(--section-spacing,72px)*.6));--d3-gap:1.25rem}.d3-density-compact{--d3-pad:1.5rem}.d3-section :where(.d3-editorial,.d3-split,.d3-asymmetric-copy,.d3-feature,.d3-image-led,.d3-cta-split,.d3-floating,.d3-contact-split,.d3-contact-image,.d3-items,.d3-stacked_cards .d3-item){grid-template-columns:minmax(0,1fr)}.d3-section .d3-unit{grid-column:auto!important;grid-row:auto!important;margin-top:0}.d3-editorial_grid .d3-unit:nth-child(even),.d3-asymmetric-copy>.d3-support{padding-top:0}.d3-section .d3-heading{margin-bottom:var(--d3-gap)}.d3-statement h2,.d3-contact-large h2{font-size:calc(2rem*var(--heading-scale));max-width:100%}.d3-numbered_list .d3-unit,.d3-numbered_editorial .d3-unit{grid-template-columns:2ch minmax(0,1fr);gap:.75rem}.d3-cta-split .d3-action{justify-self:start}.d3-floating{padding:var(--d3-gap)}.d3-immersive>.d3-media,.d3-immersive-copy{grid-area:auto}.d3-immersive-copy{margin:0;padding-block:var(--d3-gap);padding-inline:0}.d3-media img,.d3-item-media img{max-height:none;aspect-ratio:4/3;object-fit:cover}.d3-section .d3-action{position:static}.d3-quote p{font-size:calc(1.3rem*var(--heading-scale))}}

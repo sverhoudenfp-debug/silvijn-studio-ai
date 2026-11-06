@@ -166,6 +166,36 @@ for (const file of built.files) {
 }
 mkdirSync(HTML_DIR, { recursive: true });
 
+// W10: opleveringsexport. Dezelfde bron als het thema, zodat het
+// opleveringsscript pagina's en SEO kan aanmaken zonder het contentplan
+// opnieuw te interpreteren.
+{
+  const planPages = veld ? veld.contentPlan.pages : [];
+  const labelFor = (key: string): string =>
+    key === "home" ? "Home" : key === "faq" ? "FAQ" : key.replace(/-/g, " ").replace(/^\w/, (c) => c.toUpperCase());
+  const siteExport = {
+    brand: (built as unknown as { spec?: { businessName?: string } }).spec?.businessName ?? "Veld & Vorm",
+    // De homepage is in Shopify geen Page-object maar de index; alleen echte
+    // subpagina's worden aangemaakt.
+    pages: planPages
+      .filter((page) => page.key !== "home")
+      .map((page) => ({
+        handle: page.key,
+        title: labelFor(page.key),
+        templateSuffix: page.key,
+        seoTitle: page.seo?.title ?? null,
+        seoDescription: page.seo?.metaDescription ?? null,
+        published: true,
+      })),
+    navigation: planPages.map((page) => ({
+      label: labelFor(page.key),
+      path: page.key === "home" ? "/" : `/pages/${page.key}`,
+    })),
+  };
+  writeFileSync(join(OUT, "site.json"), JSON.stringify(siteExport, null, 2));
+}
+
+
 const pages: Array<{ slug: string; file: string; bytes: number }> = [];
 for (const page of veld ? veld.pages : GOLDEN_PAGES) {
   const rendered = await renderThemePageHtml(built.files, {

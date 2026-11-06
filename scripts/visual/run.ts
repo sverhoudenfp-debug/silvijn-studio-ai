@@ -99,8 +99,8 @@ function loadImages(): ThemeImage[] {
       height: entry.height,
       alt: entry.title ?? null,
       license: {
-        provider: "Openverse (CC0)",
-        licenseName: entry.license === "cc0" ? "CC0 1.0" : String(entry.license ?? "CC0 1.0"),
+        provider: String((entry as { provider?: string }).provider ?? "Openverse (CC0)"),
+        licenseName: String((entry as { licenseName?: string }).licenseName ?? entry.license ?? "CC0 1.0"),
         commercialUse: true,
         attributionText: null,
         evidenceUrl: entry.landing ?? "https://docs.openverse.org/",

@@ -3,7 +3,9 @@ import type { BlueprintSectionType } from "../blueprint/section-registry";
 import { D3_COMPOSITIONS } from "../blueprint/composition-registry";
 
 const heading = `{% if section.settings.heading != blank %}<h2>{{ section.settings.heading | escape }}</h2>{% endif %}{% if section.settings.subheading != blank %}<p>{{ section.settings.subheading | escape }}</p>{% endif %}`;
-const media = `{% if section.settings.image != blank %}<figure class="d3-media">{% render 'theme-media', image: section.settings.image, image_mobile: section.settings.image_mobile, alt: section.settings.image_alt, aspect: 'landscape', sizes: '(min-width: 990px) 50vw, 100vw', loading: 'lazy' %}</figure>{% endif %}`;
+// W9: het beeld kan een Shopify-afbeelding zijn óf een thema-asset (gegenereerd
+// beeld). Zonder de asset-tak bleef een gegenereerde foto ongebruikt.
+const media = `{% if section.settings.image != blank or section.settings.image_asset != blank %}<figure class="d3-media">{% render 'theme-media', image: section.settings.image, image_mobile: section.settings.image_mobile, asset: section.settings.image_asset, asset_w: section.settings.image_asset_width, asset_h: section.settings.image_asset_height, alt: section.settings.image_alt, aspect: 'landscape', sizes: '(min-width: 990px) 50vw, 100vw', loading: 'lazy' %}</figure>{% endif %}`;
 const body = `{% if section.settings.body != blank %}<div class="d3-prose rte">{{ section.settings.body }}</div>{% endif %}`;
 const action = `{% if section.settings.cta_label != blank and section.settings.cta_link != blank %}<div class="d3-action"><a class="btn btn--primary" href="{{ section.settings.cta_link }}">{{ section.settings.cta_label | escape }}</a></div>{% endif %}`;
 const details = `<address class="d3-details">{% if section.settings.phone != blank %}<p><a href="tel:{{ section.settings.phone | remove: ' ' }}">{{ section.settings.phone | escape }}</a></p>{% endif %}{% if section.settings.email != blank %}<p><a href="mailto:{{ section.settings.email }}">{{ section.settings.email | escape }}</a></p>{% endif %}{% if section.settings.address != blank %}<p>{{ section.settings.address | escape }}</p>{% endif %}</address>`;
@@ -15,9 +17,10 @@ const itemSnippet = `{%- assign d3_title = block.settings.title | default: block
 {%- elsif kind == 'gallery' -%}
   {%- if block.settings.image != blank or block.settings.caption != blank -%}<figure class="d3-project" {{ block.shopify_attributes }}>{%- if block.settings.image != blank -%}{% render 'theme-media', image: block.settings.image, alt: block.settings.alt, aspect: 'landscape', sizes: '(min-width: 990px) 50vw, 100vw', loading: 'lazy' %}{%- endif -%}{% if block.settings.caption != blank %}<figcaption>{{ block.settings.caption | escape }}</figcaption>{% endif %}</figure>{%- endif -%}
 {%- else -%}
-  {%- if d3_title != blank or d3_body != blank or block.settings.image != blank -%}
+  {%- if d3_title != blank or d3_body != blank or block.settings.image != blank or block.settings.image_asset != blank -%}
   <article class="d3-item" {{ block.shopify_attributes }}>
-    {% if block.settings.image != blank %}<div class="d3-item-media">{% render 'theme-media', image: block.settings.image, alt: d3_title, aspect: 'landscape', sizes: '(min-width: 990px) 50vw, 100vw', loading: 'lazy' %}</div>{% endif %}
+    {%- assign d3_asset = block.settings.image_asset -%}
+    {% if block.settings.image != blank or d3_asset != blank %}<div class="d3-item-media">{% render 'theme-media', image: block.settings.image, asset: d3_asset, asset_w: block.settings.image_asset_width, asset_h: block.settings.image_asset_height, alt: d3_title, aspect: 'landscape', sizes: '(min-width: 990px) 50vw, 100vw', loading: 'lazy' %}</div>{% endif %}
     <div class="d3-item-copy">{% if d3_title != blank %}<h3>{{ d3_title | escape }}</h3>{% endif %}{% if d3_body != blank %}<p>{{ d3_body | escape }}</p>{% endif %}</div>
   </article>
   {%- endif -%}
@@ -73,7 +76,7 @@ function renderComposition(type: BlueprintSectionType, original: string): string
   const isCollection=!isProse && type!=="contact" && type!=="cta";
   return `{% assign d3_form_id = 'D3Contact-' | append: section.id %}
 {% capture d3_content %}{% case section.settings.composition %}${cases}{% endcase %}{% endcapture %}
-${isProse?"{% if section.settings.body != blank or section.settings.image != blank or request.design_mode %}":isCollection?"{% if d3_visible > 0 or request.design_mode %}":""}
+${isProse?"{% if section.settings.body != blank or section.settings.image != blank or section.settings.image_asset != blank or request.design_mode %}":isCollection?"{% if d3_visible > 0 or request.design_mode %}":""}
 <section class="d3-section d3-density-{{ section.settings.composition_density | default: 'balanced' }} section--bg-{{ section.settings.background | default: 'default' }} motion--{{ section.settings.motion | default: 'none' }}"${type==="contact"?' id="contact"':""} data-composition="{{ section.settings.composition }}">
 <div class="container">{{ d3_content }}</div></section>${isProse||isCollection?"{% endif %}":""}`;
 }
@@ -150,6 +153,13 @@ export function compositionCss():string {
 .d3-items > .d3-unit,.d3-item{overflow-wrap:break-word;word-break:normal}
 .d3-horizontal_steps .d3-item h3{max-width:100%}
 .d3-floating{grid-template-columns:minmax(0,1fr) minmax(15rem,auto)}
+/* W9: een item met beeld én tekst houdt op tablet geen smalle tekstkolom
+   naast de foto; het beeld gaat boven de tekst staan. */
+@media (max-width: 1100px) {
+  .d3-item { grid-template-columns: minmax(0, 1fr) !important; }
+  .d3-item-media { order: -1; }
+  .d3-item-media img { width: 100%; height: auto; }
+}
 /* W8: leesbaarheid gaat voor kolommen. Onder 700px is een tekstkolom smaller
    dan ~18rem en dat is niet leesbaar; meerkoloms tekstsecties vallen dan terug
    naar één kolom. Op tablet blijven twee kolommen alleen als ze breed genoeg

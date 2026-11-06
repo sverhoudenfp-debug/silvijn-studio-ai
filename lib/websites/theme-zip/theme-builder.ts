@@ -1491,6 +1491,12 @@ main#main-content > section.section--bg-surface:nth-of-type(3n+3) {
 .usp-row { display: flex; flex-wrap: wrap; gap: 12px 40px; }
 .usp-band--row .usp-row { display: flex; flex-wrap: wrap; gap: 12px 40px; }
 .usp-band--grid .usp-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 20px; }
+/* W8: kolommen blijven leesbaar — nooit smaller dan 240px op tablet. */
+@media (min-width: 701px) and (max-width: 1100px) {
+  .usp-row, .card-grid, .team-grid, .testimonial-grid, .gallery-grid, .projects-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  }
+}
 /* W8: op smalle schermen nooit twee tekstkolommen naast elkaar. */
 @media (max-width: 700px) {
   .usp-row, .team-grid, .testimonial-grid, .card-grid, .gallery-grid, .projects-grid, .form-grid { grid-template-columns: minmax(0, 1fr); }
@@ -4612,19 +4618,46 @@ export function applyThemeImagesToTemplates(
   images: readonly ThemeImage[],
 ) {
   if (!images.length) return;
+
+  const bySlot = (slot: string) =>
+    images.filter((candidate) => candidate.slot === slot && candidate.file && candidate.bytes?.length);
+
+  // W9 (6 november 2026): het beeldplan is nu meerpaginig. Eén hero op de
+  // homepage (geen herhaling op elke pagina), de about-foto op de pagina die
+  // het verhaal draagt, dienstbeelden bij de diensten op elke pagina die ze
+  // toont, en galerijbeelden waar een galerij staat.
+  const heroes = bySlot("hero");
+  const abouts = bySlot("about");
+  const serviceImages = bySlot("services");
+  const galleryImages = bySlot("gallery");
+
+  // Voorkeurspagina voor de about-foto: de pagina met het meeste about-gewicht.
+  const aboutTemplatePath = (() => {
+    let best: { path: string; weight: number } | null = null;
+    for (const template of templates) {
+      const data = template.data as { sections?: Record<string, { type?: string; settings?: Record<string, unknown> }> };
+      const aboutSection = Object.values(data.sections ?? {}).find((section) => section.type === "about");
+      if (!aboutSection) continue;
+      const words = String(aboutSection.settings?.body ?? "").replace(/<[^>]+>/g, " ").trim().split(/\s+/).length;
+      if (!best || words > best.weight) best = { path: template.path, weight: words };
+    }
+    return best?.path ?? null;
+  })();
+
   for (const template of templates) {
-    if (template.path !== "templates/index.json") continue;
-    const data = template.data as { sections?: Record<string, { type?: string; settings?: Record<string, unknown> }> };
+    const data = template.data as {
+      sections?: Record<string, { type?: string; settings?: Record<string, unknown>; blocks?: Record<string, { settings?: Record<string, unknown> }> }>;
+    };
     if (!data.sections) continue;
+    const isHome = template.path === "templates/index.json";
+
     for (const section of Object.values(data.sections)) {
       if (section.type === "services" || section.type === "gallery") {
-        const forSection = images.filter((candidate) => candidate.slot === section.type && candidate.file && candidate.bytes?.length);
-        if (!forSection.length) continue;
-        const blocks = Object.values((section as { blocks?: Record<string, { settings?: Record<string, unknown> }> }).blocks ?? {});
-        // Volgorde is beleid: kaart 1 krijgt beeld 1. Tekort? Dan houdt die
-        // kaart zijn placeholder in plaats van een herhaalde foto.
+        const pool = section.type === "services" ? serviceImages : galleryImages;
+        if (!pool.length) continue;
+        const blocks = Object.values(section.blocks ?? {});
         blocks.forEach((block, index) => {
-          const image = forSection[index];
+          const image = pool[index % pool.length];
           if (!image) return;
           block.settings = {
             ...(block.settings ?? {}),
@@ -4636,17 +4669,34 @@ export function applyThemeImagesToTemplates(
         });
         continue;
       }
-      const slot = section.type === "hero" ? "hero" : section.type === "about" ? "about" : null;
-      if (!slot) continue;
-      const image = images.find((candidate) => candidate.slot === slot);
-      if (!image?.file || !image.bytes?.length) continue;
-      section.settings = {
-        ...(section.settings ?? {}),
-        image_asset: image.file,
-        image_asset_width: image.width,
-        image_asset_height: image.height,
-        ...(image.alt ? { image_alt: image.alt } : {}),
-      };
+
+      if (section.type === "hero") {
+        // Alleen de homepage krijgt de brede herofoto.
+        if (!isHome) continue;
+        const image = heroes[0];
+        if (!image) continue;
+        section.settings = {
+          ...(section.settings ?? {}),
+          image_asset: image.file,
+          image_asset_width: image.width,
+          image_asset_height: image.height,
+          ...(image.alt ? { image_alt: image.alt } : {}),
+        };
+        continue;
+      }
+
+      if (section.type === "about") {
+        if (template.path !== aboutTemplatePath) continue;
+        const image = abouts[0];
+        if (!image) continue;
+        section.settings = {
+          ...(section.settings ?? {}),
+          image_asset: image.file,
+          image_asset_width: image.width,
+          image_asset_height: image.height,
+          ...(image.alt ? { image_alt: image.alt } : {}),
+        };
+      }
     }
   }
 }

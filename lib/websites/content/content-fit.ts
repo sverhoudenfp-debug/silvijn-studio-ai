@@ -160,6 +160,25 @@ export function fitSection(
   }
 
   // 5. Diensten en voordelen: aantal items bepaalt de verdeling.
+  // 5a. Over ons mét beeld: kies een variant die het beeld echt toont.
+  //     "statement" is een typografisch blok zonder media; met een foto erbij
+  //     blijft die foto ongebruikt (en de pagina vlak).
+  if (shape.type === "about" && shape.hasImage && shape.wordCount >= 60) {
+    const preferred = validVariant("about", "image_led", shape) ? "image_led" : "editorial_split";
+    if (composition !== preferred && validVariant("about", preferred, shape)) {
+      return { composition: preferred, density, reason: `Over ons heeft beeld: "${preferred}" gebruikt de foto in plaats van een tekstblok zonder media.` };
+    }
+  }
+
+  // 5b. Diensten mét beeld: redactionele rijen gebruiken de volle breedte en
+  //     laten het beeld het verhaal dragen. Een raster met één grote cel en
+  //     drie kleine laat op desktop juist lege ruimte over.
+  if (shape.type === "services" && shape.itemCount >= 3 && shape.hasImage) {
+    if (composition !== "editorial_list" && composition !== "featured_service" && validVariant("services", "editorial_list", shape)) {
+      return { composition: "editorial_list", density, reason: `${shape.itemCount} diensten met beeld verdelen beter over redactionele rijen dan over een raster.` };
+    }
+  }
+
   if (shape.type === "services" && shape.itemCount > 0) {
     if (shape.itemCount <= 2 && composition !== "editorial_list" && validVariant("services", "editorial_list", shape)) {
       return { composition: "editorial_list", density, reason: `twee diensten in een raster van vier kolommen past niet; redactionele rijen verdelen beter.` };

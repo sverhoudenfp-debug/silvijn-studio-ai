@@ -78,13 +78,26 @@ async function main(): Promise<number> {
     return 0;
   }
 
-  const config = shopifyAdminConfigFromEnv();
+  // Twee routes, bewust gescheiden:
+  //  - --shop <domein>: token uit de versleutelde winkelkoppeling (OAuth,
+  //    expiring offline token + refresh). Dit is de productieroute voor klanten.
+  //  - anders: het statische token uit de omgeving, alleen voor de eigen testwinkel.
+  const shopArg = arg("shop");
+  let config: { shopDomain: string; accessToken: string } | null = null;
+  if (shopArg) {
+    const { getAccessToken } = await import("../../lib/shopify/connections");
+    config = { shopDomain: shopArg, accessToken: await getAccessToken(shopArg) };
+  } else {
+    const envConfig = shopifyAdminConfigFromEnv();
+    config = envConfig ? { shopDomain: envConfig.shopDomain, accessToken: envConfig.accessToken } : null;
+  }
   if (!config) {
     console.error(
-      "BLOCKED_EXTERNAL_CONFIGURATION: SHOPIFY_SHOP_DOMAIN en SHOPIFY_ADMIN_ACCESS_TOKEN ontbreken.",
+      "BLOCKED_EXTERNAL_CONFIGURATION: koppel de winkel met --shop <domein> (OAuth) of zet SHOPIFY_SHOP_DOMAIN en SHOPIFY_ADMIN_ACCESS_TOKEN voor de testwinkel.",
     );
     return 3;
   }
+  console.log(`Winkel: ${config.shopDomain}`);
 
   const results = await deliverPages(config, items);
   for (const result of results) {

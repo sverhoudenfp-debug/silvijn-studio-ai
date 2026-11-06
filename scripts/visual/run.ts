@@ -24,10 +24,21 @@ import type { ContentPlan } from "../../lib/websites/content/content-plan";
  */
 const sourceIndex = process.argv.indexOf("--source");
 const source = sourceIndex >= 0 ? (process.argv[sourceIndex + 1] ?? "golden") : "golden";
-const VELD_DIR = join(process.cwd(), "visual-output", "veld-en-vorm", "plans");
+// W11: meerdere briefings naast elkaar. `veld` is de vaste benchmark; elke
+// andere bron leest zijn eigen plannen uit visual-output/<bron>/plans.
+const PLANS_DIR =
+  source === "golden"
+    ? null
+    : join(
+        process.cwd(),
+        "visual-output",
+        source === "veld" ? join("veld-en-vorm") : source,
+        "plans",
+      );
 
 function loadVeldPlans() {
-  const read = (name: string) => JSON.parse(readFileSync(join(VELD_DIR, name), "utf8"));
+  if (!PLANS_DIR) throw new Error("Geen plannen voor de golden-bron");
+  const read = (name: string) => JSON.parse(readFileSync(join(PLANS_DIR, name), "utf8"));
   const designPlan = read("design-plan.json") as DesignPlan;
   const blueprint = designPlan.blueprint;
   if (!blueprint) throw new Error("Design plan zonder blueprint");
@@ -67,7 +78,8 @@ const SHOT_DIR = join(OUT, "shots");
 
 const VIEWPORTS = [
   { name: "desktop", width: 1440, height: 900 },
-  { name: "tablet", width: 768, height: 1024 },
+  { name: "tablet", width: 1024, height: 768 },
+  { name: "tablet-portrait", width: 768, height: 1024 },
   { name: "mobiel", width: 390, height: 844 },
 ] as const;
 
@@ -110,7 +122,7 @@ function loadImages(): ThemeImage[] {
   return images;
 }
 
-const veld = source === "veld" ? loadVeldPlans() : null;
+const veld = source !== "golden" ? loadVeldPlans() : null;
 // W4-DATALEK (2026-11-05): hier stond `contact: goldenContact` voor ELKE bron.
 // Daardoor droeg de Veld & Vorm-site het e-mailadres van de oude testcase
 // Van Dijk Hoveniers. Contact hoort per case te komen, nooit uit een andere.

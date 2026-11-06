@@ -1154,10 +1154,14 @@ img { max-width: 100%; height: auto; display: block; }
   margin: 0;
 }
 .page-header__intro {
-  font-size: var(--h2-size);
+  /* W11: de introductie is introductietekst, geen tweede kop. Op h2-formaat
+     duwde hij de inhoud van elke subpagina onder de vouw. */
+  font-size: clamp(1.06rem, 1rem + 0.3vw, 1.22rem);
+  line-height: 1.62;
   color: var(--color-muted);
   max-width: 58ch;
-  margin: 20px 0 0;
+  margin: 18px 0 0;
+  text-wrap: pretty;
 }
 @media (max-width: 760px) {
   .page-header__title { max-width: none; }
@@ -1807,6 +1811,10 @@ function buildDesignSystemCss(): ThemeFile {
 .page-header { padding-block: clamp(48px, 6vw, 96px) clamp(24px, 3vw, 48px); }
 .page-header__title { max-width: 24ch; text-wrap: balance; hyphens: none; }
 .page-header__intro { max-width: 56ch; }
+/* W11: informatieve pagina's krijgen een compactere kop dan een verhalende pagina. */
+.template-contact .page-header, .template-faq .page-header { padding-block: clamp(32px, 4vw, 64px) clamp(16px, 2vw, 32px); }
+.template-contact .page-header__title, .template-faq .page-header__title { font-size: clamp(1.7rem, 1.15rem + 1.7vw, 2.45rem); }
+.template-over-ons .page-header__intro { max-width: 62ch; }
 .page-header__eyebrow { letter-spacing: 0.16em; }
 
 /* ---------- 4. Sectieritme en tekstmaat ---------- */

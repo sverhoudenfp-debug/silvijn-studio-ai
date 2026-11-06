@@ -16,7 +16,7 @@ const config: ShopifyAdminConfig = {
 };
 
 type Call = { url: string; body: unknown };
-type Handler = (body: any) => { status?: number; json: unknown };
+type Handler = (body: any) => { status?: number; json: unknown; apiVersion?: string };
 
 function fakeFetch(handler: Handler): { fetchImpl: typeof fetch; calls: Call[] } {
   const calls: Call[] = [];
@@ -26,7 +26,11 @@ function fakeFetch(handler: Handler): { fetchImpl: typeof fetch; calls: Call[] }
     const result = handler(body);
     return new Response(JSON.stringify(result.json), {
       status: result.status ?? 200,
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        // Shopify bevestigt de gebruikte versie in de responseheader.
+        "X-Shopify-API-Version": result.apiVersion ?? "2026-10",
+      },
     });
   }) as unknown as typeof fetch;
   return { fetchImpl, calls };
@@ -151,4 +155,30 @@ test("shopify-admin: menu wordt bijgewerkt op basis van de gegenereerde navigati
     fetchImpl,
   );
   assert.equal(result.updated, true);
+});
+
+test("shopify-admin: vraagt de nieuwste stabiele API-versie", async () => {
+  const { fetchImpl, calls } = fakeFetch(() => ({ json: { data: { pages: { nodes: [{ id: "gid://shopify/Page/9" }] } } } }));
+  await deliverPages(config, [page], fetchImpl);
+  assert.ok(calls[0]!.url.includes("/admin/api/2026-10/graphql.json"), "URL gebruikt 2026-10");
+});
+
+test("shopify-admin: stille terugval naar een andere API-versie wordt geweigerd", async () => {
+  const { fetchImpl } = fakeFetch(() => ({ json: { data: { pages: { nodes: [] } } }, apiVersion: "2026-01" }));
+  await assert.rejects(
+    () => deliverPages(config, [page], fetchImpl),
+    (error: unknown) => error instanceof ShopifyAdminError && error.code === "API_VERSION_FALLBACK",
+  );
+});
+
+test("shopify-admin: ontbrekende versieheader is geen bewijs van de juiste versie", async () => {
+  const fetchImpl = (async () =>
+    new Response(JSON.stringify({ data: { pages: { nodes: [] } } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    })) as unknown as typeof fetch;
+  await assert.rejects(
+    () => deliverPages(config, [page], fetchImpl),
+    (error: unknown) => error instanceof ShopifyAdminError && error.code === "API_VERSION_UNVERIFIED",
+  );
 });

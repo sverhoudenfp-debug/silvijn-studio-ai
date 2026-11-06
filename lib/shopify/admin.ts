@@ -12,7 +12,12 @@
  *  - Idempotent: bestaande pagina's/menu's worden bijgewerkt, niet gedupliceerd.
  */
 
-export const SHOPIFY_ADMIN_API_VERSION = "2024-10";
+/**
+ * Nieuwste stabiele GraphQL Admin API-versie. Shopify brengt elk kwartaal een
+ * versie uit en ondersteunt de laatste vier; 2024-10 valt daar buiten.
+ * Bijwerken gebeurt in deze ene constante, plus de versietest.
+ */
+export const SHOPIFY_ADMIN_API_VERSION = "2026-10";
 
 export type ShopifyAdminConfig = {
   shopDomain: string;
@@ -26,7 +31,9 @@ export type ShopifyAdminErrorCode =
   | "ADMIN_API_AUTH"
   | "PAGE_DELIVERY_FAILED"
   | "MENU_DELIVERY_FAILED"
-  | "PUBLISH_REQUIRES_HUMAN";
+  | "PUBLISH_REQUIRES_HUMAN"
+  | "API_VERSION_UNVERIFIED"
+  | "API_VERSION_FALLBACK";
 
 export class ShopifyAdminError extends Error {
   readonly code: ShopifyAdminErrorCode;
@@ -90,6 +97,25 @@ async function adminGraphql<T>(
     throw new ShopifyAdminError("ADMIN_API_AUTH", `Admin API weigerde de toegang (HTTP ${response.status})`);
   }
 
+  // Shopify "valt vooruit" wanneer de gevraagde versie niet meer bestaat. Zonder
+  // deze controle zou een verouderde versie stilzwijgend op een andere versie
+  // draaien en zou de integratie "werken" zonder dat de versie klopt.
+  const servedVersion = response.headers.get("x-shopify-api-version");
+  const requestedVersion = config.apiVersion ?? SHOPIFY_ADMIN_API_VERSION;
+  if (!servedVersion) {
+    throw new ShopifyAdminError(
+      "API_VERSION_UNVERIFIED",
+      `Shopify gaf geen X-Shopify-API-Version-header terug; versie ${requestedVersion} is niet bevestigd`,
+    );
+  }
+  if (servedVersion !== requestedVersion) {
+    throw new ShopifyAdminError(
+      "API_VERSION_FALLBACK",
+      `Shopify serveerde API-versie ${servedVersion} in plaats van ${requestedVersion}`,
+      "stille terugval geweigerd",
+    );
+  }
+
   const payload = (await response.json().catch(() => null)) as
     | { data?: T; errors?: Array<{ message?: string }> }
     | null;
@@ -120,6 +146,8 @@ export type PageDeliveryResult = {
   id: string | null;
   action: "created" | "updated" | "skipped" | "failed";
   error: string | null;
+  /** De door Shopify bevestigde API-versie (uit de responseheader). */
+  apiVersion: string;
 };
 
 const PAGE_BY_HANDLE = `#graphql
@@ -244,11 +272,32 @@ export async function deliverPages(
         }
       }
 
-      results.push({ handle: item.handle, id: pageId, action, error: null });
+      results.push({
+        handle: item.handle,
+        id: pageId,
+        action,
+        error: null,
+        apiVersion: config.apiVersion ?? SHOPIFY_ADMIN_API_VERSION,
+      });
     } catch (error) {
-      if (error instanceof ShopifyAdminError && error.code === "ADMIN_API_AUTH") throw error;
+      // Authenticatie- en versiefouten gaan altijd omhoog: dat zijn geen
+      // pagina-specifieke problemen die je per pagina kunt negeren.
+      if (
+        error instanceof ShopifyAdminError &&
+        (error.code === "ADMIN_API_AUTH" ||
+          error.code === "API_VERSION_FALLBACK" ||
+          error.code === "API_VERSION_UNVERIFIED")
+      ) {
+        throw error;
+      }
       const message = error instanceof ShopifyAdminError ? error.message : "onbekende fout";
-      results.push({ handle: item.handle, id: null, action: "failed", error: message });
+      results.push({
+        handle: item.handle,
+        id: null,
+        action: "failed",
+        error: message,
+        apiVersion: config.apiVersion ?? SHOPIFY_ADMIN_API_VERSION,
+      });
     }
   }
 

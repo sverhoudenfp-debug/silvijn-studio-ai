@@ -159,6 +159,15 @@ export async function renderThemePageHtml(
     if (m) snippets[`${m[1]}.liquid`] = f.content;
   }
 
+  // W10: Shopify levert een `template`-object (naam + suffix). Zonder dit
+  // object kan een snippet niet per paginatype verschillen, waardoor de
+  // preview sitebrede SEO toonde terwijl Shopify het wél goed doet.
+  const templateName = options.template;
+  const [templateBase, templateSuffix] = templateName.includes(".")
+    ? [templateName.split(".")[0], templateName.split(".")[1]]
+    : [templateName, null];
+  const templateObject = { name: templateBase, suffix: templateSuffix, dir: "" };
+
   const engine = new Liquid({
     templates: snippets,
     extname: ".liquid",

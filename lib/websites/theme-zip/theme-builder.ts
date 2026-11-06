@@ -818,11 +818,12 @@ function buildThemeLayout(spec: WebsiteSpecification, tokens: ThemeDesignTokens)
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    {{ seo_assignments }}
     <title>
-      {{ page_title | default: shop.name }}
-      {%- if page_title != blank and page_title != shop.name and shop.name != blank %} &middot; {{ shop.name }}{% endif -%}
+      {{ seo_page_title | default: page_title | default: shop.name }}
+      {%- if seo_page_title == blank and page_title != blank and page_title != shop.name and shop.name != blank %} &middot; {{ shop.name }}{% endif -%}
     </title>
-    {% assign fallback_description = page_description | default: settings.seo_description %}
+    {% assign fallback_description = seo_page_description | default: page_description | default: settings.seo_description %}
     {% if fallback_description != blank %}
       <meta name="description" content="{{ fallback_description | strip_html | strip_newlines | escape }}">
     {% endif %}
@@ -887,7 +888,7 @@ function buildThemeLayout(spec: WebsiteSpecification, tokens: ThemeDesignTokens)
     ${tokens.artDirection ? `    {{ 'art-direction.css' | asset_url | stylesheet_tag }}
 ` : ""}    <script src="{{ 'theme.js' | asset_url }}" defer></script>
   </head>
-  <body class="template-{{ template.name | default: 'index' }} style-{{ settings.style_profile | default: 'neutral' }}${tokens.artDirection ? " ad-{{ settings.composition }}" : ""}">
+  <body class="template-{{ template.name | default: 'index' }}{% if template.suffix %} template-{{ template.suffix }}{% endif %} style-{{ settings.style_profile | default: 'neutral' }}${tokens.artDirection ? " ad-{{ settings.composition }}" : ""}">
     <a class="skip-link" href="#main-content">{{ 'accessibility.skip_to_content' | t }}</a>
     {% sections 'header-group' %}
     <main id="main-content" role="main">
@@ -898,6 +899,43 @@ function buildThemeLayout(spec: WebsiteSpecification, tokens: ThemeDesignTokens)
 </html>
 `;
   return { path: "layout/theme.liquid", content: liquid };
+}
+
+/**
+ * W10: per-pagina SEO. De contentplan-SEO is uniek per pagina (titel +
+ * meta-omschrijving) en mag niet als één sitebrede titel eindigen. Het thema
+ * kent geen per-template <title>, dus deze snippet vertaalt het template naar
+ * de juiste waarden. Homepage via template.name, subpagina's via de suffix.
+ */
+/**
+ * W10: SEO per paginatype. De waarden staan als Liquid-assigns IN de layout,
+ * niet in een gerenderde snippet: `render` heeft in Liquid een geïsoleerde
+ * scope, dus assigns daaruit bereiken het <title> nooit.
+ */
+function buildSeoAssignmentBlock(
+  pages: ReadonlyArray<{ suffix: string; title: string | null; description: string | null }>,
+  kind: "title" | "description",
+): string {
+  const variable = kind === "title" ? "seo_page_title" : "seo_page_description";
+  const pick = (page: { title: string | null; description: string | null }) =>
+    kind === "title" ? page.title : page.description;
+  const esc = (value: string): string => value.replace(/"/g, '\\"');
+  const home = pages.find((page) => page.suffix === "home" || page.suffix === "index") ?? null;
+  const subpages = pages.filter((page) => page !== home && pick(page));
+  const lines: string[] = [`{%- assign ${variable} = "" -%}`];
+  if (home && pick(home)) {
+    lines.push(
+      `{%- if template.name == 'index' -%}{%- assign ${variable} = "${esc(pick(home)!)}" -%}{%- endif -%}`,
+    );
+  }
+  if (subpages.length > 0) {
+    lines.push("{%- case template.suffix -%}");
+    for (const page of subpages) {
+      lines.push(`{%- when '${page.suffix}' -%}{%- assign ${variable} = "${esc(pick(page)!)}" -%}`);
+    }
+    lines.push("{%- endcase -%}");
+  }
+  return lines.join("");
 }
 
 function buildMetaTagsSnippet(): ThemeFile {
@@ -1108,7 +1146,8 @@ img { max-width: 100%; height: auto; display: block; }
   margin: 0 0 12px;
 }
 .page-header__title {
-  font-size: var(--h1-size);
+  /* W10: een paginakop is geen hero. Bescheiden maat, per paginatype gelijk. */
+  font-size: clamp(1.85rem, 1.25rem + 2.1vw, 2.9rem);
   line-height: 1.02;
   letter-spacing: -0.02em;
   max-width: 22ch;
@@ -4855,7 +4894,17 @@ export function buildShopifyTheme(input: BuildThemeInput): BuiltTheme {
   files.push(
     buildSettingsData(tokens, spec.business.businessName, contact, spec.seo.metaDescription)
   );
-  files.push(buildThemeLayout(spec, tokens));
+  const layoutFile = buildThemeLayout(spec, tokens);
+  const seoPages = (sanitizedContentPlan?.pages ?? []).map((page) => ({
+    suffix: page.key,
+    title: page.seo?.title ?? null,
+    description: page.seo?.metaDescription ?? null,
+  }));
+  layoutFile.content = layoutFile.content.replace(
+    "{{ seo_assignments }}",
+    buildSeoAssignmentBlock(seoPages, "title") + buildSeoAssignmentBlock(seoPages, "description"),
+  );
+  files.push(layoutFile);
   files.push(buildMetaTagsSnippet());
   files.push(buildButtonSnippet());
   files.push(buildThemeCss(tokens));

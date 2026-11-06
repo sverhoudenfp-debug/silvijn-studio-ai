@@ -1,12 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { goldenContentPlan } from "./fixtures/golden-content";
+import { goldenContact, goldenDesignPlan, goldenSpecification } from "./fixtures/golden-hovenier";
+
 
 // Memory-mode: nooit productie raken (zelfde patroon als outreach-sales-tests).
 delete process.env.NEXT_PUBLIC_SUPABASE_URL;
 delete process.env.SUPABASE_SECRET_KEY;
 delete process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
-import { buildThemeDesignTokens } from "../lib/websites/theme-zip/theme-builder";
+import { buildShopifyTheme, buildThemeDesignTokens } from "../lib/websites/theme-zip/theme-builder";
 import { createThemeZip, readThemeZip } from "../lib/websites/theme-zip/theme-zip";
 import { validateThemeFiles } from "../lib/websites/theme-zip/theme-validation";
 import { BLUEPRINT_SECTION_REGISTRY, BLUEPRINT_SECTION_TYPES } from "../lib/websites/blueprint/section-registry";
@@ -179,8 +182,31 @@ test("theme-zip: layouts gebruiken geldige Shopify Liquid comments (regressie: n
 
 test("theme-zip: title en meta-description hebben betrouwbare fallbackketen", () => {
   const layout = builtTheme().find((f) => f.path === "layout/theme.liquid")!;
-  assert.ok(layout.content.includes("{{ page_title | default: shop.name }}"), "title-fallback via page_title");
-  assert.ok(layout.content.includes("page_description | default: settings.seo_description"), "meta-description-fallback");
+  // W10: eerst de pagina-eigen SEO, dan de Shopify-paginatitel, dan de winkelnaam.
+  assert.ok(layout.content.includes("{{ seo_page_title | default: page_title | default: shop.name }}"), "title-fallback via page_title");
+  assert.ok(
+    layout.content.includes("seo_page_description | default: page_description | default: settings.seo_description"),
+    "meta-description-fallback",
+  );
+});
+
+test("theme-zip: elke pagina heeft een eigen SEO-titel en omschrijving", () => {
+  // SEO per pagina komt uit het contentplan; de golden bouw zonder plan houdt
+  // de fallbackketen. Daarom hier expliciet met plan bouwen.
+  const files = buildShopifyTheme({
+    specification: goldenSpecification,
+    designPlan: goldenDesignPlan,
+    contact: goldenContact,
+    contentPlan: goldenContentPlan,
+  }).files;
+  const layout = files.find((f) => f.path === "layout/theme.liquid")!;
+  assert.ok(layout.content.includes("{%- case template.suffix -%}"), "per-pagina case in de layout");
+  for (const suffix of ["diensten", "contact", "faq", "over-ons"]) {
+    assert.ok(layout.content.includes(`when '${suffix}'`), `SEO-tak voor ${suffix}`);
+  }
+  const titles = [...layout.content.matchAll(/assign seo_page_title = "([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(titles.length >= 4, "minimaal vier unieke titels");
+  assert.equal(new Set(titles).size, titles.length, "geen dubbele SEO-titels");
 });
 
 test("theme-zip: validator vangt incompleteness (password/gift card/settings)", () => {

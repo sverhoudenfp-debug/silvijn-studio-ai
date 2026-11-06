@@ -287,6 +287,18 @@ for (const viewport of VIEWPORTS) {
     results.push({ ...metrics, pageSlug: page.slug, viewport: `${viewport.name} ${viewport.width}` });
 
     mkdirSync(SHOT_DIR, { recursive: true });
+    // W10: lazy beelden onder de vouw laden pas na scrollen. Zonder deze ronde
+    // legde de screenshot lege beeldvlakken vast die in de browser gevuld zijn.
+    await tab.evaluate(`(async () => {
+      const step = Math.round(window.innerHeight * 0.8);
+      for (let y = 0; y < document.body.scrollHeight; y += step) {
+        window.scrollTo(0, y);
+        await new Promise((resolve) => setTimeout(resolve, 60));
+      }
+      window.scrollTo(0, 0);
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    })()`);
+    await tab.waitForTimeout(250);
     await tab.screenshot({
       path: join(SHOT_DIR, `${page.slug}-${viewport.name}.png`),
       fullPage: true,

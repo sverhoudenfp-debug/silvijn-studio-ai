@@ -27,6 +27,7 @@ import {
   type CompositionNavigationItem,
 } from "./blueprint-composition";
 import type { ContentPlan } from "../content/content-plan";
+import { sanitizeContactClaims } from "../content/contact-provenance";
 import { BLUEPRINT_SECTION_REGISTRY, type BlueprintSectionType } from "../blueprint/section-registry";
 import type { WebsiteContactContext } from "../generator";
 import type { WebsiteSpecification } from "../types";
@@ -1726,10 +1727,23 @@ function buildDesignSystemCss(): ThemeFile {
 .hero--immersive.hero--no-media .hero__inner { margin-top: 0; border: none; padding: 0; background: transparent; }
 .hero--immersive h1 { font-size: clamp(2.2rem, 1.1rem + 3.6vw, 4rem); max-width: 22ch; }
 
-/* Media in de hero: vaste verhoudingen, geen uitgerekte beelden */
-.hero__media, .hero__band { margin: 0; overflow: hidden; border-radius: var(--radius); }
-.hero__media img, .hero__band img, .hero__media .theme-media, .hero__band .theme-media { width: 100%; height: 100%; display: block; object-fit: cover; }
+/* Media in de hero: vaste verhoudingen, beeld vult het kader volledig.
+   W5: de oudere regel voor split-hero's (height: auto) won op specificiteit en
+   liet een leeg vlak onder de foto achter. Deze regel is specifieker en zet het
+   beeld vast op het kader. */
+.hero__media, .hero__band { margin: 0; overflow: hidden; border-radius: var(--radius); position: relative; }
+.hero .hero__media img, .hero .hero__band img,
+.hero__media .theme-media, .hero__band .theme-media { width: 100%; height: 100%; display: block; object-fit: cover; }
+.hero__media .theme-media, .hero__band .theme-media { position: absolute; inset: 0; }
 .hero__band { margin-top: clamp(28px, 4vw, 56px); aspect-ratio: 16 / 9; }
+
+/* Balans: contentmax en kolomverhoudingen — geen halflege rasterkolommen */
+.d3-layout { max-width: 78rem; }
+.d3-section > .container { max-width: 78rem; }
+.d3-bento .d3-items > :last-child:nth-child(3n + 1) { grid-column: span 3; }
+.d3-bento .d3-items > :last-child:nth-child(3n + 2) { grid-column: span 2; }
+.usp-band .usp-row, .usp-band__inner { max-width: 78rem; margin-inline: auto; }
+.d3-asymmetric_grid .d3-unit:first-child { display: grid; align-content: start; }
 
 /* ---------- 3. Paginakop: één duidelijke H1, geen gedrongen kolom ---------- */
 .page-header { padding-block: clamp(48px, 6vw, 96px) clamp(24px, 3vw, 48px); }
@@ -4164,6 +4178,18 @@ function jsonFile(path: string, data: unknown): ThemeFile {
   return { path, content: `${JSON.stringify(data, null, 2)}\n` };
 }
 
+/**
+ * W5 (6 november 2026): de headeractie is een korte ingang, geen volledige
+ * propositiezin. Een lange knop duwde op mobiel de merknaam en het menu in de
+ * knel; alles boven de 16 tekens wordt daarom teruggebracht tot "Contact".
+ */
+function compactHeaderCta(label: string): string {
+  const trimmed = label.trim();
+  if (trimmed.length <= 16) return trimmed;
+  const firstWords = trimmed.split(/\s+/).slice(0, 2).join(" ");
+  return firstWords.length <= 16 ? firstWords : "Contact";
+}
+
 interface HeaderGroupInput {
   businessName: string;
   navItems: { label: string; url: string }[];
@@ -4698,12 +4724,59 @@ export interface BuiltTheme {
  * specification + echte contactgegevens; het ontwerp komt uitsluitend uit
  * het Design Plan.
  */
+
+/**
+ * W5: contactgegevens in AI-copy zijn verboden. Copy wordt alleen uit de
+ * aangeleverde context geschreven; een telefoonnummer of e-mailadres in een
+ * ContentPlan-unit is dus een niet-onderbouwde toevoeging. Dit filtert die
+ * zinnen er deterministisch uit en rapporteert wat er is verwijderd.
+ */
+function sanitizeContentPlanContact<T>(plan: T, contact: { email: string | null; phone: string | null; website?: string | null }): { plan: T; removed: string[] } {
+  const removed: string[] = [];
+  const policy = {
+    allowedEmail: contact.email ?? null,
+    allowedPhone: contact.phone ?? null,
+    allowedWebsite: contact.website ?? null,
+  };
+  const walk = (value: unknown): unknown => {
+    if (typeof value === "string") {
+      if (!/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}|(?:\+31|0031|0)[\s().-]?\d[\d\s().-]{7,12}\d/i.test(value)) return value;
+      const result = sanitizeContactClaims(value, policy);
+      removed.push(...result.removed);
+      return result.text;
+    }
+    if (Array.isArray(value)) return value.map(walk);
+    if (value && typeof value === "object") {
+      return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, child]) => [key, walk(child)]));
+    }
+    return value;
+  };
+  return { plan: walk(plan) as T, removed };
+}
+
 export function buildShopifyTheme(input: BuildThemeInput): BuiltTheme {
   const { specification: spec, designPlan: plan, contact } = input;
   const images = input.images ?? [];
   const tokens = buildThemeDesignTokens(plan);
   const files: ThemeFile[] = [];
   const notes: string[] = [];
+
+  // W5: contactgegevens in AI-copy zijn verboden. Alles wat niet is
+  // aangeleverd wordt uit de copy verwijderd en gerapporteerd — nooit
+  // aangevuld, nooit herschreven.
+  const contactSanitization = input.contentPlan
+    ? sanitizeContentPlanContact(input.contentPlan, {
+        email: contact.email,
+        phone: contact.phone,
+        website: null,
+      })
+    : null;
+  const sanitizedContentPlan = contactSanitization?.plan ?? null;
+  if (contactSanitization && contactSanitization.removed.length > 0) {
+    notes.push(
+      `${contactSanitization.removed.length} zin(nen) met niet-aangeleverde contactgegevens uit de AI-copy verwijderd (contactgegevens komen uitsluitend uit de briefing).`
+    );
+  }
 
   // --- FASE 3: aangeleverde beelden als themabron (binary, geen image_picker)
   for (const image of images) {
@@ -4817,7 +4890,7 @@ export function buildShopifyTheme(input: BuildThemeInput): BuiltTheme {
         blueprint: plan.blueprint,
         spec,
         contact,
-        contentPlan: input.contentPlan ?? null,
+        contentPlan: sanitizedContentPlan,
         plannedNavigation: plan.navigation.items,
       })
     : null;
@@ -4876,13 +4949,61 @@ export function buildShopifyTheme(input: BuildThemeInput): BuiltTheme {
     );
   }
 
+  // --- W5: laatste poort vóór de bestanden de deur uit gaan.
+  //     Niet alleen de ContentPlan-copy, ook specificatie- en blueprint-teksten
+  //     kunnen een telefoonnummer of e-mailadres bevatten. Alles wat niet is
+  //     aangeleverd verdwijnt hier, in elke JSON- en Liquid-tekst.
+  {
+    const policy = { allowedEmail: contact.email ?? null, allowedPhone: contact.phone ?? null, allowedWebsite: null };
+    let removedSentences = 0;
+    for (const file of files) {
+      if (!/^(templates\/|sections\/.*\.json$|config\/|locales\/)/.test(file.path)) continue;
+      if (!file.content) continue;
+      if (!/[@]|(?:\+31|0031|0)[\s().-]?\d[\d\s().-]{7,12}\d/.test(file.content)) continue;
+      let fileRemovals = 0;
+      const strip = (value: unknown, key: string): unknown => {
+        // URL-/linkvelden zijn structuur, geen copy: die blijven ongemoeid
+        // (een lege of afgekapte link is een Shopify-validatiefout).
+        if (/(^|_)(url|link|href|image)$/i.test(key)) return value;
+        if (typeof value === "string") {
+          const result = sanitizeContactClaims(value, policy);
+          if (result.removed.length > 0) {
+            fileRemovals += result.removed.length;
+            removedSentences += result.removed.length;
+          }
+          return result.text;
+        }
+        if (Array.isArray(value)) return value.map((child) => strip(child, key));
+        if (value && typeof value === "object") {
+          return Object.fromEntries(
+            Object.entries(value as Record<string, unknown>).map(([childKey, child]) => [childKey, strip(child, childKey)])
+          );
+        }
+        return value;
+      };
+      if (file.path.endsWith(".json")) {
+        try {
+          const sanitized = strip(JSON.parse(file.content), "");
+          // Alleen herschrijven als er echt iets verwijderd is: onnodige
+          // reserialisatie kan Shopify's eigen validatie laten struikelen.
+          if (fileRemovals > 0) file.content = JSON.stringify(sanitized, null, 2);
+        } catch {
+          // Ongeldige JSON wordt elders al hard afgekeurd; hier niets doen.
+        }
+      }
+    }
+    if (removedSentences > 0) {
+      notes.push(`${removedSentences} zin(nen) met niet-aangeleverde contactgegevens uit het thema verwijderd.`);
+    }
+  }
+
   // --- Header/footer-groups (navigatie = gegenereerde pagina's)
   files.push(
     buildHeaderGroup(
       {
         businessName: spec.business.businessName,
         navItems: siteNavigation.map((item) => ({ label: item.label, url: item.url })),
-        ctaLabel: spec.content.ctaPrimaryText,
+        ctaLabel: compactHeaderCta(spec.content.ctaPrimaryText),
       },
       tokens.artDirection
     )

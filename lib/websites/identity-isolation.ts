@@ -192,8 +192,10 @@ export function findIdentityLeaks(
       push({ kind: "email", value: email, location });
       continue;
     }
+    // W5: is er géén e-mailadres aangeleverd, dan is elk adres in de output
+    // een niet-onderbouwde toevoeging — ook een publieke provider.
     const isPublic = domain != null && PUBLIC_MAIL_DOMAINS.has(domain);
-    if (isPublic) continue;
+    if (isPublic && ownEmail !== null) continue;
     push({ kind: "email", value: email, location });
   }
 

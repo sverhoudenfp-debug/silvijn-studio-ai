@@ -13,8 +13,11 @@ export const veldEnVormBrief = {
   province: "Utrecht",
   founded: 2018,
   teamSize: 4,
-  phone: "030 123 45 67",
-  email: "info@veldenvorm.nl",
+  // W5 (6 november 2026): deze gegevens zijn NIET door Silvijn aangeleverd.
+  // Ze stonden hier als testwaarde en belandden daardoor op de site. Ontbrekend
+  // betekent ontbrekend: de site toont dan alleen het contactformulier.
+  phone: null,
+  email: null,
   website: null,
   websiteStatus: "no_website" as const,
   serviceArea: ["Utrecht", "Zeist", "De Bilt", "Houten", "Nieuwegein", "Maarssen"],

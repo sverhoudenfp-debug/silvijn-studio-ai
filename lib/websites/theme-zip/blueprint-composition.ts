@@ -152,6 +152,8 @@ interface ContentApplicationLog {
   merchantSlots: string[];
   unrenderable: string[];
   skippedPaths: string[];
+  /** W5: aantal dubbele blokken dat deterministisch is verwijderd. */
+  duplicateBlocksRemoved?: number;
 }
 
 interface CompositionContext {
@@ -674,6 +676,29 @@ function composePage(
       consumedPaths.add(path);
       logPathApplication(path, instance.type, units, log);
     }
+    // W5 (6 november 2026): elke subpagina begon met dezelfde hero en twee
+    // CTA's, waardoor vijf pagina's als één sjabloon aanvoelden. Een subpagina
+    // krijgt nu een paginakop die bij zijn eigen type past: eigen kop, eigen
+    // intro, geen tweede knoppaar. De homepage houdt de volledige hero.
+    if (!isHome && index === 0 && instance.type === "hero") {
+      const headline = resolveSlotText(units, "headline", page.title ?? page.key);
+      const intro = resolveSlotText(units, "subheading", page.purpose ?? null);
+      const eyebrow = ctx.spec.seo.localArea ?? null;
+      sections.page_header = {
+        type: "page-header",
+        settings: {
+          eyebrow: eyebrow ?? "",
+          heading: headline ?? page.title ?? page.key,
+          subheading: intro ?? "",
+          background: "default",
+          motion: "none",
+        },
+      } as unknown as Record<string, unknown>;
+      order.push("page_header");
+      previousBackground = "default";
+      continue;
+    }
+
     const entry = instanceToSectionEntry(instance, pageCtx, units);
     const background = typeof entry.settings.background === "string" ? entry.settings.background : "default";
     if (background === "default" && previousBackground === "default") {
@@ -714,6 +739,42 @@ function composePage(
       },
     };
     order.push(ctaKey);
+  }
+
+  // W5: dubbele inhoud binnen één pagina (dezelfde USP of zin in twee
+  // secties) is een contentfout, geen stijlkeuze. Deterministisch opruimen:
+  // de eerste voorkomen blijft staan, latere duplicaten verdwijnen.
+  const seenBlockTexts = new Set<string>();
+  const normalizeBlockText = (value: unknown): string =>
+    typeof value === "string"
+      ? value.toLowerCase().replace(/<[^>]+>/g, " ").replace(/[^a-z0-9]+/g, " ").trim()
+      : "";
+  let removedDuplicates = 0;
+  for (const key of order) {
+    const section = sections[key] as unknown as {
+      blocks?: Record<string, { settings?: Record<string, unknown> }>;
+      block_order?: string[];
+    };
+    if (!section?.blocks || !section.block_order) continue;
+    const kept: string[] = [];
+    for (const blockId of section.block_order) {
+      const settings = section.blocks[blockId]?.settings ?? {};
+      const fingerprint = ["title", "heading", "text", "body", "question", "label"]
+        .map((field) => normalizeBlockText(settings[field]))
+        .filter((value) => value.length > 12)
+        .join("|");
+      if (fingerprint.length > 0 && seenBlockTexts.has(fingerprint)) {
+        delete section.blocks[blockId];
+        removedDuplicates += 1;
+        continue;
+      }
+      if (fingerprint.length > 0) seenBlockTexts.add(fingerprint);
+      kept.push(blockId);
+    }
+    section.block_order = kept;
+  }
+  if (removedDuplicates > 0) {
+    log.duplicateBlocksRemoved = (log.duplicateBlocksRemoved ?? 0) + removedDuplicates;
   }
 
   if (unitsByPath) {

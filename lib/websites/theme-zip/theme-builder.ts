@@ -4657,7 +4657,8 @@ export function applyThemeImagesToTemplates(
         if (!pool.length) continue;
         const blocks = Object.values(section.blocks ?? {});
         blocks.forEach((block, index) => {
-          const image = pool[index % pool.length];
+          // Nooit dezelfde foto op twee kaarten: liever een placeholder.
+          const image = pool[index];
           if (!image) return;
           block.settings = {
             ...(block.settings ?? {}),

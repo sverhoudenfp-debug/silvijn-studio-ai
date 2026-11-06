@@ -62,6 +62,13 @@ export function sanitizeContactClaims(input: string, policy: ContactPolicy): San
   const allowedPhone = policy.allowedPhone ? digitsOf(policy.allowedPhone) : null;
   const allowedWebsite = policy.allowedWebsite?.trim().toLowerCase() ?? null;
 
+  // W8: "neem contact op via telefoon of e-mail" is fout zodra die gegevens
+  // ontbreken — de bezoeker krijgt een kanaal dat niet bestaat.
+  const channelUnavailable = allowedPhone === null || allowedEmail === null;
+  const mentionsUnavailableChannel = (sentence: string): boolean =>
+    (allowedPhone === null && /\b(telefoon|telefonisch|bel ons)\b/i.test(sentence)) ||
+    (allowedEmail === null && /\b(e-?mail|mail ons)\b/i.test(sentence));
+
   const removed: string[] = [];
   const kept: string[] = [];
 
@@ -83,7 +90,7 @@ export function sanitizeContactClaims(input: string, policy: ContactPolicy): San
       (allowedEmail === null && emails.length > 0) ||
       (allowedPhone === null && phones.length > 0);
 
-    if (foreignEmail || foreignPhone || foreignUrl || anyContactWithoutSource) {
+    if (foreignEmail || foreignPhone || foreignUrl || anyContactWithoutSource || (channelUnavailable && mentionsUnavailableChannel(sentence))) {
       removed.push(sentence.trim());
       // Behoud de witruimte tussen de overgebleven zinnen.
       if (sentence.endsWith("\n\n")) kept.push("\n\n");

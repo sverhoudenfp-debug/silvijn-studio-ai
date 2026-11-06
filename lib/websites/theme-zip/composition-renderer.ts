@@ -150,6 +150,41 @@ export function compositionCss():string {
 .d3-items > .d3-unit,.d3-item{overflow-wrap:break-word;word-break:normal}
 .d3-horizontal_steps .d3-item h3{max-width:100%}
 .d3-floating{grid-template-columns:minmax(0,1fr) minmax(15rem,auto)}
+/* W8: leesbaarheid gaat voor kolommen. Onder 700px is een tekstkolom smaller
+   dan ~18rem en dat is niet leesbaar; meerkoloms tekstsecties vallen dan terug
+   naar één kolom. Op tablet blijven twee kolommen alleen als ze breed genoeg
+   zijn (auto-fit met een minimale leesbare maat). */
+@media (max-width: 700px) {
+  .d3-items,
+  .d3-layout .d3-items,
+  .d3-asymmetric_grid .d3-items,
+  .d3-asymmetric_gallery .d3-items,
+  .d3-editorial_grid .d3-items,
+  .d3-bento .d3-items,
+  .d3-horizontal .d3-items,
+  .d3-horizontal_steps .d3-items,
+  .d3-numbered_editorial .d3-items,
+  .d3-alternating .d3-items,
+  .d3-quote_wall .d3-items,
+  .usp-row,
+  .card-grid,
+  .testimonial-grid,
+  .form-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  .d3-unit,
+  .d3-asymmetric_grid .d3-unit,
+  .d3-asymmetric_grid .d3-unit:first-child,
+  .d3-asymmetric_gallery .d3-unit,
+  .d3-asymmetric_gallery .d3-unit:first-child,
+  .d3-editorial_grid .d3-unit:nth-child(even) { grid-column: auto !important; grid-row: auto !important; padding-top: 0; }
+  .d3-item-copy p, .d3-item-copy h2, .d3-item-copy h3 { max-width: none; }
+  .d3-section .container { padding-inline: clamp(16px, 5vw, 24px); }
+}
+@media (min-width: 701px) and (max-width: 1100px) {
+  /* W8: op tablet geldt voor ELK itemraster dezelfde leesbare minimummaat;
+     anders houdt een niet-genoemd layout-type zijn smalle desktopkolommen. */
+  .d3-items { grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)) !important; }
+  .d3-asymmetric_grid .d3-unit:first-child { grid-column: span 2; grid-row: auto; }
+}
 /* W6: één typografische trap voor secties. Een itemtitel (h3) is nooit groter
    dan de sectiekop (h2) erboven, en alle sectiekoppen delen dezelfde maat. */
 .d3-section .d3-heading h2,.d3-section .d3-layout > header h2{font-size:clamp(1.5rem,1.08rem + 1.5vw,2.3rem);line-height:1.14}

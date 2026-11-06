@@ -1490,7 +1490,11 @@ main#main-content > section.section--bg-surface:nth-of-type(3n+3) {
 /* Nieuwe registry-secties */
 .usp-row { display: flex; flex-wrap: wrap; gap: 12px 40px; }
 .usp-band--row .usp-row { display: flex; flex-wrap: wrap; gap: 12px 40px; }
-.usp-band--grid .usp-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; }
+.usp-band--grid .usp-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 20px; }
+/* W8: op smalle schermen nooit twee tekstkolommen naast elkaar. */
+@media (max-width: 700px) {
+  .usp-row, .team-grid, .testimonial-grid, .card-grid, .gallery-grid, .projects-grid, .form-grid { grid-template-columns: minmax(0, 1fr); }
+}
 .usp-item__label { font-weight: 600; margin: 0; }
 .usp-item__description { color: var(--color-muted); margin: 4px 0 0; font-size: .95rem; }
 .stats-row { display: flex; flex-wrap: wrap; gap: 32px 56px; }

@@ -9,6 +9,8 @@ delete process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 import { findInternalCopy, isInternalCopy, pickVisitorCopy } from "../lib/websites/content/internal-copy";
 import { buildShopifyTheme } from "../lib/websites/theme-zip/theme-builder";
 import { goldenDesignPlan, goldenSpecification } from "./fixtures/golden-hovenier";
+import { goldenContentPlan } from "./fixtures/golden-content";
+import { sanitizeContactClaims } from "../lib/websites/content/contact-provenance";
 
 /**
  * W6-REGRESSIE (6 november 2026): interne planningsinstructies.
@@ -81,4 +83,35 @@ test("layout: de designsysteemlaag gebruikt inhoudsafhankelijke hoogtes en één
   assert.ok(css.includes("hyphens: none"), "geen onbedoelde woordafbreking");
   assert.ok(css.includes("text-wrap: balance"), "koppen houden gebalanceerde regels");
   assert.ok(css.includes(".section__header h2"), "sectiekoppen hebben één vaste trap");
+});
+
+test("intro: pagina-intro's zijn nooit dezelfde algemene contactzin", () => {
+  const built = buildShopifyTheme({
+    specification: goldenSpecification,
+    designPlan: goldenDesignPlan,
+    contact: { phone: null, email: null, address: null, city: "Utrecht", province: "Utrecht" },
+    contentPlan: goldenContentPlan,
+  });
+  const intros: string[] = [];
+  for (const file of built.files) {
+    if (!file.path.startsWith("templates/page")) continue;
+    const data = JSON.parse(file.content) as { sections?: Record<string, { settings?: Record<string, unknown> }>; order?: string[] };
+    for (const key of data.order ?? []) {
+      const intro = data.sections?.[key]?.settings?.subheading;
+      if (typeof intro === "string" && intro.trim()) intros.push(intro.trim());
+    }
+  }
+  assert.equal(new Set(intros).size, intros.length, "elke paginaintro is uniek");
+  const generic = /neem contact op met .* via telefoon of e-?mail/i;
+  assert.ok(!intros.some((intro) => generic.test(intro)), "geen algemene contactzin als intro");
+});
+
+test("contactkanaal: noemen van telefoon of e-mail zonder aangeleverd kanaal vervalt", () => {
+  const policy = { allowedEmail: null, allowedPhone: null, allowedWebsite: null };
+  const result = sanitizeContactClaims(
+    "Neem contact op met Veld & Vorm via telefoon of e-mail. Wij denken graag mee.",
+    policy
+  );
+  assert.ok(!/telefoon|e-?mail/i.test(result.text), "kanaalzin verwijderd");
+  assert.ok(result.text.includes("Wij denken graag mee."), "overige copy blijft staan");
 });

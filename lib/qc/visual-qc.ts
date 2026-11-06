@@ -234,6 +234,90 @@ const MEASURE_SCRIPT = `(() => {
     sectionSize = size;
   }
 
+  // 7. Compositiegeschiktheid per schermformaat (W8). Tot nu toe keurde de
+  // meter alleen of iets buiten het scherm valt; een twee-koloms dienstenraster
+  // op 390px valt netjes binnen het scherm en is tóch onleesbaar.
+  const viewportWidth = window.innerWidth;
+  const textBlocks = Array.from(document.querySelectorAll(".d3-item-copy, .d3-quote, .card__body, .usp-row > *, .d3-item")).filter(visible);
+  for (const block of textBlocks) {
+    const r = rectOf(block);
+    const text = (block.textContent || "").trim();
+    if (text.length < 25) continue;
+    if (r.width < 200) {
+      issues.push({
+        kind: "narrow_column",
+        severity: viewportWidth <= 480 ? "critical" : "warning",
+        selector: path(block),
+        detail: "tekstkolom van " + Math.round(r.width) + "px is te smal voor " + text.length + " tekens",
+      });
+    }
+  }
+
+  const gridContainers = Array.from(document.querySelectorAll(".d3-items, .usp-row, .card-grid, .testimonial-grid, .form-grid")).filter(visible);
+  for (const grid of gridContainers) {
+    const children = Array.from(grid.children).filter(visible);
+    if (children.length < 2) continue;
+    const firstTop = Math.round(children[0].getBoundingClientRect().top);
+    const sameRow = children.filter((child) => Math.abs(Math.round(child.getBoundingClientRect().top) - firstTop) <= 6).length;
+    const columns = { length: sameRow };
+    if (viewportWidth > 480 || columns.length < 2) continue;
+    const withText = Array.from(grid.children).some((child) => (child.textContent || "").trim().length > 30);
+    if (!withText) continue;
+    issues.push({
+      kind: "desktop_columns_on_mobile",
+      severity: "critical",
+      selector: path(grid),
+      detail: columns.length + " kolommen op " + viewportWidth + "px",
+    });
+  }
+
+  // Onleesbaar kleine tekst.
+  const paragraphs = Array.from(document.querySelectorAll("p, li")).filter(visible);
+  for (const paragraph of paragraphs) {
+    const size = parseFloat(getComputedStyle(paragraph).fontSize);
+    if (size > 0 && size < 13) {
+      issues.push({
+        kind: "small_text",
+        severity: "warning",
+        selector: path(paragraph),
+        detail: "lettergrootte " + Math.round(size) + "px",
+      });
+    }
+  }
+
+  // Onnodige verticale leegte: een sectie die veel hoger is dan zijn inhoud.
+  const sections = Array.from(document.querySelectorAll("main > section, main > .d3-section")).filter(visible);
+  for (const section of sections) {
+    const outer = rectOf(section);
+    if (outer.height < 400) continue;
+    const inner = section.firstElementChild ? section.firstElementChild.getBoundingClientRect() : null;
+    if (!inner) continue;
+    if (inner.height / outer.height < 0.55) {
+      issues.push({
+        kind: "vertical_emptiness",
+        severity: "warning",
+        selector: path(section),
+        detail: "inhoud vult " + Math.round((inner.height / outer.height) * 100) + "% van " + Math.round(outer.height) + "px",
+      });
+    }
+  }
+
+  // Knoppen die de tekstkolom visueel verdringen (te breed t.o.v. hun inhoud).
+  const buttons = Array.from(document.querySelectorAll(".d3-item .btn, .card .btn, .d3-item-copy .btn")).filter(visible);
+  for (const button of buttons) {
+    const r = rectOf(button);
+    const parent = button.parentElement ? rectOf(button.parentElement) : null;
+    if (!parent || parent.width === 0) continue;
+    if (r.width / parent.width > 0.92) {
+      issues.push({
+        kind: "button_ratio",
+        severity: "warning",
+        selector: path(button),
+        detail: "knop vult " + Math.round((r.width / parent.width) * 100) + "% van de kolom",
+      });
+    }
+  }
+
   // Dedupliceer identieke meldingen (dezelfde selector + soort).
   const seen = new Set();
   return issues.filter((issue) => {

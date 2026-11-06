@@ -688,11 +688,10 @@ function composePage(
       const headline = resolveSlotText(units, "headline", page.title ?? page.key);
       // W6: uitsluitend bezoekersgerichte copy. Geen planningsregel als
       // terugval; liever een kop zonder intro dan interne taal op de site.
-      const intro = pickVisitorCopy([
-        resolveSlotText(units, "subheading", null),
-        resolveSlotText(units, "headline", null) === null ? null : null,
-        ctx.spec.content.contactIntro,
-      ]);
+      // W8: de intro komt UITSLUITEND van deze pagina zelf. De algemene
+      // contactzin is geen introductie voor Over ons, Diensten of FAQ; zonder
+      // eigen copy blijft de intro leeg (alleen de paginatitel).
+      const intro = pickVisitorCopy([resolveSlotText(units, "subheadline", null)]);
       const eyebrow = ctx.spec.seo.localArea ?? null;
       sections.page_header = {
         type: "page-header",

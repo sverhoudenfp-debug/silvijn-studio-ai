@@ -28,6 +28,7 @@ import {
 } from "./blueprint-composition";
 import type { ContentPlan } from "../content/content-plan";
 import { sanitizeContactClaims } from "../content/contact-provenance";
+import { applyContentFit } from "../content/content-fit";
 import { BLUEPRINT_SECTION_REGISTRY, type BlueprintSectionType } from "../blueprint/section-registry";
 import type { WebsiteContactContext } from "../generator";
 import type { WebsiteSpecification } from "../types";
@@ -4908,6 +4909,18 @@ export function buildShopifyTheme(input: BuildThemeInput): BuiltTheme {
 
   if (composition) {
     applyThemeImagesToTemplates(composition.templates, images);
+    // W7: pas na de beeldtoewijzing weten we of een sectie echt beeld heeft.
+    // Nu pas is de compositie inhoudsafhankelijk te kiezen (content-fit).
+    for (const template of composition.templates) {
+      const data = template.data as {
+        sections?: Record<string, { type?: string; settings?: Record<string, unknown>; blocks?: Record<string, { settings?: Record<string, unknown> }>; block_order?: string[] }>;
+        order?: string[];
+      };
+      if (!data.sections || !data.order) continue;
+      const fitted = applyContentFit(data.sections, data.order);
+      data.order = fitted.order;
+      notes.push(...fitted.notes.map((note) => `Content-fit (${template.path}): ${note}`));
+    }
     for (const template of composition.templates) {
       files.push(jsonFile(template.path, template.data));
     }
